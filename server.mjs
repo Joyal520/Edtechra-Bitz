@@ -6025,6 +6025,8 @@ app.get('/api/course-studio/courses/:id', async (req, res) => {
           expected_answer: q.options.expected_answer,
           acceptable_answers: q.options.acceptable_answers,
           matching_pairs: q.options.matching_pairs,
+          items: q.options.items || q.options.options,
+          correct_order: q.options.correct_order,
           image_url: q.options.image_url,
           illustration_key: q.options.illustration_key,
           question_type: q.options._question_type || q.question_type,
@@ -6039,6 +6041,8 @@ app.get('/api/course-studio/courses/:id', async (req, res) => {
         expected_answer: q.expected_answer || extra.expected_answer || undefined,
         acceptable_answers: q.acceptable_answers || extra.acceptable_answers || undefined,
         matching_pairs: q.matching_pairs || extra.matching_pairs || undefined,
+        items: q.items || extra.items || undefined,
+        correct_order: q.correct_order || extra.correct_order || undefined,
         image_url: q.image_url || extra.image_url || undefined,
         illustration_key: q.illustration_key || extra.illustration_key || undefined
       };
@@ -6559,7 +6563,9 @@ app.post('/api/course-studio/courses/:id/episodes/:episodeId/blocks', async (req
             ...b,
             block_type: b.block_type === 'video'
               ? 'youtube_video'
-              : (legacyAllowedBlockTypes.has(b.block_type) ? b.block_type : 'text')
+              : b.block_type === 'learn_with_shorts'
+                ? 'youtube_short'
+                : (legacyAllowedBlockTypes.has(b.block_type) ? b.block_type : 'text')
           }));
           const { data: fallbackSaved, error: fbError } = await serverSupabase
             .from('course_blocks')
@@ -6627,9 +6633,12 @@ app.post('/api/course-studio/courses/:id/questions', async (req, res) => {
         let optionsToSave = (typeof q.options === 'object' && q.options !== null) || Array.isArray(q.options) ? q.options : [];
         const hasExtraQuestionMeta = Boolean(
           q.question_type === 'wh_question' ||
+          q.question_type === 'sentence_reordering' ||
+          q.question_type === 'word_ordering' ||
           q.wh_type ||
           q.passage ||
           q.matching_pairs ||
+          q.correct_order ||
           q.image_url ||
           q.illustration_key ||
           q.question_type === 'image_selection' ||
@@ -6638,6 +6647,8 @@ app.post('/api/course-studio/courses/:id/questions', async (req, res) => {
         if (hasExtraQuestionMeta) {
           optionsToSave = {
             options: Array.isArray(q.options) ? q.options : (typeof q.options === 'object' && q.options?.options ? q.options.options : []),
+            items: Array.isArray(q.items) ? q.items : (Array.isArray(q.options) ? q.options : undefined),
+            correct_order: Array.isArray(q.correct_order) ? q.correct_order : undefined,
             acceptable_answers: Array.isArray(q.acceptable_answers) ? q.acceptable_answers : (typeof q.options === 'object' && Array.isArray(q.options?.acceptable_answers) ? q.options.acceptable_answers : []),
             expected_answer: q.expected_answer || q.correct_answer || (typeof q.options === 'object' && q.options?.expected_answer) || '',
             wh_type: q.wh_type || (typeof q.options === 'object' && q.options?.wh_type) || undefined,

@@ -741,7 +741,14 @@ export const CoursePreviewPage: React.FC = () => {
     setLastCompletedTitle(selectedEpisode.title);
     setLastCompletedPos(selectedEpisode.position || currentIndex + 1);
     setLastCompletedPoints(pointsForLesson);
-    setCelebrationOpen(true);
+    const hasShort = currentBlocks.some(
+      b =>
+        b.block_type === 'learn_with_shorts' ||
+        (b.block_type === 'youtube_short' && Boolean((b.content as any)?.is_learn_with_shorts))
+    );
+    if (!hasShort) {
+      setCelebrationOpen(true);
+    }
   };
 
   const handleAfterCelebrationContinue = () => {
@@ -816,19 +823,26 @@ export const CoursePreviewPage: React.FC = () => {
   const activeTheme = getThemePreset(effectiveThemeId);
   const isEpisodeCompleted = selectedEpisode ? completedEpisodeIds.has(selectedEpisode.id) : false;
 
+  const isLearnWithShortsLesson = currentBlocks.some(
+    b =>
+      b.block_type === 'learn_with_shorts' ||
+      (b.block_type === 'youtube_short' && Boolean((b.content as any)?.is_learn_with_shorts))
+  );
+
   const isCreepyLegendsOrVideoCourse = Boolean(
-    !isAnnabelleCourse && (
-      course.id === 'e10c7ee9-0012-4000-8000-000000000012' ||
-        course.id === 'ca2e41a8-e929-43a6-940b-ab5ab00bc535' ||
-        course.title?.toLowerCase().includes('creepy legends') ||
-        currentBlocks.some(
-          b =>
-            b.block_type === 'video' ||
-            b.block_type === 'youtube_video' ||
-            b.block_type === 'text_video' ||
-            Boolean((b.content as any)?.video?.url)
-        )
-    )
+    !isAnnabelleCourse &&
+      !isLearnWithShortsLesson && (
+        course.id === 'e10c7ee9-0012-4000-8000-000000000012' ||
+          course.id === 'ca2e41a8-e929-43a6-940b-ab5ab00bc535' ||
+          course.title?.toLowerCase().includes('creepy legends') ||
+          currentBlocks.some(
+            b =>
+              b.block_type === 'video' ||
+              b.block_type === 'youtube_video' ||
+              b.block_type === 'text_video' ||
+              Boolean((b.content as any)?.video?.url)
+          )
+      )
   );
 
   const episodeNavItems: EpisodeNavItem[] = allEpisodes.map((item, idx) => {
@@ -1301,7 +1315,20 @@ export const CoursePreviewPage: React.FC = () => {
             <LiquidButton
               variant="emerald"
               size="sm"
-              onClick={() => setPublishModalOpen(true)}
+              onClick={() => {
+                // Check if any Learn with Shorts block is missing its mandatory transcript
+                const hasShortMissingTranscript = currentBlocks.some(
+                  b =>
+                    (b.block_type === 'learn_with_shorts' ||
+                      (b.block_type === 'youtube_short' && Boolean((b.content as any)?.is_learn_with_shorts))) &&
+                    !String((b.content as any)?.transcript || (b.content as any)?.video?.transcript || '').trim()
+                );
+                if (hasShortMissingTranscript) {
+                  showToast('Video Transcript is mandatory for Learn with Shorts. Please enter the transcript before publishing.');
+                  return;
+                }
+                setPublishModalOpen(true);
+              }}
               icon={<Send className="w-3.5 h-3.5" />}
               title="Publish course & assign to classrooms"
               className="!px-3 !py-1 !text-xs font-bold shrink-0"
@@ -1646,6 +1673,20 @@ export const CoursePreviewPage: React.FC = () => {
                 courseTitle={course.title}
                 lessonTitle={selectedEpisode.title}
                 onCompleteLesson={handleCompleteEpisode}
+                onNextLesson={
+                  nextItem
+                    ? () => {
+                        setSelectedEpisode(nextItem.episode);
+                        setViewMode('lesson');
+                        mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                      }
+                    : undefined
+                }
+                onReturnToCourse={() => setViewMode('roadmap')}
+                onQuitLesson={() => setViewMode('roadmap')}
+                hasNextLesson={Boolean(nextItem)}
+                isLessonCompleted={isEpisodeCompleted}
+                onPreviewStudentExperience={() => handleToggleMode(false)}
                 onProgressChange={handleProgressChange}
                 onVideoCompletionChange={setVideoCompletionStatus}
                 onChangeBlocks={handleBlocksChange}
@@ -1659,6 +1700,7 @@ export const CoursePreviewPage: React.FC = () => {
               {/* ============================================================== */}
               {/* FINAL LESSON COMPLETION & NAVIGATION ACTION AREA               */}
               {/* ============================================================== */}
+              {(!isLearnWithShortsLesson || isEditMode) && (
               <footer
                 data-testid="lesson-final-action-area"
                 className="w-full pt-6 sm:pt-8 mt-6 sm:mt-10 pb-6 border-t border-[var(--theme-border-subtle)] space-y-4"
@@ -1755,6 +1797,7 @@ export const CoursePreviewPage: React.FC = () => {
                   </div>
                 </div>
               </footer>
+              )}
               </article>
               </div>
             </div>

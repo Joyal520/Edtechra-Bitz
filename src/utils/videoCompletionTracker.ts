@@ -423,6 +423,7 @@ export function extractEpisodeRequiredVideos(
       b.block_type === 'video' ||
       b.block_type === 'youtube_video' ||
       b.block_type === 'youtube_short' ||
+      b.block_type === 'learn_with_shorts' ||
       b.block_type === 'text_video' ||
       Boolean(c?.video?.url || c?.video_url || c?.video_id);
 

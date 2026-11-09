@@ -531,6 +531,52 @@ export const courseStudioService = {
     };
   },
 
+  async uploadCourseVideo(
+    file: File,
+    courseId: string = 'general'
+  ): Promise<{ publicUrl: string; storageKey: string }> {
+    const contentType = file.type && file.type.startsWith('video/') ? file.type : 'video/mp4';
+    const safeFilename = /\.(mp4|webm|mov|m4v)$/i.test(file.name)
+      ? file.name
+      : `${file.name || 'short-video'}.mp4`;
+
+    const presignRes = await authenticatedFetch(`${API_BASE}/presign-upload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        courseId,
+        filename: safeFilename,
+        contentType,
+        size: file.size,
+        isCover: false
+      })
+    });
+
+    const presignJson = await presignRes.json();
+    if (!presignRes.ok || !presignJson.success) {
+      throw new Error(presignJson.error || 'Failed to generate video upload credentials.');
+    }
+
+    const { uploadUrl, publicUrl, objectKey } = presignJson.data;
+
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': contentType
+      },
+      body: file
+    });
+
+    if (!uploadRes.ok) {
+      throw new Error(`Cloudflare R2 video upload rejected with status: ${uploadRes.status}`);
+    }
+
+    return {
+      publicUrl,
+      storageKey: objectKey
+    };
+  },
+
   // --------------------------------------------------------------------------
   // 6. AI TEACHING STUDIO TOOLS
   // --------------------------------------------------------------------------

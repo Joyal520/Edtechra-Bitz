@@ -506,17 +506,29 @@ export const StudentCoursePlayerPage: React.FC = () => {
         : null;
 
       // Only trigger celebration modal ONCE when backend confirms new lesson completion & reward
-      if (!alreadyAwarded && !celebratedIds.has(epId)) {
-        setCelebratedIds(prev => new Set([...prev, epId]));
-        setLastCompletedTitle(selectedEpisode.title);
-        setLastCompletedPos(selectedEpisode.position || (currentIndex + 1));
-        setLastCompletedPoints(awardedByBackend);
-        setLastCompletedScore(confirmedScore);
-        setCelebrationOpen(true);
+      const hasShortBlock = (selectedEpisode.blocks || []).some(
+        b =>
+          b.block_type === 'learn_with_shorts' ||
+          (b.block_type === 'youtube_short' && Boolean((b.content as any)?.is_learn_with_shorts))
+      );
+
+      if (!hasShortBlock) {
+        if (!alreadyAwarded && !celebratedIds.has(epId)) {
+          setCelebratedIds(prev => new Set([...prev, epId]));
+          setLastCompletedTitle(selectedEpisode.title);
+          setLastCompletedPos(selectedEpisode.position || (currentIndex + 1));
+          setLastCompletedPoints(awardedByBackend);
+          setLastCompletedScore(confirmedScore);
+          setCelebrationOpen(true);
+        } else {
+          setCelebratedIds(prev => new Set([...prev, epId]));
+          handleAfterCelebrationContinue();
+        }
       } else {
         setCelebratedIds(prev => new Set([...prev, epId]));
-        handleAfterCelebrationContinue();
       }
+
+      return res;
     } catch (err: any) {
       console.error('Failed to mark lesson complete:', err);
       const errMsg = err?.message || 'Failed to complete lesson.';
@@ -615,19 +627,26 @@ export const StudentCoursePlayerPage: React.FC = () => {
   const activeTheme = getThemePreset(effectiveThemeId);
   const isEpisodeCompleted = completedEpisodeIds.has(selectedEpisode.id);
 
+  const isLearnWithShortsLesson = (selectedEpisode.blocks || []).some(
+    b =>
+      b.block_type === 'learn_with_shorts' ||
+      (b.block_type === 'youtube_short' && Boolean((b.content as any)?.is_learn_with_shorts))
+  );
+
   const isCreepyLegendsOrVideoCourse = Boolean(
-    !isAnnabelleCourse && (
-      course.id === 'e10c7ee9-0012-4000-8000-000000000012' ||
-        course.id === 'ca2e41a8-e929-43a6-940b-ab5ab00bc535' ||
-        course.title?.toLowerCase().includes('creepy legends') ||
-        (selectedEpisode.blocks || []).some(
-          b =>
-            b.block_type === 'video' ||
-            b.block_type === 'youtube_video' ||
-            b.block_type === 'text_video' ||
-            Boolean((b.content as any)?.video?.url)
-        )
-    )
+    !isAnnabelleCourse &&
+      !isLearnWithShortsLesson && (
+        course.id === 'e10c7ee9-0012-4000-8000-000000000012' ||
+          course.id === 'ca2e41a8-e929-43a6-940b-ab5ab00bc535' ||
+          course.title?.toLowerCase().includes('creepy legends') ||
+          (selectedEpisode.blocks || []).some(
+            b =>
+              b.block_type === 'video' ||
+              b.block_type === 'youtube_video' ||
+              b.block_type === 'text_video' ||
+              Boolean((b.content as any)?.video?.url)
+          )
+      )
   );
 
   const episodeNavItems: EpisodeNavItem[] = allEpisodes.map((item, idx) => {
@@ -1018,13 +1037,28 @@ export const StudentCoursePlayerPage: React.FC = () => {
                   textScale={textScale}
                   themeId={effectiveThemeId}
                   courseId={course.id}
+                  classroomId={classroomId}
                   episodeId={selectedEpisode.id}
+                  userId={user?.id}
                   courseTitle={course.title}
                   lessonTitle={selectedEpisode.title}
                   userAnswers={userAnswers}
                   feedbackState={feedbackState}
                   onQuestionAnswer={handleQuestionAnswer}
                   onCompleteLesson={handleCompleteEpisode}
+                  onNextLesson={
+                    nextItem
+                      ? () => {
+                          setSelectedEpisode(nextItem.episode);
+                          setViewMode('lesson');
+                          mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                        }
+                      : undefined
+                  }
+                  onReturnToCourse={() => setViewMode('roadmap')}
+                  onQuitLesson={() => setViewMode('roadmap')}
+                  hasNextLesson={Boolean(nextItem)}
+                  isLessonCompleted={isEpisodeCompleted}
                   onProgressChange={handleProgressChange}
                   onVideoCompletionChange={setVideoCompletionStatus}
                   isCourseReader={isAnnabelleCourse}
@@ -1033,6 +1067,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
             {/* ============================================================== */}
             {/* FINAL LESSON COMPLETION & NAVIGATION ACTION AREA               */}
             {/* ============================================================== */}
+            {!isLearnWithShortsLesson && (
             <footer
               data-testid="lesson-final-action-area"
               className="w-full pt-6 sm:pt-8 mt-6 sm:mt-10 border-t border-[var(--theme-border-subtle)] space-y-4"
@@ -1135,6 +1170,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
                 </div>
               </div>
             </footer>
+            )}
           </>
         )}
 

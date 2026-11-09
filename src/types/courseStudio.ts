@@ -17,6 +17,7 @@ export type BlockType =
   | 'video'
   | 'youtube_video'
   | 'youtube_short'
+  | 'learn_with_shorts'
   | 'question_set'
   | 'audio'
   | 'callout'
@@ -253,12 +254,26 @@ export interface QuestionSetBlockContent {
   passing_score?: number;
 }
 
+export interface LearnWithShortsBlockContent {
+  title: string;
+  description: string;
+  video_url: string;
+  storage_key?: string;
+  transcript: string;
+  subject_topic: string;
+  difficulty: DifficultyLevel;
+  learning_objectives: string[] | string;
+  aspect_ratio?: '9:16';
+  show_transcript?: boolean;
+}
+
 export type BlockContent =
   | TextBlockContent
   | TextImageBlockContent
   | TextVideoBlockContent
   | ImageBlockContent
   | YouTubeBlockContent
+  | LearnWithShortsBlockContent
   | QuestionSetBlockContent
   | Record<string, any>;
 

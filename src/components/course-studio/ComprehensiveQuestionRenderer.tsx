@@ -1020,8 +1020,10 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                   size="md"
                   disabled={!fillInput.trim()}
                   onClick={() => {
+                    const evalCheck = evaluateQuestionAnswer(question, fillInput.trim());
                     const isMatch =
-                      fillInput.trim().toLowerCase() === (question.correct_answer || '').trim().toLowerCase();
+                      fillInput.trim().toLowerCase() === (question.correct_answer || '').trim().toLowerCase() ||
+                      evalCheck.isCorrect;
                     commitAnswer(
                       fillInput.trim(),
                       isMatch,

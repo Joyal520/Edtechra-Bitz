@@ -1776,20 +1776,51 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
     //    - Row with >= score    -> nothing credited (refresh / re-submit / lower retry).
     //    Each write touches only this lesson's row, so concurrent awards from other sources
     //    (Live Quiz, Exams, Tasks, ...) are never overwritten. Totals are SUM(points) on read.
+    // Check if this episode is a Learn with Shorts (9:16) micro-lesson:
+    // Reward calculation for Learn with Shorts:
+    //   - Complete the lesson: 5 XP
+    //   - Each correct answer: 2 XP
+    //   - Perfect score bonus: 5 XP
+    //   - Maximum reward (5 questions): 20 XP
+    let isShortsEpisode = false;
+    try {
+      const { data: epBlocks } = await supabaseClient
+        .from('course_blocks')
+        .select('block_type, content')
+        .eq('episode_id', cleanEpisodeId)
+        .eq('course_id', cleanCourseId);
+      if (Array.isArray(epBlocks)) {
+        isShortsEpisode = epBlocks.some(
+          (b) =>
+            b?.block_type === 'learn_with_shorts' ||
+            b?.content?._block_type === 'learn_with_shorts' ||
+            Boolean(b?.content?.is_learn_with_shorts)
+        );
+      }
+    } catch {
+      // Non-critical if blocks check is unavailable in mock/test
+    }
+
+    const targetRewardPoints = isShortsEpisode
+      ? 5 + correctCount * 2 + (questionCount > 0 && correctCount === questionCount ? 5 : 0)
+      : numScore;
+
     let pointsAwarded = 0;
     let creditedLessonPoints = previouslyCreditedPoints;
     let lessonPointRowId = hasExistingPointRow ? existingPointRows[0].id : null;
     let creditAction = 'none';
-    const scoreReason = `Course Lesson Score: ${episodeTitle} (${numScore}/${numMaxScore})`;
+    const scoreReason = isShortsEpisode
+      ? `Learn with Shorts XP: ${episodeTitle} (${numScore}/${numMaxScore} Marks • ${targetRewardPoints} XP)`
+      : `Course Lesson Score: ${episodeTitle} (${numScore}/${numMaxScore})`;
 
-    if (!isClassroomOwner && numScore > 0) {
+    if (!isClassroomOwner && targetRewardPoints > 0) {
       if (!lessonPointRowId) {
         const { data: insertedPoint, error: ptErr } = await supabaseClient
           .from('classroom_points')
           .insert({
             classroom_id: cleanClassroomId,
             student_id: cleanStudentId,
-            points: numScore,
+            points: targetRewardPoints,
             reason: scoreReason,
             source_type: 'activity',
             source_id: cleanEpisodeId,
@@ -1827,8 +1858,8 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
         if (primaryPointRow) {
           lessonPointRowId = primaryPointRow.id;
           if (insertedPoint && primaryPointRow.id === insertedPoint.id) {
-            pointsAwarded = numScore;
-            creditedLessonPoints = numScore;
+            pointsAwarded = targetRewardPoints;
+            creditedLessonPoints = targetRewardPoints;
             creditAction = 'initial_score';
           } else {
             creditedLessonPoints = Number(primaryPointRow.points || 0);
@@ -1837,19 +1868,19 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
       }
 
       // Highest-score retry policy: raise the lesson's credited contribution by the difference only.
-      if (lessonPointRowId && creditAction === 'none' && creditedLessonPoints < numScore) {
+      if (lessonPointRowId && creditAction === 'none' && creditedLessonPoints < targetRewardPoints) {
         const { data: upgradedRows, error: upErr } = await supabaseClient
           .from('classroom_points')
-          .update({ points: numScore, reason: scoreReason })
+          .update({ points: targetRewardPoints, reason: scoreReason })
           .eq('id', lessonPointRowId)
-          .lt('points', numScore)
+          .lt('points', targetRewardPoints)
           .select('id, points');
 
         if (upErr) {
           console.warn('[CourseStudioPoints] Score upgrade notice:', upErr.message);
         } else if (Array.isArray(upgradedRows) && upgradedRows.length > 0) {
-          pointsAwarded = numScore - creditedLessonPoints;
-          creditedLessonPoints = numScore;
+          pointsAwarded = targetRewardPoints - creditedLessonPoints;
+          creditedLessonPoints = targetRewardPoints;
           creditAction = 'improved_score';
         }
       }

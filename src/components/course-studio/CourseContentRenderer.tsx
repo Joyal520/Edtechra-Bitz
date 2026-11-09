@@ -23,7 +23,8 @@ import {
   Heading,
   Minus,
   FileText,
-  Lock
+  Lock,
+  Smartphone
 } from 'lucide-react';
 import {
   CourseBlock,
@@ -62,6 +63,10 @@ import {
   CourseCompletionBlock
 } from '@/components/course-studio/InteractiveCourseBlocks';
 import { AnnabelleCourseReaderBlock } from '@/components/course-studio/AnnabelleCourseReaderBlocks';
+import {
+  LearnWithShortsEditor,
+  LearnWithShortsStudentPlayer
+} from '@/components/course-studio/LearnWithShortsExperience';
 
 interface Props {
   blocks: CourseBlock[];
@@ -70,7 +75,9 @@ interface Props {
   isStudentView?: boolean;
   textScale?: TextScale;
   courseId?: string;
+  classroomId?: string;
   episodeId?: string;
+  userId?: string | null;
   courseTitle?: string;
   lessonTitle?: string;
   onQuestionAnswer?: (
@@ -81,7 +88,13 @@ interface Props {
     question: CourseQuestion,
     responseMeta?: StudentQuestionResponse
   ) => void;
-  onCompleteLesson?: () => void;
+  onCompleteLesson?: () => Promise<any> | void;
+  onNextLesson?: () => void;
+  onReturnToCourse?: () => void;
+  onQuitLesson?: () => void;
+  hasNextLesson?: boolean;
+  isLessonCompleted?: boolean;
+  onPreviewStudentExperience?: () => void;
   onProgressChange?: (answeredCount: number, totalCount: number) => void;
   onVideoCompletionChange?: (status: { allCompleted: boolean; watchedPercent: number; totalVideos: number }) => void;
   userAnswers?: Record<string, string>;
@@ -116,9 +129,18 @@ export const CourseContentRenderer: React.FC<Props> = ({
   mode = 'student',
   textScale = 'md',
   courseId,
+  classroomId,
   episodeId,
+  userId,
+  courseTitle,
   onQuestionAnswer,
-  onCompleteLesson: _onCompleteLesson,
+  onCompleteLesson,
+  onNextLesson,
+  onReturnToCourse,
+  onQuitLesson,
+  hasNextLesson = false,
+  isLessonCompleted = false,
+  onPreviewStudentExperience,
   onProgressChange,
   onVideoCompletionChange,
   userAnswers = {},
@@ -136,6 +158,17 @@ export const CourseContentRenderer: React.FC<Props> = ({
 
   const effectiveCourseId = courseId || blocks[0]?.course_id || questions[0]?.course_id || 'course';
   const effectiveEpisodeId = episodeId || blocks[0]?.episode_id || questions[0]?.episode_id || 'episode';
+
+  const hasLearnWithShortsBlock = React.useMemo(
+    () =>
+      (blocks || []).some(
+        (b) =>
+          b &&
+          (b.block_type === 'learn_with_shorts' ||
+            (b.block_type === 'youtube_short' && Boolean((b.content as any)?.is_learn_with_shorts)))
+      ),
+    [blocks]
+  );
 
   // Required lesson videos for engine-level 90% completion enforcement
   const requiredVideos = React.useMemo(() => extractEpisodeRequiredVideos(blocks), [blocks]);
@@ -397,6 +430,18 @@ export const CourseContentRenderer: React.FC<Props> = ({
         transcript: '',
         show_transcript: false,
         video: { url: '', position: 'above' }
+      };
+    } else if (type === 'learn_with_shorts') {
+      content = {
+        title: '',
+        description: '',
+        video_url: '',
+        transcript: '',
+        subject_topic: '',
+        difficulty: 'medium',
+        learning_objectives: '',
+        aspect_ratio: '9:16',
+        is_learn_with_shorts: true
       };
     } else if (type === 'objective') {
       content = {
@@ -806,6 +851,53 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   <FormattedLessonText text={bodyText} textScale={textScale} />
                 </div>
               </section>
+            );
+          }
+
+          // C0. LEARN WITH SHORTS (9:16 VERTICAL MICROLEARNING SECTION)
+          if (
+            block_type === 'learn_with_shorts' ||
+            (block_type === 'youtube_short' && Boolean((content as any)?.is_learn_with_shorts))
+          ) {
+            if (isEditMode) {
+              return renderBlockWrapper(
+                <LearnWithShortsEditor
+                  block={block}
+                  courseId={effectiveCourseId}
+                  episodeId={effectiveEpisodeId}
+                  courseTitle={courseTitle}
+                  questions={questions}
+                  onUpdateBlockContent={(newContent) => updateBlockContent(idx, newContent)}
+                  onAddQuestions={(newQs) => {
+                    if (onChangeQuestions) {
+                      onChangeQuestions([...questions, ...newQs]);
+                    }
+                  }}
+                  onOpenAddQuestionsModal={onOpenAddQuestions}
+                  onPreviewStudentExperience={onPreviewStudentExperience}
+                />
+              );
+            }
+
+            return (
+              <div key={block.id || idx} className="w-full my-2">
+                <LearnWithShortsStudentPlayer
+                  block={block}
+                  courseId={effectiveCourseId}
+                  classroomId={classroomId}
+                  episodeId={effectiveEpisodeId}
+                  userId={userId}
+                  questions={validQuestions}
+                  questionResponses={studentResponses}
+                  onQuestionAnswer={(resp, q) => handleStudentResponse(resp, q)}
+                  onCompleteLesson={onCompleteLesson}
+                  onNextShort={onNextLesson}
+                  onReturnToCourse={onReturnToCourse}
+                  onQuitLesson={onQuitLesson || onReturnToCourse}
+                  hasNextShort={hasNextLesson}
+                  isLessonCompleted={isLessonCompleted}
+                />
+              </div>
             );
           }
 
@@ -1524,6 +1616,23 @@ export const CourseContentRenderer: React.FC<Props> = ({
 
                   <button
                     type="button"
+                    data-testid="add-learn-with-shorts-btn"
+                    onClick={() => handleAddSection('learn_with_shorts')}
+                    className="w-full p-2 rounded-xl text-left hover:bg-[#174A75] active:bg-[#1769AA] flex items-center gap-2.5 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-[#38BDF8]"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-sky-500/25 text-sky-300 flex items-center justify-center shrink-0">
+                      <Smartphone className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-white leading-tight">Learn with Shorts (9:16)</div>
+                      <div className="text-[10px] text-[#DCE8F5] leading-tight">
+                        Create interactive micro lessons using short vertical videos followed by gamified questions.
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => handleAddSection('image')}
                     className="w-full p-2 rounded-xl text-left hover:bg-[#174A75] active:bg-[#1769AA] flex items-center gap-2.5 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-[#38BDF8]"
                   >
@@ -1699,7 +1808,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
       {/* ===================================================================== */}
       {/* 2. PRACTICE QUESTIONS STREAM                                          */}
       {/* ===================================================================== */}
-      {(validQuestions.length > 0 || isEditMode) && (
+      {((validQuestions.length > 0 && !hasLearnWithShortsBlock) || isEditMode) && (
         <section className="w-full pt-5 sm:pt-8 border-t border-[var(--theme-border-subtle)] space-y-4 sm:space-y-6">
           
           {/* Practice Header: Mode Switch Aware (panel only in edit mode; light row for students) */}
