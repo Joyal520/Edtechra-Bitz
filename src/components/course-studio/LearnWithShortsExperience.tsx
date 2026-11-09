@@ -64,6 +64,7 @@ import { ComprehensiveQuestionRenderer } from './ComprehensiveQuestionRenderer';
 import { courseAudio } from '@/utils/courseAudio';
 import { triggerConfettiBurst } from '@/utils/courseConfetti';
 import { getNextDailyUnlockSummary } from '@/utils/dailyReleaseEngine';
+import { normalizeQuestionOptions, resolveCorrectOption } from '@/utils/questionGrading';
 
 declare global {
   interface Window {
@@ -363,6 +364,34 @@ export const LearnWithShortsEditor: React.FC<LearnWithShortsEditorProps> = ({
             let items: any = q.items;
             let correctOrder: any = q.correct_order;
             let matchingPairs: any = q.matching_pairs;
+            let correctAnswerStr = String(q.correct_answer ?? '').trim();
+
+            if (qType === 'multiple_choice' && Array.isArray(options) && options.length > 1) {
+              const normalized = normalizeQuestionOptions(options);
+              const resolved = resolveCorrectOption({
+                options: normalized,
+                correct_answer: correctAnswerStr
+              });
+              if (resolved) {
+                const shuffled = [...normalized];
+                for (let i = shuffled.length - 1; i > 0; i--) {
+                  const j = Math.floor(Math.random() * (i + 1));
+                  [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                }
+                const reindexed = shuffled.map((opt, oIdx) => ({
+                  id: String.fromCharCode(65 + oIdx),
+                  text: opt.text
+                }));
+                const newCorrectOpt = reindexed.find(opt => opt.text === resolved.text);
+                if (typeof options[0] === 'string') {
+                  options = reindexed.map(o => o.text);
+                  correctAnswerStr = newCorrectOpt ? newCorrectOpt.text : resolved.text;
+                } else {
+                  options = reindexed;
+                  correctAnswerStr = newCorrectOpt ? newCorrectOpt.id : resolved.id;
+                }
+              }
+            }
 
             if (qType === 'sentence_reordering' || qType === 'sentence_builder' || qType === 'ordering') {
               const sentenceStr = String(q.correct_answer || '').trim();
@@ -384,7 +413,7 @@ export const LearnWithShortsEditor: React.FC<LearnWithShortsEditorProps> = ({
               items,
               correct_order: correctOrder,
               matching_pairs: matchingPairs,
-              correct_answer: String(q.correct_answer ?? ''),
+              correct_answer: correctAnswerStr,
               explanation: String(q.explanation || 'Grounded in the short video transcript.'),
               skill: String(q.skill || subjectTopic || 'Microlearning Comprehension'),
               concept: String(q.concept || shortTitle || 'Short Lesson'),

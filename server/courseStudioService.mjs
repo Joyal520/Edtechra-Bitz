@@ -179,6 +179,8 @@ CRITERIA:
 - Target Difficulty: ${difficulty}
 - Allowed Question Types: ${questionTypes.join(', ')}
 - Special Teacher Instructions: ${instructions || 'Ensure clear wording and accurate answer keys.'}
+- Multiple Choice Randomisation: Randomise correct answer positions evenly across options A, B, C, and D. Do not default to Option A.
+- True/False Balance: Provide an equal, balanced mixture of True and False statements across lessons. Do not make all statements True.
 
 CRITICAL: Every question MUST include fine-grained educational metadata:
 - "skill": Broad subject skill (e.g. Grammar, Vocabulary, Reading, Comprehension, Problem Solving)
@@ -266,21 +268,71 @@ Return STRICTLY valid JSON with no Markdown wrappers matching this schema:
 
 function ensureQuestionIntegrity(parsedQuestions, defaultDifficulty = 'medium') {
   if (!Array.isArray(parsedQuestions)) return [];
-  return parsedQuestions.map((q, idx) => ({
-    id: q.id && String(q.id).length > 8 ? String(q.id) : crypto.randomUUID(),
-    question_text: String(q.question_text || q.question || 'Practice question').trim(),
-    question_type: q.question_type || q.type || 'multiple_choice',
-    options: Array.isArray(q.options) ? q.options : [],
-    correct_answer: String(q.correct_answer || q.answer || ''),
-    explanation: q.explanation || '',
-    skill: q.skill || 'Reading & Comprehension',
-    concept: q.concept || 'Key Takeaway',
-    difficulty: q.difficulty || defaultDifficulty,
-    points: typeof q.points === 'number' ? q.points : 10,
-    order_index: typeof q.order_index === 'number' ? q.order_index : idx,
-    passage: q.passage || '',
-    content_ref: q.content_ref || q.passage_ref || ''
-  }));
+  return parsedQuestions.map((q, idx) => {
+    const qType = q.question_type || q.type || 'multiple_choice';
+    let options = Array.isArray(q.options) ? [...q.options] : [];
+    let correctAnswer = String(q.correct_answer || q.answer || '').trim();
+
+    // Randomize Multiple Choice option positions to prevent Option A bias
+    if (qType === 'multiple_choice' && options.length > 1) {
+      let matchIdx = -1;
+      const cleanTarget = correctAnswer.toLowerCase().replace(/^[a-d][\.\)\:\-]\s*/i, '').trim();
+      const letterMatch = correctAnswer.match(/^[A-Da-d]$/);
+
+      if (letterMatch) {
+        const letterIdx = letterMatch[0].toUpperCase().charCodeAt(0) - 65;
+        if (letterIdx >= 0 && letterIdx < options.length) {
+          matchIdx = letterIdx;
+        }
+      }
+
+      if (matchIdx === -1) {
+        matchIdx = options.findIndex(opt => {
+          const optText = String(typeof opt === 'object' ? opt.text || opt.label : opt)
+            .toLowerCase()
+            .replace(/^[a-d][\.\)\:\-]\s*/i, '')
+            .trim();
+          return optText === cleanTarget || optText.includes(cleanTarget) || cleanTarget.includes(optText);
+        });
+      }
+
+      if (matchIdx !== -1) {
+        const correctItem = options[matchIdx];
+        // Fisher-Yates shuffle
+        for (let i = options.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [options[i], options[j]] = [options[j], options[i]];
+        }
+        if (typeof correctItem === 'string') {
+          const rawTarget = String(correctItem).replace(/^[A-Da-d][\.\)\:\-]\s*/, '').trim();
+          correctAnswer = rawTarget;
+        } else if (typeof correctItem === 'object' && correctItem !== null) {
+          options = options.map((opt, oIdx) => ({
+            ...opt,
+            id: String.fromCharCode(65 + oIdx)
+          }));
+          const newOpt = options.find(o => o.text === correctItem.text);
+          if (newOpt) correctAnswer = newOpt.id;
+        }
+      }
+    }
+
+    return {
+      id: q.id && String(q.id).length > 8 ? String(q.id) : crypto.randomUUID(),
+      question_text: String(q.question_text || q.question || 'Practice question').trim(),
+      question_type: qType,
+      options,
+      correct_answer: correctAnswer,
+      explanation: q.explanation || '',
+      skill: q.skill || 'Reading & Comprehension',
+      concept: q.concept || 'Key Takeaway',
+      difficulty: q.difficulty || defaultDifficulty,
+      points: typeof q.points === 'number' ? q.points : 10,
+      order_index: typeof q.order_index === 'number' ? q.order_index : idx,
+      passage: q.passage || '',
+      content_ref: q.content_ref || q.passage_ref || ''
+    };
+  });
 }
 
 // ----------------------------------------------------------------------------

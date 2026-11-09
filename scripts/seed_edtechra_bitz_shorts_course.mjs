@@ -64,9 +64,9 @@ export const TEN_SHORTS_LESSONS = [
         question_type: 'multiple_choice',
         question_text: 'Where did people first report seeing the Mothman in 1966?',
         options: [
-          'Point Pleasant, West Virginia',
           'Transylvania, Romania',
           'Paris, France',
+          'Point Pleasant, West Virginia',
           'Tokyo, Japan'
         ],
         correct_answer: 'Point Pleasant, West Virginia',
@@ -149,8 +149,8 @@ export const TEN_SHORTS_LESSONS = [
         question_type: 'multiple_choice',
         question_text: 'Where is the Hoia-Baciu Forest located?',
         options: [
-          'In Transylvania, Romania',
           'In West Virginia, USA',
+          'In Transylvania, Romania',
           'Between France and Spain',
           'In southern Australia'
         ],
@@ -165,10 +165,10 @@ export const TEN_SHORTS_LESSONS = [
         question_type: 'multiple_choice',
         question_text: 'What is unusual about the circular clearing in the center of the forest?',
         options: [
-          'No trees or plants grow in the circular clearing',
           'It is covered in snow all year round',
           'There is a large airport in the clearing',
-          'Hundreds of tall buildings stand there'
+          'Hundreds of tall buildings stand there',
+          'No trees or plants grow in the circular clearing'
         ],
         correct_answer: 'No trees or plants grow in the circular clearing',
         explanation:
@@ -179,13 +179,14 @@ export const TEN_SHORTS_LESSONS = [
       {
         id: 'e10c7ee9-0010-4000-8004-000000000203',
         question_type: 'true_false',
-        question_text: 'Hoia-Baciu Forest is often called the Bermuda Triangle of Romania.',
+        question_text:
+          'In the center of the Hoia-Baciu Forest, trees grow much taller and denser than anywhere else.',
         options: ['True', 'False'],
-        correct_answer: 'True',
+        correct_answer: 'False',
         explanation:
-          'The video and reading passage explain that Hoia-Baciu Forest is known as the Bermuda Triangle of Romania.',
+          'False — In the center of the forest lies a circular clearing where no trees or plants grow at all.',
         skill: 'Fact Verification',
-        concept: 'Forest Nickname'
+        concept: 'Circular Clearing Vegetation'
       },
       {
         id: 'e10c7ee9-0010-4000-8004-000000000204',
@@ -233,10 +234,10 @@ export const TEN_SHORTS_LESSONS = [
         question_type: 'multiple_choice',
         question_text: 'According to the story, where did the traveler say Taured was located?',
         options: [
-          'Between France and Spain',
           'Between Canada and the United States',
           'Next to Romania',
-          'On a small island near Japan'
+          'On a small island near Japan',
+          'Between France and Spain'
         ],
         correct_answer: 'Between France and Spain',
         explanation:
@@ -249,8 +250,8 @@ export const TEN_SHORTS_LESSONS = [
         question_type: 'multiple_choice',
         question_text: 'What do researchers say about the popular story of the Man from Taured?',
         options: [
-          'No reliable evidence confirms it, and it probably grew from a real 1950s passport case',
           'Taured is a real country that joined the United Nations in 1960',
+          'No reliable evidence confirms it, and it probably grew from a real 1950s passport case',
           'Every airport officer took photographs of the country of Taured',
           'The man built a new airport in Andorra'
         ],
@@ -334,9 +335,9 @@ export const TEN_SHORTS_LESSONS = [
         question_type: 'multiple_choice',
         question_text: 'What have some people reported seeing beside their bed during sleep paralysis?',
         options: [
-          'A dark figure standing near the bed',
           'A bright rainbow on the ceiling',
           'An airport officer checking passports',
+          'A dark figure standing near the bed',
           'A circular forest clearing'
         ],
         correct_answer: 'A dark figure standing near the bed',
@@ -349,13 +350,13 @@ export const TEN_SHORTS_LESSONS = [
         id: 'e10c7ee9-0010-4000-8004-000000000403',
         question_type: 'true_false',
         question_text:
-          'During sleep paralysis, you can see your room and hear sounds, even though your body feels frozen.',
+          'During sleep paralysis, your body can move freely and run around the room while your mind is still asleep.',
         options: ['True', 'False'],
-        correct_answer: 'True',
+        correct_answer: 'False',
         explanation:
-          'The video explains that you can see your room and hear everything, but your body feels completely frozen.',
+          'False — During sleep paralysis, your mind is awake and conscious, but your muscles are temporarily unable to move.',
         skill: 'Fact Verification',
-        concept: 'Sensory Awareness'
+        concept: 'Motor Inhibition in Sleep'
       },
       {
         id: 'e10c7ee9-0010-4000-8004-000000000404',
@@ -403,8 +404,8 @@ export const TEN_SHORTS_LESSONS = [
         question_type: 'multiple_choice',
         question_text: 'What is a false awakening?',
         options: [
-          'A dream experience where you believe you have woken up, even though you are still dreaming',
           'Staying awake all night to study for an exam',
+          'A dream experience where you believe you have woken up, even though you are still dreaming',
           'Walking through a dark forest in Romania',
           'Hearing an alarm clock in the afternoon'
         ],
@@ -420,10 +421,10 @@ export const TEN_SHORTS_LESSONS = [
         question_type: 'multiple_choice',
         question_text: 'Why does a false awakening feel so real at first?',
         options: [
-          'Your room, your bed, and your phone look normal inside the dream',
           'You are standing at an international airport',
           'Someone is shouting outside your window',
-          'The lights in the city are turned off'
+          'The lights in the city are turned off',
+          'Your room, your bed, and your phone look normal inside the dream'
         ],
         correct_answer: 'Your room, your bed, and your phone look normal inside the dream',
         explanation:
@@ -489,10 +490,10 @@ export const TEN_SHORTS_LESSONS = [
         question_type: 'multiple_choice',
         question_text: 'What happens during Exploding Head Syndrome?',
         options: [
-          'A person hears a loud imaginary sound like an explosion or crash while sleeping or waking',
           'A real thunderstorm breaks the bedroom window',
           'Neighbors play loud music in the street all night',
-          'A person walks in their sleep into the kitchen'
+          'A person walks in their sleep into the kitchen',
+          'A person hears a loud imaginary sound like an explosion or crash while sleeping or waking'
         ],
         correct_answer:
           'A person hears a loud imaginary sound like an explosion or crash while sleeping or waking',
@@ -521,11 +522,11 @@ export const TEN_SHORTS_LESSONS = [
         id: 'e10c7ee9-0010-4000-8004-000000000603',
         question_type: 'true_false',
         question_text:
-          'In Exploding Head Syndrome, the loud explosion sound feels real, but nothing actually exploded outside.',
+          'Exploding Head Syndrome is caused by real physical bombs exploding outside the house and causes permanent physical damage.',
         options: ['True', 'False'],
-        correct_answer: 'True',
+        correct_answer: 'False',
         explanation:
-          'The sound feels completely real to the sleeper, but nothing actually exploded.',
+          'False — The loud explosion is an imaginary sound produced by the brain switching states; it is completely harmless and does not cause physical damage.',
         skill: 'Fact Verification',
         concept: 'Auditory Sleep Phenomenon'
       },
@@ -576,9 +577,9 @@ export const TEN_SHORTS_LESSONS = [
         question_type: 'multiple_choice',
         question_text: 'According to the video, what is the shadow person standing in the corner of the room?',
         options: [
-          'A hallucination created by the brain between sleeping and waking',
           'A real thief hiding inside the bedroom',
           'A neighbor visiting at three in the morning',
+          'A hallucination created by the brain between sleeping and waking',
           'A statue made of stone'
         ],
         correct_answer: 'A hallucination created by the brain between sleeping and waking',
@@ -592,8 +593,8 @@ export const TEN_SHORTS_LESSONS = [
         question_type: 'multiple_choice',
         question_text: 'Why does the shadow figure in the room feel so real and frightening?',
         options: [
-          'Because your mind is awake while part of your brain is still dreaming',
           'Because the bedroom window is broken',
+          'Because your mind is awake while part of your brain is still dreaming',
           'Because it only happens in the middle of the afternoon',
           'Because everyone in the street can see it too'
         ],
@@ -679,10 +680,10 @@ export const TEN_SHORTS_LESSONS = [
         question_type: 'multiple_choice',
         question_text: 'What real organism in nature can change the behavior of insects such as ants?',
         options: [
-          'Certain fungi, such as Cordyceps',
           'Ordinary garden flowers',
           'Small river fish',
-          'Desert rocks'
+          'Desert rocks',
+          'Certain fungi, such as Cordyceps'
         ],
         correct_answer: 'Certain fungi, such as Cordyceps',
         explanation:
@@ -693,13 +694,14 @@ export const TEN_SHORTS_LESSONS = [
       {
         id: 'e10c7ee9-0010-4000-8004-000000000803',
         question_type: 'true_false',
-        question_text: 'Some real fungi in nature can infect ants and change their behavior.',
+        question_text:
+          'Scientists confirm that real human beings frequently turn into movie zombies in major modern cities.',
         options: ['True', 'False'],
-        correct_answer: 'True',
+        correct_answer: 'False',
         explanation:
-          'One famous fungus infects ants and changes their behavior before the fungus reproduces.',
+          'False — A human zombie apocalypse is entirely fictional and only exists in movies and stories.',
         skill: 'Fact Verification',
-        concept: 'Ant Behavior Manipulation'
+        concept: 'Fiction vs Reality'
       },
       {
         id: 'e10c7ee9-0010-4000-8004-000000000804',
@@ -747,8 +749,8 @@ export const TEN_SHORTS_LESSONS = [
         question_type: 'multiple_choice',
         question_text: 'In the story, what happens first at 3 AM while you are lying in bed?',
         options: [
-          'You hear a sound under the bed',
           'You go outside to drive your car',
+          'You hear a sound under the bed',
           'You receive a phone call from a friend',
           'You turn on the television'
         ],
@@ -762,9 +764,9 @@ export const TEN_SHORTS_LESSONS = [
         question_type: 'multiple_choice',
         question_text: 'What is the surprise twist question at the very end of the story?',
         options: [
-          'What if it was never under the bed, and was already behind you?',
           'What if it was just a friendly cat in the kitchen?',
           'What if it was already morning outside?',
+          'What if it was never under the bed, and was already behind you?',
           'What if the bed was in a hotel room?'
         ],
         correct_answer: 'What if it was never under the bed, and was already behind you?',
@@ -831,9 +833,9 @@ export const TEN_SHORTS_LESSONS = [
         question_type: 'multiple_choice',
         question_text: 'When does a night terror happen?',
         options: [
-          'During deep NREM sleep when the brain partially wakes up',
           'When a person is wide awake eating breakfast',
           'Only when someone is watching television',
+          'During deep NREM sleep when the brain partially wakes up',
           'While walking to school in the morning'
         ],
         correct_answer: 'During deep NREM sleep when the brain partially wakes up',
@@ -861,13 +863,14 @@ export const TEN_SHORTS_LESSONS = [
       {
         id: 'e10c7ee9-0010-4000-8004-000000001003',
         question_type: 'true_false',
-        question_text: 'A night terror is a different sleep phenomenon from an ordinary nightmare.',
+        question_text:
+          'When people wake up after experiencing night terrors, they clearly remember every detail of their dream.',
         options: ['True', 'False'],
-        correct_answer: 'True',
+        correct_answer: 'False',
         explanation:
-          'As the video explains: "It\'s not a nightmare. It\'s a different sleep phenomenon."',
+          'False — People who experience night terrors typically remember almost nothing about the episode the next morning because it occurs during deep NREM sleep.',
         skill: 'Fact Verification',
-        concept: 'Night Terror vs Nightmare'
+        concept: 'Night Terror Memory Recall'
       },
       {
         id: 'e10c7ee9-0010-4000-8004-000000001004',
@@ -952,9 +955,7 @@ async function seedCourse() {
   }
   console.log('2. Unit upserted:', unitRow.id, '-', unitRow.title);
 
-  // Clean up any stale episodes/blocks/questions ONLY for this course ID (never touch any other course!)
-  await supabase.from('course_questions').delete().eq('course_id', COURSE_ID);
-  await supabase.from('course_blocks').delete().eq('course_id', COURSE_ID);
+  // Upsert blocks and questions to preserve existing student attempts and progress
   await supabase
     .from('course_episodes')
     .delete()
@@ -1013,14 +1014,17 @@ async function seedCourse() {
       }
     };
 
-    let blockInsertRes = await supabase.from('course_blocks').insert({
-      id: lesson.blockId,
-      episode_id: lesson.episodeId,
-      course_id: COURSE_ID,
-      block_type: 'learn_with_shorts',
-      order_index: 0,
-      content: blockContent
-    });
+    let blockInsertRes = await supabase.from('course_blocks').upsert(
+      {
+        id: lesson.blockId,
+        episode_id: lesson.episodeId,
+        course_id: COURSE_ID,
+        block_type: 'learn_with_shorts',
+        order_index: 0,
+        content: blockContent
+      },
+      { onConflict: 'id' }
+    );
 
     if (
       blockInsertRes.error &&
@@ -1028,14 +1032,17 @@ async function seedCourse() {
         String(blockInsertRes.error.message || '').includes('course_blocks_block_type_check'))
     ) {
       // Fallback to 'youtube_short' while preserving _block_type: 'learn_with_shorts'
-      blockInsertRes = await supabase.from('course_blocks').insert({
-        id: lesson.blockId,
-        episode_id: lesson.episodeId,
-        course_id: COURSE_ID,
-        block_type: 'youtube_short',
-        order_index: 0,
-        content: blockContent
-      });
+      blockInsertRes = await supabase.from('course_blocks').upsert(
+        {
+          id: lesson.blockId,
+          episode_id: lesson.episodeId,
+          course_id: COURSE_ID,
+          block_type: 'youtube_short',
+          order_index: 0,
+          content: blockContent
+        },
+        { onConflict: 'id' }
+      );
     }
 
     if (blockInsertRes.error) {
@@ -1114,9 +1121,11 @@ async function seedCourse() {
       };
     });
 
-    const { error: qErr } = await supabase.from('course_questions').insert(questionsToInsert);
+    const { error: qErr } = await supabase
+      .from('course_questions')
+      .upsert(questionsToInsert, { onConflict: 'id' });
     if (qErr) {
-      throw new Error(`Failed to insert questions for lesson ${lesson.lessonNumber}: ${qErr.message}`);
+      throw new Error(`Failed to upsert questions for lesson ${lesson.lessonNumber}: ${qErr.message}`);
     }
 
     const passageWordCount = lesson.readingPassage.trim().split(/\s+/).length;
