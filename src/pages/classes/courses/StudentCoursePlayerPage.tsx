@@ -100,6 +100,19 @@ export const StudentCoursePlayerPage: React.FC = () => {
   // server-side score (computed from persisted attempts) includes every answer.
   const pendingAttemptsRef = useRef<Set<Promise<unknown>>>(new Set());
 
+  const handleShortsStageChange = React.useCallback(
+    (newStage: 'intro' | 'watch' | 'read' | 'watch_again' | 'challenge' | 'reward') => {
+      setShortsStage(prevStage => {
+        if (prevStage === newStage) return prevStage;
+        if (newStage !== 'intro') {
+          mainScrollRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+        }
+        return newStage;
+      });
+    },
+    []
+  );
+
   const handleProgressChange = React.useCallback((answered: number, total: number) => {
     setQuestionProgress({ answered, total });
   }, []);
@@ -889,7 +902,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
       <main
         ref={mainScrollRef}
         onScroll={handleScroll}
-        className={`course-reader-scroll flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden scroll-smooth box-border ${
+        className={`course-reader-scroll flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden box-border ${
           viewMode === 'lesson' && isCreepyLegendsOrVideoCourse && !isCurrentEpisodeLocked
             ? 'bg-[#071326] p-0'
             : viewMode === 'lesson' && isLearnWithShortsLesson && !isCurrentEpisodeLocked && shortsStage !== 'intro'
@@ -1137,12 +1150,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
                   dailyReleaseIntervalDays={course.daily_release_interval_days || 1}
                   nextUnlockDateLabel={nextLessonUnlockDateLabel}
                   nextUnlockCountdown={nextLessonUnlockCountdown}
-                  onShortsStageChange={(newStage) => {
-                    setShortsStage(newStage);
-                    if (newStage !== 'intro') {
-                      mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-                    }
-                  }}
+                  onShortsStageChange={handleShortsStageChange}
                   onProgressChange={handleProgressChange}
                   onVideoCompletionChange={setVideoCompletionStatus}
                   isCourseReader={useCinematicHeaderCourse}

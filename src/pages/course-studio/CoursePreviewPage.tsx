@@ -705,6 +705,19 @@ export const CoursePreviewPage: React.FC = () => {
   });
   const [shortsStage, setShortsStage] = useState<'intro' | 'watch' | 'read' | 'watch_again' | 'challenge' | 'reward'>('intro');
 
+  const handleShortsStageChange = React.useCallback(
+    (newStage: 'intro' | 'watch' | 'read' | 'watch_again' | 'challenge' | 'reward') => {
+      setShortsStage(prevStage => {
+        if (prevStage === newStage) return prevStage;
+        if (newStage !== 'intro') {
+          mainScrollRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+        }
+        return newStage;
+      });
+    },
+    []
+  );
+
   const handleProgressChange = React.useCallback((answered: number, total: number) => {
     setQuestionProgress({ answered, total });
   }, []);
@@ -1517,7 +1530,7 @@ export const CoursePreviewPage: React.FC = () => {
         <main
           ref={mainScrollRef}
           onScroll={handleScroll}
-          className={`course-reader-scroll flex-1 min-h-0 h-full overflow-y-auto overflow-x-hidden scroll-smooth box-border relative z-1 ${
+          className={`course-reader-scroll flex-1 min-h-0 h-full overflow-y-auto overflow-x-hidden box-border relative z-1 ${
             !isEditMode && viewMode === 'lesson' && isCreepyLegendsOrVideoCourse && selectedEpisode
               ? 'bg-[#071326] p-0'
               : !isEditMode && viewMode === 'lesson' && isLearnWithShortsLesson && shortsStage !== 'intro'
@@ -1777,12 +1790,7 @@ export const CoursePreviewPage: React.FC = () => {
                 nextUnlockDateLabel={nextLessonUnlockDateLabel}
                 nextUnlockCountdown={nextLessonUnlockCountdown}
                 onUpdateDailyUnlockSettings={handleUpdateDailyUnlockSettings}
-                onShortsStageChange={(newStage) => {
-                  setShortsStage(newStage);
-                  if (newStage !== 'intro') {
-                    mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-                  }
-                }}
+                onShortsStageChange={handleShortsStageChange}
                 onPreviewStudentExperience={() => handleToggleMode(false)}
                 onProgressChange={handleProgressChange}
                 onVideoCompletionChange={setVideoCompletionStatus}

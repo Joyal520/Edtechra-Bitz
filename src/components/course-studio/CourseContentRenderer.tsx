@@ -225,13 +225,15 @@ export const CourseContentRenderer: React.FC<Props> = ({
     return Math.round(totalPct / requiredVideos.length);
   }, [requiredVideos, videoProgressMap]);
 
+  const onVideoCompletionChangeRef = React.useRef(onVideoCompletionChange);
+  onVideoCompletionChangeRef.current = onVideoCompletionChange;
   useEffect(() => {
-    onVideoCompletionChange?.({
+    onVideoCompletionChangeRef.current?.({
       allCompleted: allRequiredVideosCompleted,
       watchedPercent: avgVideoWatchedPercent,
       totalVideos: requiredVideos.length
     });
-  }, [allRequiredVideosCompleted, avgVideoWatchedPercent, requiredVideos.length, onVideoCompletionChange]);
+  }, [allRequiredVideosCompleted, avgVideoWatchedPercent, requiredVideos.length]);
 
   // Unique canonical questions strictly belonging to this lesson instance
   const validQuestions = React.useMemo(() => getValidLessonQuestions(questions), [questions]);
@@ -637,9 +639,11 @@ export const CourseContentRenderer: React.FC<Props> = ({
     return hasResp || hasAns || Boolean(fb);
   }).length;
 
+  const onProgressChangeRef = React.useRef(onProgressChange);
+  onProgressChangeRef.current = onProgressChange;
   useEffect(() => {
-    onProgressChange?.(answeredTotal, totalQuestions);
-  }, [answeredTotal, totalQuestions, onProgressChange]);
+    onProgressChangeRef.current?.(answeredTotal, totalQuestions);
+  }, [answeredTotal, totalQuestions]);
 
   const correctTotal = validQuestions.filter(q => {
     const resp = studentResponses[q.id];

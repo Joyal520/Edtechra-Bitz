@@ -1422,10 +1422,12 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   // 6-Stage Microlearning Flow: 'intro' -> 'watch' -> 'read' -> 'watch_again' -> 'challenge' -> 'reward'
   const [stage, setStage] = useState<'intro' | 'watch' | 'read' | 'watch_again' | 'challenge' | 'reward'>('intro');
 
-  // Notify parent when stage changes so the common course header is only shown on 'intro'
+  // Notify parent ONLY when `stage` actually transitions (never on ordinary scroll re-renders)
+  const onStageChangeRef = useRef(onStageChange);
+  onStageChangeRef.current = onStageChange;
   useEffect(() => {
-    onStageChange?.(stage);
-  }, [stage, onStageChange]);
+    onStageChangeRef.current?.(stage);
+  }, [stage]);
 
   // Active video key depends on whether the student is in Stage 2 (watch) or Stage 4 (watch_again)
   const activeVideoKey = stage === 'watch_again' ? `${baseVideoKey}_watch2` : baseVideoKey;
@@ -2330,16 +2332,20 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   }
 
   // ==========================================================================
-  // STAGE 3: READING ACTIVITY — FULL-WIDTH MOBILE LAYOUT & SIMPLIFIED HEADER
+  // STAGE 3: READING ACTIVITY — DIGITAL READING BOOK LAYOUT & 18PX TYPOGRAPHY
   // ==========================================================================
   if (stage === 'read') {
     return (
       <div
         data-testid="shorts-reading-stage"
-        className="w-full max-w-full sm:max-w-3xl sm:mx-auto m-0 p-0 animate-in fade-in duration-300 box-border bg-white sm:rounded-3xl sm:border sm:border-sky-500/25 sm:shadow-lg overflow-hidden"
+        className="w-full max-w-full sm:max-w-[720px] sm:mx-auto m-0 p-0 box-border bg-white sm:rounded-3xl sm:border sm:border-sky-500/25 sm:shadow-xl sm:overflow-hidden"
       >
-        {/* Reading Header: ONLY Reading Title + Relevant Background Image + Dark Overlay */}
-        <div className="relative w-full min-h-[148px] sm:min-h-[180px] flex items-end px-4 py-5 sm:px-8 sm:py-7 overflow-hidden">
+        {/* Naturally Scrolling Reading Header: Lesson Title + Background Image + Dark Overlay (non-sticky) */}
+        <div
+          data-testid="shorts-reading-header"
+          style={{ position: 'relative' }}
+          className="relative w-full min-h-[180px] sm:min-h-[220px] flex items-end px-[20px] py-6 sm:px-8 sm:py-7 overflow-hidden"
+        >
           <img
             src={coverArtworkUrl}
             alt={shortTitle}
@@ -2348,14 +2354,14 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
               (e.currentTarget as HTMLImageElement).src = '/images/creepy_legends_cover.png';
             }}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#050f1e]/95 via-[#07162c]/75 to-[#050f1e]/40" />
-          <h2 className="relative z-10 w-full text-lg sm:text-2xl font-black text-white uppercase tracking-tight leading-snug drop-shadow-sm">
+          <div className="absolute inset-0 bg-gradient-to-t from-[#050f1e]/95 via-[#07162c]/70 to-[#050f1e]/35" />
+          <h2 className="relative z-10 w-full text-xl sm:text-2xl font-black text-white uppercase tracking-tight leading-snug drop-shadow-sm text-left">
             {shortTitle}
           </h2>
         </div>
 
-        {/* Full-Width Reading Body with Consistent Mobile Safe-Area Padding & Justified 14px Typography */}
-        <div className="w-full max-w-full px-4 py-5 sm:px-8 sm:py-7 bg-white box-border">
+        {/* Full-Width Digital Book Reading Body with 20px Mobile Padding & 18px Justified Typography */}
+        <div className="w-full max-w-full px-[20px] pt-6 pb-10 sm:px-8 sm:pt-8 sm:pb-10 bg-white box-border">
           {readingPassage
             .split(/\n\n+/)
             .filter(Boolean)
@@ -2363,25 +2369,29 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
               <p
                 key={idx}
                 style={{
-                  fontSize: '14px',
-                  lineHeight: 1.7,
+                  fontSize: '18px',
+                  lineHeight: 1.75,
+                  fontWeight: 400,
                   textAlign: 'justify',
                   textJustify: 'inter-word',
-                  color: '#0F172A'
+                  color: '#0F172A',
+                  marginBottom: '20px',
+                  overflowWrap: 'break-word',
+                  wordBreak: 'normal'
                 }}
-                className="w-full max-w-none text-[14px] leading-[1.7] text-[#0F172A] font-normal mb-3.5 last:mb-0"
+                className="w-full max-w-none text-[18px] leading-[1.75] font-normal text-[#0F172A] last:!mb-0"
               >
                 {para.trim()}
               </p>
             ))}
 
-          {/* Bottom Action: One Clear Button */}
-          <div className="pt-5 mt-5 border-t border-slate-200/80 flex justify-center sm:justify-end">
+          {/* Bottom Action Button: Placed naturally after the complete reading passage */}
+          <div className="pt-6 mt-7 pb-6 sm:pb-2 border-t border-slate-200/80 flex justify-center sm:justify-end">
             <button
               type="button"
               data-testid="shorts-read-next-button"
               onClick={() => enterFullscreenVideoStage('watch_again')}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-4 rounded-2xl bg-gradient-to-r from-[#0284C7] to-[#0369A1] hover:from-[#0369A1] hover:to-[#075985] text-white text-xs sm:text-sm font-black uppercase tracking-wider shadow-lg shadow-sky-500/20 active:scale-[0.99] transition-all cursor-pointer"
+              className="w-full sm:w-auto min-h-[52px] inline-flex items-center justify-center gap-2.5 px-8 py-4 rounded-2xl bg-gradient-to-r from-[#0284C7] to-[#0369A1] hover:from-[#0369A1] hover:to-[#075985] text-white text-sm font-black uppercase tracking-wider shadow-lg shadow-sky-500/20 active:scale-[0.99] transition-all cursor-pointer"
             >
               <span>I&apos;M READY – WATCH AGAIN</span>
             </button>
