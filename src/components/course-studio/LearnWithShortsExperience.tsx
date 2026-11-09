@@ -52,12 +52,13 @@ import {
 import {
   VideoProgressState,
   createInitialVideoProgressState,
-  processVideoPlaybackTick,
-  loadLocalVideoProgress,
+  mergeWatchedSegments,
+  computeUniqueWatchedSeconds,
+  computeWatchedPercent,
+  getMaxWatchedPosition,
   saveLocalVideoProgress,
   extractYouTubeId,
-  formatSecondsAsTime,
-  VIDEO_COMPLETION_THRESHOLD_PERCENT
+  formatSecondsAsTime
 } from '@/utils/videoCompletionTracker';
 import { ComprehensiveQuestionRenderer } from './ComprehensiveQuestionRenderer';
 import { courseAudio } from '@/utils/courseAudio';
@@ -1364,6 +1365,7 @@ export interface LearnWithShortsStudentPlayerProps {
   dailyReleaseEnabled?: boolean;
   nextUnlockDateLabel?: string;
   nextUnlockCountdown?: string;
+  onStageChange?: (stage: 'intro' | 'watch' | 'read' | 'watch_again' | 'challenge' | 'reward') => void;
 }
 
 export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayerProps> = ({
@@ -1385,7 +1387,8 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   courseCoverUrl = null,
   dailyReleaseEnabled = false,
   nextUnlockDateLabel,
-  nextUnlockCountdown
+  nextUnlockCountdown,
+  onStageChange
 }) => {
   const content = (block.content || {}) as Record<string, any>;
   const shortTitle = String(content.title ?? content.video?.title ?? 'Micro Lesson Short');
@@ -1407,6 +1410,7 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   const baseVideoKey = useMemo(() => ytId || block.id || 'short_video', [ytId, block.id]);
 
   // Cover / thumbnail image for Stage 1 (Intro) and Stage 3 (Reading Header)
+  // Uses individual lesson image where available; otherwise uses the course cover image.
   const coverArtworkUrl = useMemo(() => {
     if (content.cover_image_url) return String(content.cover_image_url);
     if (content.image_url) return String(content.image_url);
@@ -1418,33 +1422,37 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   // 6-Stage Microlearning Flow: 'intro' -> 'watch' -> 'read' -> 'watch_again' -> 'challenge' -> 'reward'
   const [stage, setStage] = useState<'intro' | 'watch' | 'read' | 'watch_again' | 'challenge' | 'reward'>('intro');
 
+  // Notify parent when stage changes so the common course header is only shown on 'intro'
+  useEffect(() => {
+    onStageChange?.(stage);
+  }, [stage, onStageChange]);
+
   // Active video key depends on whether the student is in Stage 2 (watch) or Stage 4 (watch_again)
   const activeVideoKey = stage === 'watch_again' ? `${baseVideoKey}_watch2` : baseVideoKey;
 
-  // Stage 2 (First Watch) playback & verification state
-  const [progressState, setProgressState] = useState<VideoProgressState>(() => {
-    const saved = loadLocalVideoProgress(courseId, episodeId, baseVideoKey, userId);
-    if (saved) return saved;
-    return createInitialVideoProgressState({
+  // Stage 2 (First Watch) playback & verification state — starts at 0% on each viewing so QUIT/NEXT are hidden when video starts
+  const [progressState, setProgressState] = useState<VideoProgressState>(() =>
+    createInitialVideoProgressState({
       courseId,
       episodeId,
       videoKey: baseVideoKey,
       durationSeconds: 0
-    });
-  });
+    })
+  );
 
-  // Stage 4 (Second Watch: WATCH AGAIN) playback & verification state
-  const [secondWatchProgressState, setSecondWatchProgressState] = useState<VideoProgressState>(() => {
-    const key2 = `${baseVideoKey}_watch2`;
-    const saved = loadLocalVideoProgress(courseId, episodeId, key2, userId);
-    if (saved) return saved;
-    return createInitialVideoProgressState({
+  // Stage 4 (Second Watch: WATCH AGAIN) playback & verification state — starts at 0% on each viewing
+  const [secondWatchProgressState, setSecondWatchProgressState] = useState<VideoProgressState>(() =>
+    createInitialVideoProgressState({
       courseId,
       episodeId,
-      videoKey: key2,
+      videoKey: `${baseVideoKey}_watch2`,
       durationSeconds: 0
-    });
-  });
+    })
+  );
+
+  // Explicit per-viewing threshold (> 90%) verification flags
+  const [watch1Unlocked, setWatch1Unlocked] = useState<boolean>(false);
+  const [watch2Unlocked, setWatch2Unlocked] = useState<boolean>(false);
 
   const currentProgressState = stage === 'watch_again' ? secondWatchProgressState : progressState;
 
@@ -1466,6 +1474,8 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   const ytContainerRef = useRef<HTMLDivElement | null>(null);
   const ytPlayerRef = useRef<any>(null);
   const lastTimeRef = useRef<number>(0);
+  const lastWallTimeRef = useRef<number>(0);
+  const wasPlayingRef = useRef<boolean>(false);
   const isTabVisibleRef = useRef<boolean>(true);
   const progressRef = useRef<VideoProgressState>(currentProgressState);
   progressRef.current = currentProgressState;
@@ -1499,31 +1509,27 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   // Reset state when episode or video changes
   useEffect(() => {
     exitNativeFullscreenIfActive();
-    const saved1 = loadLocalVideoProgress(courseId, episodeId, baseVideoKey, userId);
-    const initial1 =
-      saved1 ||
-      createInitialVideoProgressState({
-        courseId,
-        episodeId,
-        videoKey: baseVideoKey,
-        durationSeconds: 0
-      });
-
-    const key2 = `${baseVideoKey}_watch2`;
-    const saved2 = loadLocalVideoProgress(courseId, episodeId, key2, userId);
-    const initial2 =
-      saved2 ||
-      createInitialVideoProgressState({
-        courseId,
-        episodeId,
-        videoKey: key2,
-        durationSeconds: 0
-      });
+    const initial1 = createInitialVideoProgressState({
+      courseId,
+      episodeId,
+      videoKey: baseVideoKey,
+      durationSeconds: 0
+    });
+    const initial2 = createInitialVideoProgressState({
+      courseId,
+      episodeId,
+      videoKey: `${baseVideoKey}_watch2`,
+      durationSeconds: 0
+    });
 
     setProgressState(initial1);
     setSecondWatchProgressState(initial2);
+    setWatch1Unlocked(false);
+    setWatch2Unlocked(false);
     progressRef.current = initial1;
     lastTimeRef.current = 0;
+    lastWallTimeRef.current = 0;
+    wasPlayingRef.current = false;
     setStage('intro');
     setCurrentQuestionIndex(0);
     setSeekNotice(null);
@@ -1533,6 +1539,8 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   useEffect(() => {
     if (stage === 'watch' || stage === 'watch_again') {
       lastTimeRef.current = 0;
+      lastWallTimeRef.current = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      wasPlayingRef.current = false;
       setSeekNotice(null);
       const prevOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
@@ -1545,6 +1553,30 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   // Enter full-screen video mode from Stage 1 (Intro) or Stage 3 (Read)
   const enterFullscreenVideoStage = (targetStage: 'watch' | 'watch_again') => {
     courseAudio.playSelectSound();
+    if (targetStage === 'watch') {
+      const fresh1 = createInitialVideoProgressState({
+        courseId,
+        episodeId,
+        videoKey: baseVideoKey,
+        durationSeconds: 0
+      });
+      setProgressState(fresh1);
+      progressRef.current = fresh1;
+      setWatch1Unlocked(false);
+    } else {
+      const fresh2 = createInitialVideoProgressState({
+        courseId,
+        episodeId,
+        videoKey: `${baseVideoKey}_watch2`,
+        durationSeconds: 0
+      });
+      setSecondWatchProgressState(fresh2);
+      progressRef.current = fresh2;
+      setWatch2Unlocked(false);
+    }
+    lastTimeRef.current = 0;
+    lastWallTimeRef.current = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    wasPlayingRef.current = false;
     setStage(targetStage);
     setTimeout(() => {
       try {
@@ -1588,87 +1620,13 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
     [courseId, classroomId, episodeId, userId, isPreview]
   );
 
-  // Load server video progress on mount
-  useEffect(() => {
-    let cancelled = false;
-    if (!courseId || !episodeId || isPreview || courseId === 'general') return;
-
-    courseStudioService
-      .getVideoProgress(courseId, episodeId)
-      .then((records: any[]) => {
-        if (cancelled || !Array.isArray(records)) return;
-        const match1 = records.find((r) => r.video_key === baseVideoKey);
-        if (match1) {
-          setProgressState((prev) => {
-            const serverPct = Number(match1.watched_percent) || 0;
-            if (serverPct > prev.watchedPercent || Boolean(match1.is_completed)) {
-              const merged: VideoProgressState = {
-                ...prev,
-                durationSeconds: Math.max(prev.durationSeconds, Number(match1.duration_seconds) || 0),
-                watchedSeconds: Math.max(prev.watchedSeconds, Number(match1.watched_seconds) || 0),
-                watchedPercent: Math.max(prev.watchedPercent, serverPct),
-                watchedSegments:
-                  Array.isArray(match1.watched_segments) && match1.watched_segments.length > 0
-                    ? match1.watched_segments
-                    : prev.watchedSegments,
-                maxAllowedPosition: Math.max(
-                  prev.maxAllowedPosition,
-                  Number(match1.max_allowed_position) || 0
-                ),
-                isCompleted: Boolean(prev.isCompleted || match1.is_completed),
-                completedAt: prev.completedAt || match1.completed_at || null,
-                updatedAt: new Date().toISOString()
-              };
-              saveLocalVideoProgress(merged, userId);
-              return merged;
-            }
-            return prev;
-          });
-        }
-
-        const key2 = `${baseVideoKey}_watch2`;
-        const match2 = records.find((r) => r.video_key === key2);
-        if (match2) {
-          setSecondWatchProgressState((prev) => {
-            const serverPct = Number(match2.watched_percent) || 0;
-            if (serverPct > prev.watchedPercent || Boolean(match2.is_completed)) {
-              const merged: VideoProgressState = {
-                ...prev,
-                durationSeconds: Math.max(prev.durationSeconds, Number(match2.duration_seconds) || 0),
-                watchedSeconds: Math.max(prev.watchedSeconds, Number(match2.watched_seconds) || 0),
-                watchedPercent: Math.max(prev.watchedPercent, serverPct),
-                watchedSegments:
-                  Array.isArray(match2.watched_segments) && match2.watched_segments.length > 0
-                    ? match2.watched_segments
-                    : prev.watchedSegments,
-                maxAllowedPosition: Math.max(
-                  prev.maxAllowedPosition,
-                  Number(match2.max_allowed_position) || 0
-                ),
-                isCompleted: Boolean(prev.isCompleted || match2.is_completed),
-                completedAt: prev.completedAt || match2.completed_at || null,
-                updatedAt: new Date().toISOString()
-              };
-              saveLocalVideoProgress(merged, userId);
-              return merged;
-            }
-            return prev;
-          });
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-    };
-  }, [courseId, episodeId, baseVideoKey, userId, isPreview]);
-
   // Pause tracking & playback when browser tab becomes hidden
   useEffect(() => {
     const handleVisibilityChange = () => {
       const visible = document.visibilityState === 'visible';
       isTabVisibleRef.current = visible;
       if (!visible) {
+        wasPlayingRef.current = false;
         if (html5VideoRef.current && !html5VideoRef.current.paused) {
           html5VideoRef.current.pause();
         }
@@ -1685,43 +1643,140 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
-  // Process playback tick through the anti-skip segment engine
+  // Process playback tick through the strict >90% verified playback & anti-skip segment engine
   const handleTick = useCallback(
     (currentTime: number, durationSeconds: number, activelyPlaying: boolean) => {
-      const result = processVideoPlaybackTick(progressRef.current, {
-        currentTime,
-        previousTime: lastTimeRef.current,
-        durationSeconds,
-        isPlaying: activelyPlaying,
-        isTabVisible: isTabVisibleRef.current
-      });
+      const state = progressRef.current;
+      const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      const validDuration =
+        Number.isFinite(durationSeconds) && durationSeconds > 5
+          ? durationSeconds
+          : state.durationSeconds > 5
+          ? state.durationSeconds
+          : 0;
 
-      if (result.seekBlocked) {
-        setSeekNotice(
-          `Fast-forwarding is disabled (${formatSecondsAsTime(result.snapBackTime)}).`
-        );
-        lastTimeRef.current = result.snapBackTime;
+      const curr = Math.max(0, Number(currentTime) || 0);
+      const allowedFrontier = Math.max(
+        state.maxAllowedPosition || 0,
+        getMaxWatchedPosition(state.watchedSegments || [])
+      );
+
+      // 1. Block seeking ahead past the watched frontier (unless >90% is already verified in this viewing)
+      if (!state.isCompleted && curr > allowedFrontier + 2.2) {
+        wasPlayingRef.current = false;
+        lastTimeRef.current = allowedFrontier;
+        lastWallTimeRef.current = nowMs;
+        setSeekNotice(`Fast-forwarding is disabled (${formatSecondsAsTime(allowedFrontier)}).`);
         if (html5VideoRef.current) {
-          html5VideoRef.current.currentTime = result.snapBackTime;
+          html5VideoRef.current.currentTime = allowedFrontier;
         }
         if (ytPlayerRef.current && typeof ytPlayerRef.current.seekTo === 'function') {
           try {
-            ytPlayerRef.current.seekTo(result.snapBackTime, true);
+            ytPlayerRef.current.seekTo(allowedFrontier, true);
           } catch {
             // ignore
           }
         }
         setTimeout(() => setSeekNotice(null), 2500);
-      } else {
-        lastTimeRef.current = currentTime;
+        return;
       }
 
-      if (stageRef.current === 'watch_again') {
-        setSecondWatchProgressState(result.nextState);
-      } else {
-        setProgressState(result.nextState);
+      // 2. Do not count paused time or hidden tab time
+      if (!activelyPlaying || !isTabVisibleRef.current || validDuration <= 5) {
+        wasPlayingRef.current = false;
+        lastTimeRef.current = curr;
+        lastWallTimeRef.current = nowMs;
+        if (validDuration > 5 && state.durationSeconds !== validDuration) {
+          const updatedDurState: VideoProgressState = {
+            ...state,
+            durationSeconds: validDuration
+          };
+          progressRef.current = updatedDurState;
+          if (stageRef.current === 'watch_again') {
+            setSecondWatchProgressState(updatedDurState);
+          } else {
+            setProgressState(updatedDurState);
+          }
+        }
+        return;
       }
-      syncProgressToServer(result.nextState, result.justCompleted);
+
+      // 3. First tick after starting or resuming from pause: anchor media & wall-clock timestamps without crediting paused time
+      if (!wasPlayingRef.current) {
+        wasPlayingRef.current = true;
+        lastTimeRef.current = curr;
+        lastWallTimeRef.current = nowMs;
+        return;
+      }
+
+      // 4. Genuine sequential playback interval verification (bounded by both media progress & real-time playback)
+      const mediaDelta = curr - lastTimeRef.current;
+      const wallDelta = Math.max(0, (nowMs - lastWallTimeRef.current) / 1000);
+      lastWallTimeRef.current = nowMs;
+
+      // Detect rapid forward jump larger than real-time playback
+      if (!state.isCompleted && mediaDelta > Math.max(2.2, wallDelta * 1.85) && curr > allowedFrontier + 1.5) {
+        lastTimeRef.current = allowedFrontier;
+        setSeekNotice(`Fast-forwarding is disabled (${formatSecondsAsTime(allowedFrontier)}).`);
+        if (html5VideoRef.current) {
+          html5VideoRef.current.currentTime = allowedFrontier;
+        }
+        if (ytPlayerRef.current && typeof ytPlayerRef.current.seekTo === 'function') {
+          try {
+            ytPlayerRef.current.seekTo(allowedFrontier, true);
+          } catch {
+            // ignore
+          }
+        }
+        setTimeout(() => setSeekNotice(null), 2500);
+        return;
+      }
+
+      let nextSegments = state.watchedSegments || [];
+      if (mediaDelta > 0 && wallDelta > 0) {
+        const creditedAdvance = Math.min(mediaDelta, wallDelta * 1.35, 1.5);
+        const segStart = Math.max(0, lastTimeRef.current);
+        const segEnd = Math.min(validDuration, segStart + creditedAdvance);
+        if (segEnd > segStart) {
+          nextSegments = mergeWatchedSegments([...nextSegments, [segStart, segEnd]], validDuration);
+        }
+      }
+      lastTimeRef.current = curr;
+
+      const uniqueWatchedSeconds = computeUniqueWatchedSeconds(nextSegments, validDuration);
+      const watchedPercent = computeWatchedPercent(uniqueWatchedSeconds, validDuration);
+      const nextMaxAllowed = Math.min(
+        validDuration,
+        Math.max(allowedFrontier, getMaxWatchedPosition(nextSegments))
+      );
+
+      // Require MORE than 90% (> 90%) of actual unique video playback to unlock QUIT and NEXT
+      const passedNinetyPercent = validDuration > 5 && watchedPercent > 90;
+      const isNowCompleted = Boolean(state.isCompleted || passedNinetyPercent);
+      const justCompleted = !state.isCompleted && isNowCompleted;
+
+      const nextState: VideoProgressState = {
+        ...state,
+        durationSeconds: validDuration,
+        watchedSeconds: Math.round(uniqueWatchedSeconds),
+        watchedPercent,
+        watchedSegments: nextSegments,
+        maxAllowedPosition: nextMaxAllowed,
+        isCompleted: isNowCompleted,
+        completedAt: state.completedAt || (isNowCompleted ? new Date().toISOString() : null),
+        updatedAt: new Date().toISOString()
+      };
+
+      progressRef.current = nextState;
+      if (stageRef.current === 'watch_again') {
+        setSecondWatchProgressState(nextState);
+        if (isNowCompleted) setWatch2Unlocked(true);
+      } else {
+        setProgressState(nextState);
+        if (isNowCompleted) setWatch1Unlocked(true);
+      }
+
+      syncProgressToServer(nextState, justCompleted);
     },
     [syncProgressToServer]
   );
@@ -1799,10 +1854,11 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
               if (!mounted) return;
               setIsBuffering(false);
               const dur = Number(event.target?.getDuration?.()) || 0;
-              if (dur > 0) {
+              if (dur > 5) {
                 handleTick(0, dur, false);
               }
               try {
+                event.target.seekTo(0, true);
                 event.target.playVideo();
               } catch {
                 setNeedsUserStartTap(true);
@@ -1817,6 +1873,7 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
 
               if (stateCode === YT.PlayerState.BUFFERING) {
                 setIsBuffering(true);
+                wasPlayingRef.current = false;
               } else {
                 setIsBuffering(false);
               }
@@ -1827,30 +1884,42 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
                 handleTick(curr, dur, true);
               } else if (stateCode === YT.PlayerState.PAUSED) {
                 setIsPlaying(false);
+                wasPlayingRef.current = false;
                 handleTick(curr, dur, false);
               } else if (stateCode === YT.PlayerState.ENDED) {
                 setIsPlaying(false);
+                wasPlayingRef.current = false;
                 const latest = progressRef.current;
-                const finalSegments: Array<[number, number]> =
-                  dur > 0 && latest.maxAllowedPosition >= Math.max(0, dur - 4)
-                    ? [...latest.watchedSegments, [latest.maxAllowedPosition, dur]]
-                    : latest.watchedSegments;
-                const updatedResult = processVideoPlaybackTick(
-                  { ...latest, watchedSegments: finalSegments },
-                  {
-                    currentTime: dur || curr,
-                    previousTime: lastTimeRef.current,
-                    durationSeconds: dur || latest.durationSeconds,
-                    isPlaying: true,
-                    isTabVisible: isTabVisibleRef.current
+                const validDur = dur > 5 ? dur : latest.durationSeconds;
+                if (validDur > 5 && latest.maxAllowedPosition >= Math.max(0, validDur - 2.5)) {
+                  const tailSegments = mergeWatchedSegments(
+                    [...(latest.watchedSegments || []), [latest.maxAllowedPosition, validDur]],
+                    validDur
+                  );
+                  const watchedSecs = computeUniqueWatchedSeconds(tailSegments, validDur);
+                  const watchedPct = computeWatchedPercent(watchedSecs, validDur);
+                  const completedNow = Boolean(latest.isCompleted || watchedPct > 90);
+                  const nextState: VideoProgressState = {
+                    ...latest,
+                    durationSeconds: validDur,
+                    watchedSeconds: Math.round(watchedSecs),
+                    watchedPercent: watchedPct,
+                    watchedSegments: tailSegments,
+                    maxAllowedPosition: validDur,
+                    isCompleted: completedNow,
+                    completedAt: latest.completedAt || (completedNow ? new Date().toISOString() : null),
+                    updatedAt: new Date().toISOString()
+                  };
+                  progressRef.current = nextState;
+                  if (stageRef.current === 'watch_again') {
+                    setSecondWatchProgressState(nextState);
+                    if (completedNow) setWatch2Unlocked(true);
+                  } else {
+                    setProgressState(nextState);
+                    if (completedNow) setWatch1Unlocked(true);
                   }
-                );
-                if (stageRef.current === 'watch_again') {
-                  setSecondWatchProgressState(updatedResult.nextState);
-                } else {
-                  setProgressState(updatedResult.nextState);
+                  syncProgressToServer(nextState, true);
                 }
-                syncProgressToServer(updatedResult.nextState, true);
               }
             }
           }
@@ -1865,7 +1934,7 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
             const dur = Number(p.getDuration?.()) || 0;
             handleTick(curr, dur, true);
           }
-        }, 500);
+        }, 300);
       })
       .catch(() => {
         setIsBuffering(false);
@@ -1893,6 +1962,7 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
         if (st === 1) {
           ytPlayerRef.current.pauseVideo();
           setIsPlaying(false);
+          wasPlayingRef.current = false;
         } else {
           ytPlayerRef.current.playVideo();
           setIsPlaying(true);
@@ -1916,13 +1986,15 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
     } else {
       v.pause();
       setIsPlaying(false);
+      wasPlayingRef.current = false;
     }
   };
 
-  // Verified video completion flag for current watch stage
+  // Verified video completion flag for current watch stage: strictly requires > 90% verified playback in this viewing
   const isVideoCompleted = Boolean(
-    currentProgressState.isCompleted ||
-      currentProgressState.watchedPercent >= VIDEO_COMPLETION_THRESHOLD_PERCENT
+    (stage === 'watch_again' ? watch2Unlocked : watch1Unlocked) &&
+      currentProgressState.durationSeconds > 5 &&
+      currentProgressState.watchedPercent > 90
   );
 
   // Handle QUIT button after video completion (returns to lesson introduction without awarding completion rewards)
@@ -2022,28 +2094,28 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   const accuracyPercent =
     totalQuestions > 0 ? Math.round((correctAnswersCount / totalQuestions) * 100) : 100;
 
-  // Achievement Badge (if earned)
+  // Achievement Badge (if earned) — concise subtitle without repeating numeric score/accuracy
   const earnedBadge = useMemo(() => {
     if (totalQuestions > 0 && accuracyPercent === 100) {
       return {
         title: 'Sharp Master',
-        subtitle: 'Perfect 5/5 Challenge Score',
+        subtitle: 'Flawless Mystery Solver',
         color: 'from-amber-400 to-orange-500'
       };
     }
     if (totalQuestions > 0 && accuracyPercent >= 80) {
       return {
         title: 'Quick Thinker',
-        subtitle: `${correctAnswersCount}/${totalQuestions} Correct Answers`,
+        subtitle: 'Sharp Mystery Investigator',
         color: 'from-emerald-500 to-teal-600'
       };
     }
     return {
       title: 'Short Finisher',
-      subtitle: 'Micro Lesson Completed',
+      subtitle: 'Micro Lesson Accomplished',
       color: 'from-sky-500 to-blue-600'
     };
-  }, [totalQuestions, accuracyPercent, correctAnswersCount]);
+  }, [totalQuestions, accuracyPercent]);
 
   // Compute fallback daily unlock info if not passed explicitly
   const fallbackUnlockSummary = useMemo(() => getNextDailyUnlockSummary(null), []);
@@ -2157,26 +2229,37 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
                   const v = e.currentTarget;
                   const dur = Number(v.duration) || progressRef.current.durationSeconds || 0;
                   const latest = progressRef.current;
-                  const finalSegments: Array<[number, number]> =
-                    dur > 0 && latest.maxAllowedPosition >= Math.max(0, dur - 4)
-                      ? [...latest.watchedSegments, [0, dur]]
-                      : latest.watchedSegments;
-                  const endResult = processVideoPlaybackTick(
-                    { ...latest, watchedSegments: finalSegments },
-                    {
-                      currentTime: dur,
-                      previousTime: lastTimeRef.current,
-                      durationSeconds: dur,
-                      isPlaying: true,
-                      isTabVisible: isTabVisibleRef.current
-                    }
-                  );
+                  const canFinalizeTail =
+                    dur > 5 && latest.maxAllowedPosition >= Math.max(0, dur - 2.5);
+                  const merged = canFinalizeTail
+                    ? mergeWatchedSegments(
+                        [...latest.watchedSegments, [Math.max(0, dur - 2.5), dur]],
+                        dur
+                      )
+                    : latest.watchedSegments;
+                  const uniqueWatched = computeUniqueWatchedSeconds(merged, dur);
+                  const watchedPct = computeWatchedPercent(uniqueWatched, dur);
+                  const maxWatched = getMaxWatchedPosition(merged);
+                  const reached90Plus = dur > 5 && watchedPct > 90;
+                  const updatedState: VideoProgressState = {
+                    ...latest,
+                    durationSeconds: dur,
+                    watchedSeconds: Math.round(uniqueWatched),
+                    watchedPercent: watchedPct,
+                    maxAllowedPosition: Math.max(latest.maxAllowedPosition, maxWatched),
+                    watchedSegments: merged,
+                    isCompleted: reached90Plus,
+                    completedAt: latest.completedAt || (reached90Plus ? new Date().toISOString() : null),
+                    updatedAt: new Date().toISOString()
+                  };
                   if (stageRef.current === 'watch_again') {
-                    setSecondWatchProgressState(endResult.nextState);
+                    setSecondWatchProgressState(updatedState);
+                    if (reached90Plus) setWatch2Unlocked(true);
                   } else {
-                    setProgressState(endResult.nextState);
+                    setProgressState(updatedState);
+                    if (reached90Plus) setWatch1Unlocked(true);
                   }
-                  syncProgressToServer(endResult.nextState, true);
+                  syncProgressToServer(updatedState, true);
                 }}
                 className="w-full h-full object-cover"
               />
@@ -2213,12 +2296,12 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
             </div>
           )}
 
-          {/* Post-Completion Action Buttons: Strictly hidden until video finishes! */}
+          {/* Post-Completion Action Buttons: Strictly hidden until >90% verified playback */}
           {isVideoCompleted && (
             <div
               data-testid="shorts-post-completion-actions"
               onClick={(e) => e.stopPropagation()}
-              className="absolute bottom-0 inset-x-0 p-5 pt-12 bg-gradient-to-t from-black/90 via-black/50 to-transparent animate-in fade-in slide-in-from-bottom-4 duration-300"
+              className="absolute bottom-0 inset-x-0 p-5 pt-12 bg-gradient-to-t from-black/90 via-black/55 to-transparent animate-in fade-in slide-in-from-bottom-3 duration-500 ease-out"
             >
               <div className="grid grid-cols-2 gap-3">
                 <button
@@ -2236,7 +2319,7 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
                   onClick={handleNextAfterWatch}
                   className="py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#0284C7] to-[#0EA5E9] hover:from-[#0369A1] hover:to-[#0284C7] text-white font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-sky-500/30 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                 >
-                  <span>{isSecondViewing ? 'START CHALLENGE →' : 'NEXT →'}</span>
+                  <span>NEXT →</span>
                 </button>
               </div>
             </div>
@@ -2247,58 +2330,61 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   }
 
   // ==========================================================================
-  // STAGE 3: READING ACTIVITY — EDGE-TO-EDGE DESIGN & SIMPLIFIED HEADER
+  // STAGE 3: READING ACTIVITY — FULL-WIDTH MOBILE LAYOUT & SIMPLIFIED HEADER
   // ==========================================================================
   if (stage === 'read') {
     return (
       <div
         data-testid="shorts-reading-stage"
-        className="w-full -mx-3 sm:mx-0 animate-in fade-in duration-300"
+        className="w-full max-w-full sm:max-w-3xl sm:mx-auto m-0 p-0 animate-in fade-in duration-300 box-border bg-white sm:rounded-3xl sm:border sm:border-sky-500/25 sm:shadow-lg overflow-hidden"
       >
-        <div className="w-full rounded-none sm:rounded-3xl bg-white border-y sm:border border-sky-500/25 shadow-lg overflow-hidden">
-          {/* Simplified Reading Header: ONLY Reading Title + Relevant Background Image with Dark Overlay */}
-          <div className="relative min-h-[140px] sm:min-h-[170px] flex items-end p-5 sm:p-7 overflow-hidden">
-            <img
-              src={coverArtworkUrl}
-              alt={shortTitle}
-              className="absolute inset-0 w-full h-full object-cover object-center"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src = '/images/creepy_legends_cover.png';
-              }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#050f1e]/95 via-[#07162c]/75 to-[#050f1e]/45" />
-            <h2 className="relative z-10 text-xl sm:text-2xl font-black text-white uppercase tracking-tight leading-snug drop-shadow-sm">
-              {shortTitle}
-            </h2>
-          </div>
+        {/* Reading Header: ONLY Reading Title + Relevant Background Image + Dark Overlay */}
+        <div className="relative w-full min-h-[148px] sm:min-h-[180px] flex items-end px-4 py-5 sm:px-8 sm:py-7 overflow-hidden">
+          <img
+            src={coverArtworkUrl}
+            alt={shortTitle}
+            className="absolute inset-0 w-full h-full object-cover object-center"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src = '/images/creepy_legends_cover.png';
+            }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#050f1e]/95 via-[#07162c]/75 to-[#050f1e]/40" />
+          <h2 className="relative z-10 w-full text-lg sm:text-2xl font-black text-white uppercase tracking-tight leading-snug drop-shadow-sm">
+            {shortTitle}
+          </h2>
+        </div>
 
-          {/* Edge-to-Edge Reading Body with Clean Mobile-Safe Padding & High Contrast */}
-          <div className="px-4 sm:px-8 py-6 sm:py-8 bg-white space-y-6">
-            <div className="max-w-none space-y-4">
-              {readingPassage
-                .split(/\n\n+/)
-                .filter(Boolean)
-                .map((para, idx) => (
-                  <p
-                    key={idx}
-                    className="text-base sm:text-lg leading-relaxed text-[#0F172A] font-medium"
-                  >
-                    {para.trim()}
-                  </p>
-                ))}
-            </div>
-
-            {/* Bottom Action: One Clear Button */}
-            <div className="pt-4 border-t border-slate-200/80 flex justify-center sm:justify-end">
-              <button
-                type="button"
-                data-testid="shorts-read-next-button"
-                onClick={() => enterFullscreenVideoStage('watch_again')}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-4 rounded-2xl bg-gradient-to-r from-[#0284C7] to-[#0369A1] hover:from-[#0369A1] hover:to-[#075985] text-white text-xs sm:text-sm font-black uppercase tracking-wider shadow-lg shadow-sky-500/20 active:scale-[0.99] transition-all cursor-pointer"
+        {/* Full-Width Reading Body with Consistent Mobile Safe-Area Padding & Justified 14px Typography */}
+        <div className="w-full max-w-full px-4 py-5 sm:px-8 sm:py-7 bg-white box-border">
+          {readingPassage
+            .split(/\n\n+/)
+            .filter(Boolean)
+            .map((para, idx) => (
+              <p
+                key={idx}
+                style={{
+                  fontSize: '14px',
+                  lineHeight: 1.7,
+                  textAlign: 'justify',
+                  textJustify: 'inter-word',
+                  color: '#0F172A'
+                }}
+                className="w-full max-w-none text-[14px] leading-[1.7] text-[#0F172A] font-normal mb-3.5 last:mb-0"
               >
-                <span>I&apos;M READY – WATCH AGAIN</span>
-              </button>
-            </div>
+                {para.trim()}
+              </p>
+            ))}
+
+          {/* Bottom Action: One Clear Button */}
+          <div className="pt-5 mt-5 border-t border-slate-200/80 flex justify-center sm:justify-end">
+            <button
+              type="button"
+              data-testid="shorts-read-next-button"
+              onClick={() => enterFullscreenVideoStage('watch_again')}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-4 rounded-2xl bg-gradient-to-r from-[#0284C7] to-[#0369A1] hover:from-[#0369A1] hover:to-[#075985] text-white text-xs sm:text-sm font-black uppercase tracking-wider shadow-lg shadow-sky-500/20 active:scale-[0.99] transition-all cursor-pointer"
+            >
+              <span>I&apos;M READY – WATCH AGAIN</span>
+            </button>
           </div>
         </div>
       </div>
@@ -2323,7 +2409,7 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
     return (
       <div
         data-testid="shorts-challenge-stage"
-        className="w-full max-w-2xl mx-auto space-y-4 py-2 animate-in fade-in duration-300"
+        className="w-full max-w-2xl mx-auto px-4 sm:px-0 space-y-4 py-3 animate-in fade-in duration-300 box-border"
       >
         {/* Minimal Question Counter & Progress Bar */}
         <div className="rounded-2xl bg-[#07162c] border border-sky-500/25 px-4 py-3.5 shadow-md">
@@ -2396,20 +2482,35 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   }
 
   // ==========================================================================
-  // STAGE 6: SIMPLIFIED GAMIFIED REWARD SCREEN
+  // STAGE 6: PREMIUM CUSTOM GAMIFIED REWARD SCREEN
   // ==========================================================================
   return (
-    <div className="max-w-lg mx-auto w-full py-2 animate-in zoom-in-95 duration-300">
+    <div className="max-w-lg mx-auto w-full px-4 sm:px-0 py-3 animate-in zoom-in-95 duration-300 box-border">
       <div
         data-testid="shorts-reward-screen"
-        className="w-full rounded-3xl bg-[#07162c] border border-sky-500/30 shadow-2xl overflow-hidden text-white"
+        className="relative w-full rounded-3xl bg-gradient-to-b from-[#061830] via-[#07162c] to-[#040d1a] border border-sky-400/30 shadow-[0_24px_60px_rgba(2,132,199,0.28)] overflow-hidden text-white"
       >
-        {/* Top Celebration Header */}
-        <div className="bg-gradient-to-b from-[#0284C7]/35 to-transparent px-6 pt-8 pb-5 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-amber-400/15 border border-amber-300/30 flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <Trophy className="w-8 h-8 text-amber-300" />
+        {/* Ambient Ocean Blue & Golden Glow Backdrop */}
+        <div className="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full bg-amber-400/15 blur-3xl" />
+        <div className="pointer-events-none absolute top-10 left-1/2 -translate-x-1/2 w-80 h-56 rounded-full bg-sky-500/15 blur-3xl" />
+
+        {/* Custom Generated 3D Reward Artwork Header */}
+        <div className="relative px-6 pt-7 pb-4 text-center">
+          <div className="relative mx-auto w-32 h-32 sm:w-36 sm:h-36 rounded-3xl p-1 bg-gradient-to-b from-amber-300/60 via-sky-400/40 to-sky-600/20 shadow-[0_0_40px_rgba(251,191,36,0.25)] mb-4">
+            <div className="w-full h-full rounded-[20px] overflow-hidden bg-[#040e1d] flex items-center justify-center relative">
+              <picture>
+                <source srcSet="/images/shorts_reward_trophy.webp" type="image/webp" />
+                <img
+                  src="/images/shorts_reward_trophy.png"
+                  alt="EdTechra Lesson Completed Trophy"
+                  className="w-full h-full object-cover"
+                  loading="eager"
+                />
+              </picture>
+            </div>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white uppercase">
+
+          <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-white to-sky-200 uppercase drop-shadow-sm">
             LESSON COMPLETED!
           </h2>
 
@@ -2418,13 +2519,13 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
               data-testid="shorts-daily-unlock-notice"
               className="mt-3 space-y-1 max-w-md mx-auto"
             >
-              <p className="text-sm font-semibold text-sky-100">
+              <p className="text-xs sm:text-sm font-semibold text-sky-100/95">
                 You have successfully completed today&apos;s micro lesson.
               </p>
-              <p className="text-sm font-bold text-amber-300">
+              <p className="text-xs sm:text-sm font-bold text-amber-300">
                 Your next lesson will unlock tomorrow.
               </p>
-              <div className="pt-1.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500/15 border border-sky-400/25 text-xs font-bold text-sky-200">
+              <div className="pt-1.5 inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-sky-500/15 border border-sky-400/30 text-xs font-bold text-sky-200">
                 <Calendar className="w-3.5 h-3.5 text-sky-300" />
                 <span>
                   Unlocks {effectiveNextUnlockDate} ({effectiveNextUnlockCountdown})
@@ -2434,12 +2535,12 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
           )}
         </div>
 
-        {/* Core Gamified Stats: Final Score (/10), Correct Answers (/5), XP Earned */}
-        <div className="px-6 pb-7 space-y-5">
-          <div className="grid grid-cols-3 gap-3">
-            <div className="p-3.5 rounded-2xl bg-[#0b2140] border border-sky-400/20 text-center">
+        {/* Core Gamified Stats: Academic Score (X/10), Correct Answers (X/5), XP Earned (+X XP) */}
+        <div className="relative z-10 px-5 sm:px-6 pb-7 space-y-4">
+          <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
+            <div className="p-3.5 rounded-2xl bg-[#0b2140]/90 border border-sky-400/25 text-center shadow-inner">
               <span className="block text-[10px] font-extrabold uppercase tracking-wider text-sky-300">
-                Final Score
+                Academic Score
               </span>
               <span
                 data-testid="shorts-reward-academic-score"
@@ -2449,9 +2550,9 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
               </span>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-[#0b2140] border border-emerald-400/20 text-center">
+            <div className="p-3.5 rounded-2xl bg-[#0b2140]/90 border border-emerald-400/25 text-center shadow-inner">
               <span className="block text-[10px] font-extrabold uppercase tracking-wider text-emerald-300">
-                Correct
+                Correct Answers
               </span>
               <span
                 data-testid="shorts-reward-correct"
@@ -2461,7 +2562,7 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
               </span>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-[#0b2140] border border-amber-400/25 text-center">
+            <div className="p-3.5 rounded-2xl bg-gradient-to-b from-amber-500/20 to-[#0b2140]/90 border border-amber-400/35 text-center shadow-inner">
               <span className="block text-[10px] font-extrabold uppercase tracking-wider text-amber-300">
                 XP Earned
               </span>
@@ -2474,23 +2575,9 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
             </div>
           </div>
 
-          {/* Perfect Score Bonus (only when applicable) */}
-          {isPerfectScore && (
-            <div
-              data-testid="shorts-perfect-score-bonus"
-              className="px-4 py-3 rounded-2xl bg-amber-400/15 border border-amber-300/30 flex items-center justify-between text-amber-200 text-xs font-extrabold"
-            >
-              <span className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
-                <span>Perfect Score Bonus</span>
-              </span>
-              <span className="text-amber-300 font-black">+5 XP</span>
-            </div>
-          )}
-
           {/* Achievement Badge */}
           {earnedBadge && (
-            <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-[#0b2140] border border-sky-400/20">
+            <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-[#0b2140]/85 border border-sky-400/25">
               <div
                 className={`w-11 h-11 rounded-xl bg-gradient-to-br ${earnedBadge.color} text-white flex items-center justify-center shrink-0 shadow-md`}
               >
@@ -2500,7 +2587,7 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
                 <div className="text-xs font-black uppercase tracking-wide text-white">
                   {earnedBadge.title}
                 </div>
-                <div className="text-[11px] font-medium text-sky-200/80">
+                <div className="text-[11px] font-medium text-sky-200/85">
                   {earnedBadge.subtitle}
                 </div>
               </div>

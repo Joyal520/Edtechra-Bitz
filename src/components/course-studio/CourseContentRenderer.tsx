@@ -117,6 +117,7 @@ interface Props {
     course_start_date?: string;
     daily_release_interval_days?: number;
   }) => Promise<void> | void;
+  onShortsStageChange?: (stage: 'intro' | 'watch' | 'read' | 'watch_again' | 'challenge' | 'reward') => void;
 }
 
 export function getValidLessonQuestions(questions?: CourseQuestion[]): CourseQuestion[] {
@@ -169,7 +170,8 @@ export const CourseContentRenderer: React.FC<Props> = ({
   dailyReleaseIntervalDays = 1,
   nextUnlockDateLabel,
   nextUnlockCountdown,
-  onUpdateDailyUnlockSettings
+  onUpdateDailyUnlockSettings,
+  onShortsStageChange
 }) => {
   const isEditMode = mode === 'edit';
   const activeTheme = getThemePreset(themeId);
@@ -671,14 +673,18 @@ export const CourseContentRenderer: React.FC<Props> = ({
   return (
     <div
       className={`w-full ${
-        isCourseReader && !isEditMode ? 'course-reader__body' : 'max-w-[760px] mx-auto'
-      } space-y-8 sm:space-y-12 py-2 antialiased font-sans text-inherit box-border min-w-0`}
+        hasLearnWithShortsBlock && !isEditMode
+          ? 'max-w-full mx-0 py-0 space-y-0'
+          : isCourseReader && !isEditMode
+          ? 'course-reader__body space-y-8 sm:space-y-12 py-2'
+          : 'max-w-[760px] mx-auto space-y-8 sm:space-y-12 py-2'
+      } antialiased font-sans text-inherit box-border min-w-0`}
     >
       
       {/* ===================================================================== */}
       {/* 1. LESSON CONTENT STREAM                                              */}
       {/* ===================================================================== */}
-      <div className="w-full space-y-6 sm:space-y-8">
+      <div className={hasLearnWithShortsBlock && !isEditMode ? 'w-full space-y-0' : 'w-full space-y-6 sm:space-y-8'}>
         {blocks.map((block, idx) => {
           if (!isEditMode && isExcludedStudentSection(block)) {
             return null;
@@ -902,7 +908,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
             }
 
             return (
-              <div key={block.id || idx} className="w-full my-2">
+              <div key={block.id || idx} className="w-full m-0 p-0">
                 <LearnWithShortsStudentPlayer
                   block={block}
                   courseId={effectiveCourseId}
@@ -922,6 +928,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   dailyReleaseEnabled={dailyReleaseEnabled}
                   nextUnlockDateLabel={nextUnlockDateLabel}
                   nextUnlockCountdown={nextUnlockCountdown}
+                  onStageChange={onShortsStageChange}
                 />
               </div>
             );

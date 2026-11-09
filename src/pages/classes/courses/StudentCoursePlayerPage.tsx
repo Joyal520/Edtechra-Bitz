@@ -81,6 +81,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
     watchedPercent: 100,
     totalVideos: 0
   });
+  const [shortsStage, setShortsStage] = useState<'intro' | 'watch' | 'read' | 'watch_again' | 'challenge' | 'reward'>('intro');
   const [coverModalOpen, setCoverModalOpen] = useState(false);
 
   // Celebration Modal State
@@ -138,6 +139,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
   useEffect(() => {
     if (courseId && classroomId && selectedEpisode) {
+      setShortsStage('intro');
       const initialTotal = getValidLessonQuestions(selectedEpisode.questions).length;
       setQuestionProgress({ answered: 0, total: initialTotal });
       // Only fetch episode attempts if we don't already have attempts loaded for this episode
@@ -890,6 +892,8 @@ export const StudentCoursePlayerPage: React.FC = () => {
         className={`course-reader-scroll flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden scroll-smooth box-border ${
           viewMode === 'lesson' && isCreepyLegendsOrVideoCourse && !isCurrentEpisodeLocked
             ? 'bg-[#071326] p-0'
+            : viewMode === 'lesson' && isLearnWithShortsLesson && !isCurrentEpisodeLocked && shortsStage !== 'intro'
+            ? 'px-0 pt-0 pb-16 sm:py-6'
             : viewMode === 'lesson' && useCinematicHeaderCourse
             ? 'px-0 pt-4 pb-24 sm:py-7 md:py-9 [--reader-gutter:1.125rem] sm:[--reader-gutter:2rem]'
             : 'px-4 sm:px-6 md:px-8 pt-6 pb-24 sm:py-10 [--reader-gutter:1rem] sm:[--reader-gutter:1.5rem]'
@@ -937,48 +941,62 @@ export const StudentCoursePlayerPage: React.FC = () => {
         ) : (
           <div
             className={
-              useCinematicHeaderCourse
+              isLearnWithShortsLesson && !isCurrentEpisodeLocked && shortsStage !== 'intro'
+                ? 'w-full max-w-full px-0 mx-0 pb-8 box-border min-w-0'
+                : useCinematicHeaderCourse
                 ? 'container-fluid course-reader px-0 pb-8'
                 : 'w-full max-w-[760px] mx-auto space-y-6 sm:space-y-8 pb-8 box-border min-w-0'
             }
           >
-            <div className={useCinematicHeaderCourse ? 'course-reader__content space-y-6 sm:space-y-8' : 'space-y-6 sm:space-y-8'}>
-            {/* ESTABLISHED CINEMATIC HERO & DAY NAVIGATION OR STANDARD HERO BANNER */}
-            {useCinematicHeaderCourse ? (
-              <AnnabelleCinematicHeader
-                course={course}
-                selectedEpisode={selectedEpisode}
-                allEpisodes={episodeNavItems}
-                completedCount={roadmapData?.completedLessons || completedEpisodeIds.size}
-                totalCount={roadmapData?.totalLessons || allEpisodes.length || (isBitzShortsCourse ? 10 : 7)}
-                progressPercent={roadmapData?.progressPercent || 0}
-                onSelectEpisode={(ep, locked, unlockMsg) => {
-                  if (locked && !isTeacherPreview) {
-                    setToastMessage(unlockMsg || 'This lesson is currently locked.');
-                    setTimeout(() => setToastMessage(null), 3500);
-                    return;
-                  }
-                  setSelectedEpisode(ep);
-                  mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                onOpenCoverModal={isTeacherPreview ? () => setCoverModalOpen(true) : undefined}
-              />
-            ) : (
-              <CourseHeroBanner
-                course={course}
-                completedLessonsCount={roadmapData?.completedLessons || 0}
-                totalLessonsCount={roadmapData?.totalLessons || 1}
-                defaultCollapsed={(selectedEpisode.position || currentInfo?.epIndex || 1) > 1}
-                onStartOrContinue={() => {
-                  const el = document.getElementById('student-lesson-header');
-                  el?.scrollIntoView({ behavior: 'smooth' });
-                }}
-              />
+            <div
+              className={
+                isLearnWithShortsLesson && !isCurrentEpisodeLocked && shortsStage !== 'intro'
+                  ? 'w-full max-w-full px-0 mx-0 space-y-0'
+                  : useCinematicHeaderCourse
+                  ? 'course-reader__content space-y-6 sm:space-y-8'
+                  : 'space-y-6 sm:space-y-8'
+              }
+            >
+            {/* ESTABLISHED CINEMATIC HERO & DAY NAVIGATION OR STANDARD HERO BANNER (Shown ONLY on initial intro stage for Learn with Shorts) */}
+            {(!(isLearnWithShortsLesson && !isCurrentEpisodeLocked) || shortsStage === 'intro') && (
+              useCinematicHeaderCourse ? (
+                <AnnabelleCinematicHeader
+                  course={course}
+                  selectedEpisode={selectedEpisode}
+                  allEpisodes={episodeNavItems}
+                  completedCount={roadmapData?.completedLessons || completedEpisodeIds.size}
+                  totalCount={roadmapData?.totalLessons || allEpisodes.length || (isBitzShortsCourse ? 10 : 7)}
+                  progressPercent={roadmapData?.progressPercent || 0}
+                  onSelectEpisode={(ep, locked, unlockMsg) => {
+                    if (locked && !isTeacherPreview) {
+                      setToastMessage(unlockMsg || 'This lesson is currently locked.');
+                      setTimeout(() => setToastMessage(null), 3500);
+                      return;
+                    }
+                    setSelectedEpisode(ep);
+                    mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  onOpenCoverModal={isTeacherPreview ? () => setCoverModalOpen(true) : undefined}
+                />
+              ) : (
+                <CourseHeroBanner
+                  course={course}
+                  completedLessonsCount={roadmapData?.completedLessons || 0}
+                  totalLessonsCount={roadmapData?.totalLessons || 1}
+                  defaultCollapsed={(selectedEpisode.position || currentInfo?.epIndex || 1) > 1}
+                  onStartOrContinue={() => {
+                    const el = document.getElementById('student-lesson-header');
+                    el?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                />
+              )
             )}
 
             <article
               className={
-                useCinematicHeaderCourse
+                isLearnWithShortsLesson && !isCurrentEpisodeLocked && shortsStage !== 'intro'
+                  ? 'w-full max-w-full px-0 mx-0 space-y-0 box-border min-w-0'
+                  : useCinematicHeaderCourse
                   ? 'course-reader__lesson w-full space-y-6 sm:space-y-8 box-border min-w-0'
                   : 'w-full mx-auto space-y-6 sm:space-y-10 box-border min-w-0'
               }
@@ -1119,6 +1137,12 @@ export const StudentCoursePlayerPage: React.FC = () => {
                   dailyReleaseIntervalDays={course.daily_release_interval_days || 1}
                   nextUnlockDateLabel={nextLessonUnlockDateLabel}
                   nextUnlockCountdown={nextLessonUnlockCountdown}
+                  onShortsStageChange={(newStage) => {
+                    setShortsStage(newStage);
+                    if (newStage !== 'intro') {
+                      mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                  }}
                   onProgressChange={handleProgressChange}
                   onVideoCompletionChange={setVideoCompletionStatus}
                   isCourseReader={useCinematicHeaderCourse}
