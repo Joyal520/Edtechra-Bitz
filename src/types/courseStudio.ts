@@ -265,6 +265,7 @@ export interface LearnWithShortsBlockContent {
   learning_objectives: string[] | string;
   aspect_ratio?: '9:16';
   show_transcript?: boolean;
+  cover_image_url?: string;
 }
 
 export type BlockContent =
@@ -390,6 +391,8 @@ export interface Course {
   daily_release_enabled?: boolean;
   course_timezone?: string;
   course_start_date?: string;
+  daily_release_interval_days?: number;
+  server_time?: string;
   created_at: string;
   updated_at: string;
 
@@ -423,6 +426,7 @@ export interface RoadmapLessonItem {
   is_locked: boolean;
   unlock_message?: string;
   release_date_str?: string;
+  next_unlock_countdown?: string;
   score?: number;
   max_score?: number;
   completed_at?: string;
@@ -439,6 +443,9 @@ export interface CourseAssignmentSettings {
   track_mastery: boolean;
   award_points: boolean;
   daily_release_enabled?: boolean;
+  daily_release_interval_days?: number;
+  course_start_date?: string;
+  course_timezone?: string;
 }
 
 export interface CourseClassroomAssignment {

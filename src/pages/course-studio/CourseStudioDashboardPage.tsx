@@ -362,15 +362,14 @@ export const CourseStudioDashboardPage: React.FC = () => {
           {/* PREMIUM COURSE CARDS GRID                                             */}
           {/* ===================================================================== */}
           {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="h-80 bg-white rounded-[26px] border border-stone-200/70 animate-pulse p-6 space-y-4 shadow-xs">
-                  <div className="h-44 bg-slate-200 rounded-2xl" />
-                  <div className="h-4 bg-slate-200 rounded w-1/3" />
-                  <div className="h-6 bg-slate-200 rounded w-2/3" />
-                  <div className="h-10 bg-slate-100 rounded-xl" />
-                </div>
-              ))}
+            <div className="rounded-[26px] border border-sky-500/20 bg-gradient-to-br from-[#07182e] via-[#091f3b] to-[#061326] p-10 sm:p-14 flex flex-col items-center justify-center text-center min-h-[260px] shadow-md">
+              <div className="w-11 h-11 rounded-2xl bg-sky-500/15 border border-sky-400/25 flex items-center justify-center mb-3.5">
+                <RefreshCw className="w-5 h-5 text-sky-400 animate-spin" />
+              </div>
+              <p className="text-sm font-bold text-sky-100 tracking-wide">Loading Course Studio...</p>
+              <div className="mt-3 w-36 h-1 rounded-full bg-sky-950 overflow-hidden">
+                <div className="h-full w-1/2 bg-sky-400/80 rounded-full animate-pulse" />
+              </div>
             </div>
           ) : loadError ? (
             <div

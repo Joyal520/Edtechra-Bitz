@@ -1348,7 +1348,7 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
     const [{ data: episodeRow }, { data: classroomRow }, { data: studentProfile }, { data: courseRow }] = await Promise.all([
       supabaseClient
         .from('course_episodes')
-        .select('id, title, unit_id, course_id, position, order_index')
+        .select('*')
         .eq('id', cleanEpisodeId)
         .maybeSingle(),
       supabaseClient
@@ -1363,7 +1363,7 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
         .maybeSingle(),
       supabaseClient
         .from('courses')
-        .select('id, teacher_id, daily_release_enabled, course_timezone')
+        .select('*')
         .eq('id', cleanCourseId)
         .maybeSingle()
     ]);
@@ -1401,7 +1401,7 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
     // 2. Resolve student enrollment and verify assignment status
     const { data: assignment } = await supabaseClient
       .from('course_classroom_assignments')
-      .select('id, status')
+      .select('id, status, settings, start_date')
       .eq('course_id', cleanCourseId)
       .eq('classroom_id', cleanClassroomId)
       .maybeSingle();
@@ -1524,23 +1524,63 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
     const hasExistingPointRow = Array.isArray(existingPointRows) && existingPointRows.length > 0;
     const previouslyCreditedPoints = hasExistingPointRow ? Number(existingPointRows[0].points || 0) : 0;
 
-    // Authoritative check: Enforce "One Lesson Per Day" locking rule
-    const dailyReleaseActive = Boolean(courseRow?.daily_release_enabled);
-    if (dailyReleaseActive && existingProgress?.status !== 'completed') {
-      const timeZone = courseRow?.course_timezone || 'Asia/Colombo';
-      let todayStr;
-      try {
-        todayStr = new Intl.DateTimeFormat('en-CA', {
-          timeZone,
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit'
-        }).format(new Date());
-      } catch (_e) {
-        todayStr = new Date().toISOString().split('T')[0];
+    // Authoritative check: Enforce "Daily Lesson Unlock" locking rule in course timezone
+    const dailyReleaseActive = Boolean(
+      courseRow?.daily_release_enabled ?? assignment?.settings?.daily_release_enabled
+    );
+    const isManuallyUnlocked = Boolean(episodeRow?.manual_unlock);
+    if (dailyReleaseActive && !isManuallyUnlocked && existingProgress?.status !== 'completed') {
+      const timeZone =
+        courseRow?.course_timezone || assignment?.settings?.course_timezone || 'Asia/Colombo';
+      const intervalDays = Math.max(
+        1,
+        Number(courseRow?.daily_release_interval_days ?? assignment?.settings?.daily_release_interval_days ?? 1) || 1
+      );
+      const formatTzDate = (dt) => {
+        try {
+          return new Intl.DateTimeFormat('en-CA', {
+            timeZone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+          }).format(dt);
+        } catch (_e) {
+          return dt.toISOString().split('T')[0];
+        }
+      };
+
+      const todayStr = formatTzDate(new Date());
+      const toUtcDayMs = (ymd) => {
+        const [y, m, d] = String(ymd || '').split('-').map(Number);
+        return Date.UTC(y || 1970, (m || 1) - 1, d || 1);
+      };
+      const todayDayMs = toUtcDayMs(todayStr);
+
+      // Check 1: Scheduled release date based on course_start_date + lesson index * intervalDays
+      const rawStartDate =
+        courseRow?.course_start_date || assignment?.settings?.course_start_date || assignment?.start_date || null;
+      if (rawStartDate) {
+        const startDateStr = String(rawStartDate).includes('T')
+          ? formatTzDate(new Date(rawStartDate))
+          : String(rawStartDate).slice(0, 10);
+        const startDayMs = toUtcDayMs(startDateStr);
+        const lessonIdx = Math.max(
+          0,
+          Number(episodeRow?.order_index ?? (episodeRow?.position ? episodeRow.position - 1 : 0)) || 0
+        );
+        const scheduledUnlockDayMs = startDayMs + lessonIdx * intervalDays * 86400000;
+        if (todayDayMs < scheduledUnlockDayMs) {
+          const unlockDateFormatted = new Date(scheduledUnlockDayMs).toISOString().split('T')[0];
+          const lockErr = new Error(
+            `Daily Lesson Unlock is active for this course. This lesson is scheduled to unlock on ${unlockDateFormatted}.`
+          );
+          lockErr.statusCode = 403;
+          lockErr.dailyReleaseLocked = true;
+          throw lockErr;
+        }
       }
 
-      // Check if student has completed any lesson today in this course
+      // Check 2: Student completion pacing (at most 1 new micro lesson per release interval)
       const { data: todayCompletions } = await supabaseClient
         .from('course_episode_progress')
         .select('id, episode_id, completed_at')
@@ -1548,23 +1588,18 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
         .eq('status', 'completed')
         .neq('episode_id', cleanEpisodeId);
 
-      const hasCompletedToday = (todayCompletions || []).some(c => {
+      const hasCompletedWithinInterval = (todayCompletions || []).some(c => {
         if (!c.completed_at) return false;
-        try {
-          const compDateStr = new Intl.DateTimeFormat('en-CA', {
-            timeZone,
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-          }).format(new Date(c.completed_at));
-          return compDateStr === todayStr;
-        } catch (_e) {
-          return c.completed_at.startsWith(todayStr);
-        }
+        const compDateStr = formatTzDate(new Date(c.completed_at));
+        const compDayMs = toUtcDayMs(compDateStr);
+        const diffDays = Math.floor((todayDayMs - compDayMs) / 86400000);
+        return diffDays < intervalDays;
       });
 
-      if (hasCompletedToday) {
-        const lockErr = new Error('One Lesson Per Day is active for this course. You have already completed a lesson today. The next lesson will unlock tomorrow at midnight.');
+      if (hasCompletedWithinInterval) {
+        const lockErr = new Error(
+          'Daily Lesson Unlock is active for this course. You have already completed today\'s micro lesson. Your next lesson will unlock tomorrow.'
+        );
         lockErr.statusCode = 403;
         lockErr.dailyReleaseLocked = true;
         throw lockErr;

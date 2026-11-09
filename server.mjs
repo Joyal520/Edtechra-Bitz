@@ -6066,10 +6066,20 @@ app.get('/api/course-studio/courses/:id', async (req, res) => {
       episodes: episodesByUnit.get(u.id) || []
     }));
 
+    const activeAssignmentSettings = (assignments || []).find(a => a.status === 'active')?.settings || (assignments || [])[0]?.settings || {};
+    const resolvedIntervalDays = Math.max(
+      1,
+      Number(course.daily_release_interval_days ?? activeAssignmentSettings.daily_release_interval_days ?? 1) || 1
+    );
+    const serverTimeIso = new Date().toISOString();
+
     res.json({
       success: true,
+      server_time: serverTimeIso,
       course: {
         ...course,
+        daily_release_interval_days: resolvedIntervalDays,
+        server_time: serverTimeIso,
         units: enrichedUnits,
         assignments: assignments || [],
         // Alias kept for frontend components that read this key
@@ -6102,7 +6112,8 @@ app.put('/api/course-studio/courses/:id', async (req, res) => {
       status,
       daily_release_enabled,
       course_timezone,
-      course_start_date
+      course_start_date,
+      daily_release_interval_days
     } = req.body;
 
     const updates = { updated_at: new Date().toISOString() };
@@ -6117,25 +6128,80 @@ app.put('/api/course-studio/courses/:id', async (req, res) => {
     if (daily_release_enabled !== undefined) updates.daily_release_enabled = Boolean(daily_release_enabled);
     if (course_timezone !== undefined) updates.course_timezone = course_timezone;
     if (course_start_date !== undefined) updates.course_start_date = course_start_date;
+    if (daily_release_interval_days !== undefined) {
+      updates.daily_release_interval_days = Math.max(1, Number(daily_release_interval_days) || 1);
+    }
 
     const isAdminOrFeaturedTeacher =
       authData.profile?.role === 'admin' ||
       authData.user.email === 'roshanjoyal520@gmail.com' ||
-      (courseId === 'e10c7ee9-0012-4000-8000-000000000012' && authData.profile?.role === 'teacher');
-    let query = serverSupabase
-      .from('courses')
-      .update(updates)
-      .eq('id', courseId);
-    if (!isAdminOrFeaturedTeacher) {
-      query = query.eq('teacher_id', authData.user.id);
+      ((courseId === 'e10c7ee9-0012-4000-8000-000000000012' || courseId === 'e10c7ee9-0010-4000-8000-000000000010') &&
+        authData.profile?.role === 'teacher');
+
+    const runCourseUpdate = async (payload) => {
+      let query = serverSupabase
+        .from('courses')
+        .update(payload)
+        .eq('id', courseId);
+      if (!isAdminOrFeaturedTeacher) {
+        query = query.eq('teacher_id', authData.user.id);
+      }
+      return query.select().single();
+    };
+
+    let { data: updated, error } = await runCourseUpdate(updates);
+    if (error && updates.daily_release_interval_days !== undefined && String(error.message || '').includes('daily_release_interval_days')) {
+      const { daily_release_interval_days: _omit, ...fallbackUpdates } = updates;
+      const retryRes = await runCourseUpdate(fallbackUpdates);
+      updated = retryRes.data;
+      error = retryRes.error;
     }
 
-    const { data: updated, error } = await query
-      .select()
-      .single();
-
     if (error) throw error;
-    res.json({ success: true, course: updated });
+
+    // Sync daily unlock settings into existing classroom assignments if present
+    if (
+      daily_release_enabled !== undefined ||
+      daily_release_interval_days !== undefined ||
+      course_start_date !== undefined ||
+      course_timezone !== undefined
+    ) {
+      try {
+        const { data: existingAssigns } = await serverSupabase
+          .from('course_classroom_assignments')
+          .select('id, settings')
+          .eq('course_id', courseId);
+        for (const assign of existingAssigns || []) {
+          const nextSettings = {
+            ...(assign.settings || {}),
+            ...(daily_release_enabled !== undefined ? { daily_release_enabled: Boolean(daily_release_enabled) } : {}),
+            ...(daily_release_interval_days !== undefined
+              ? { daily_release_interval_days: Math.max(1, Number(daily_release_interval_days) || 1) }
+              : {}),
+            ...(course_start_date !== undefined ? { course_start_date } : {}),
+            ...(course_timezone !== undefined ? { course_timezone } : {})
+          };
+          await serverSupabase
+            .from('course_classroom_assignments')
+            .update({ settings: nextSettings, updated_at: new Date().toISOString() })
+            .eq('id', assign.id);
+        }
+      } catch (_syncAssignErr) {
+        // Non-blocking sync
+      }
+    }
+
+    res.json({
+      success: true,
+      server_time: new Date().toISOString(),
+      course: {
+        ...updated,
+        daily_release_interval_days:
+          daily_release_interval_days !== undefined
+            ? Math.max(1, Number(daily_release_interval_days) || 1)
+            : updated?.daily_release_interval_days ?? 1
+      }
+    });
   } catch (err) {
     console.error('Error in PUT /api/course-studio/courses/:id:', err);
     res.status(500).json({ success: false, error: err.message || 'Failed to update course.' });
@@ -6962,7 +7028,10 @@ app.post('/api/course-studio/courses/:id/publish-and-assign', async (req, res) =
         track_mastery: true,
         award_points: true
       },
-      daily_release_enabled
+      daily_release_enabled,
+      course_start_date,
+      course_timezone,
+      daily_release_interval_days
     } = req.body;
 
     const isAdmin = authData.profile?.role === 'admin' || authData.user.email === 'roshanjoyal520@gmail.com';
@@ -6970,17 +7039,36 @@ app.post('/api/course-studio/courses/:id/publish-and-assign', async (req, res) =
     if (daily_release_enabled !== undefined) {
       courseUpdates.daily_release_enabled = Boolean(daily_release_enabled);
     }
-
-    let courseQuery = serverSupabase
-      .from('courses')
-      .update(courseUpdates)
-      .eq('id', courseId);
-    if (!isAdmin) {
-      courseQuery = courseQuery.eq('teacher_id', authData.user.id);
+    if (course_start_date !== undefined) {
+      courseUpdates.course_start_date = course_start_date;
+    } else if (start_date) {
+      courseUpdates.course_start_date = String(start_date).split('T')[0];
     }
-    const { data: updatedCourse, error: cErr } = await courseQuery
-      .select()
-      .single();
+    if (course_timezone !== undefined) {
+      courseUpdates.course_timezone = course_timezone;
+    }
+    if (daily_release_interval_days !== undefined) {
+      courseUpdates.daily_release_interval_days = Math.max(1, Number(daily_release_interval_days) || 1);
+    }
+
+    const executePublishUpdate = async (payload) => {
+      let courseQuery = serverSupabase
+        .from('courses')
+        .update(payload)
+        .eq('id', courseId);
+      if (!isAdmin) {
+        courseQuery = courseQuery.eq('teacher_id', authData.user.id);
+      }
+      return courseQuery.select().single();
+    };
+
+    let { data: updatedCourse, error: cErr } = await executePublishUpdate(courseUpdates);
+    if (cErr && courseUpdates.daily_release_interval_days !== undefined && String(cErr.message || '').includes('daily_release_interval_days')) {
+      const { daily_release_interval_days: _omit, ...fallbackUpdates } = courseUpdates;
+      const retryRes = await executePublishUpdate(fallbackUpdates);
+      updatedCourse = retryRes.data;
+      cErr = retryRes.error;
+    }
 
     if (cErr) throw cErr;
 
@@ -7030,7 +7118,12 @@ app.post('/api/course-studio/courses/:id/publish-and-assign', async (req, res) =
             status: 'active',
             settings: {
               ...settings,
-              ...(daily_release_enabled !== undefined ? { daily_release_enabled: Boolean(daily_release_enabled) } : {})
+              ...(daily_release_enabled !== undefined ? { daily_release_enabled: Boolean(daily_release_enabled) } : {}),
+              ...(daily_release_interval_days !== undefined
+                ? { daily_release_interval_days: Math.max(1, Number(daily_release_interval_days) || 1) }
+                : {}),
+              ...(courseUpdates.course_start_date ? { course_start_date: courseUpdates.course_start_date } : {}),
+              ...(course_timezone ? { course_timezone } : {})
             },
             assigned_at: new Date().toISOString()
           },
@@ -7578,7 +7671,7 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
     ] = await Promise.all([
       serverSupabase
         .from('courses')
-        .select('id, teacher_id, daily_release_enabled, course_timezone')
+        .select('*')
         .eq('id', course_id)
         .maybeSingle(),
       serverSupabase
@@ -7588,7 +7681,7 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
         .maybeSingle(),
       serverSupabase
         .from('course_classroom_assignments')
-        .select('id, status, settings')
+        .select('id, status, settings, start_date')
         .eq('course_id', course_id)
         .eq('classroom_id', classroom_id)
         .maybeSingle(),
@@ -7612,6 +7705,19 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
         .eq('student_id', student_id)
     ]);
 
+    const resolvedDailyReleaseEnabled = Boolean(
+      courseRow?.daily_release_enabled ?? assignment?.settings?.daily_release_enabled
+    );
+    const resolvedIntervalDays = Math.max(
+      1,
+      Number(courseRow?.daily_release_interval_days ?? assignment?.settings?.daily_release_interval_days ?? 1) || 1
+    );
+    const resolvedStartDate =
+      courseRow?.course_start_date || assignment?.settings?.course_start_date || assignment?.start_date || null;
+    const resolvedTimezone =
+      courseRow?.course_timezone || assignment?.settings?.course_timezone || 'Asia/Colombo';
+    const serverTimeIso = new Date().toISOString();
+
     const isTeacher =
       (courseRow?.teacher_id && courseRow.teacher_id === student_id) ||
       (classroomRow?.teacher_id && classroomRow.teacher_id === student_id) ||
@@ -7623,6 +7729,7 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
     if (isTeacher) {
       return res.json({
         success: true,
+        server_time: serverTimeIso,
         is_teacher: true,
         is_preview: true,
         is_paused: assignment?.status === 'paused',
@@ -7632,7 +7739,10 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
         progress_percent: 0,
         total_classroom_points: 0,
         attempts: [],
-        daily_release_enabled: Boolean(courseRow?.daily_release_enabled)
+        daily_release_enabled: resolvedDailyReleaseEnabled,
+        daily_release_interval_days: resolvedIntervalDays,
+        course_start_date: resolvedStartDate,
+        course_timezone: resolvedTimezone
       });
     }
 
@@ -7694,6 +7804,7 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
 
     res.json({
       success: true,
+      server_time: serverTimeIso,
       is_teacher: false,
       is_preview: false,
       is_paused: isPaused,
@@ -7703,7 +7814,10 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
       progress_percent: enrollment?.progress_percent || 0,
       total_classroom_points: totalClassroomPoints,
       attempts: studentAttempts || [],
-      daily_release_enabled: Boolean(courseRow?.daily_release_enabled)
+      daily_release_enabled: resolvedDailyReleaseEnabled,
+      daily_release_interval_days: resolvedIntervalDays,
+      course_start_date: resolvedStartDate,
+      course_timezone: resolvedTimezone
     });
   } catch (err) {
     console.error('Error in GET student progress:', err);

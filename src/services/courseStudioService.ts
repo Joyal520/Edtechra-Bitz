@@ -188,6 +188,7 @@ export const courseStudioService = {
       daily_release_enabled: boolean;
       course_timezone: string;
       course_start_date: string;
+      daily_release_interval_days: number;
     }>
   ): Promise<Course> {
     const headers = await getAuthHeader();
@@ -390,6 +391,9 @@ export const courseStudioService = {
       due_date?: string | null;
       settings?: Partial<CourseAssignmentSettings>;
       daily_release_enabled?: boolean;
+      course_start_date?: string;
+      course_timezone?: string;
+      daily_release_interval_days?: number;
     }
   ): Promise<{ course: Course; assigned_count: number; assignments: CourseClassroomAssignment[] }> {
     const headers = await getAuthHeader();
@@ -449,6 +453,10 @@ export const courseStudioService = {
     last_completed_at?: string | null;
     progress_percent: number;
     daily_release_enabled?: boolean;
+    daily_release_interval_days?: number;
+    course_start_date?: string | null;
+    course_timezone?: string;
+    server_time?: string;
     is_paused?: boolean;
     is_teacher?: boolean;
     is_preview?: boolean;

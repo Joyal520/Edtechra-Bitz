@@ -41,17 +41,23 @@ export const CoursePublishModal: React.FC<Props> = ({
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [selectedClassroomIds, setSelectedClassroomIds] = useState<string[]>([]);
   const [alreadyAssignedIds, setAlreadyAssignedIds] = useState<string[]>([]);
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(
+    course.course_start_date ? String(course.course_start_date).slice(0, 10) : new Date().toISOString().split('T')[0]
+  );
   const [dueDate, setDueDate] = useState('');
   const [dailyReleaseEnabled, setDailyReleaseEnabled] = useState<boolean>(
     Boolean(course.daily_release_enabled)
+  );
+  const [dailyReleaseIntervalDays, setDailyReleaseIntervalDays] = useState<number>(
+    Math.max(1, Number(course.daily_release_interval_days || 1) || 1)
   );
   const [settings, setSettings] = useState<CourseAssignmentSettings>({
     sequential_unlock: false,
     allow_retries: true,
     track_mastery: true,
     award_points: true,
-    daily_release_enabled: Boolean(course.daily_release_enabled)
+    daily_release_enabled: Boolean(course.daily_release_enabled),
+    daily_release_interval_days: Math.max(1, Number(course.daily_release_interval_days || 1) || 1)
   });
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -75,11 +81,15 @@ export const CoursePublishModal: React.FC<Props> = ({
   useEffect(() => {
     if (isOpen) {
       setDailyReleaseEnabled(Boolean(course.daily_release_enabled));
+      setDailyReleaseIntervalDays(Math.max(1, Number(course.daily_release_interval_days || 1) || 1));
+      if (course.course_start_date) {
+        setStartDate(String(course.course_start_date).slice(0, 10));
+      }
       loadTeacherClassroomsAndAssignments();
       setSuccessResult(null);
       setError(null);
     }
-  }, [isOpen, course.id, initialClassroomId, course.daily_release_enabled]);
+  }, [isOpen, course.id, initialClassroomId, course.daily_release_enabled, course.daily_release_interval_days, course.course_start_date]);
 
   const loadTeacherClassroomsAndAssignments = async () => {
     setLoading(true);
@@ -100,6 +110,12 @@ export const CoursePublishModal: React.FC<Props> = ({
 
         if (typeof (fullCourse as any)?.daily_release_enabled === 'boolean') {
           setDailyReleaseEnabled((fullCourse as any).daily_release_enabled);
+        }
+        if ((fullCourse as any)?.daily_release_interval_days) {
+          setDailyReleaseIntervalDays(Math.max(1, Number((fullCourse as any).daily_release_interval_days) || 1));
+        }
+        if ((fullCourse as any)?.course_start_date) {
+          setStartDate(String((fullCourse as any).course_start_date).slice(0, 10));
         }
       } catch (_e) {
         // Do NOT assume zero assignments: saving with an empty list would archive every existing class assignment.
@@ -150,12 +166,16 @@ export const CoursePublishModal: React.FC<Props> = ({
     try {
       const mergedSettings = {
         ...settings,
-        daily_release_enabled: dailyReleaseEnabled
+        daily_release_enabled: dailyReleaseEnabled,
+        daily_release_interval_days: dailyReleaseIntervalDays,
+        course_start_date: startDate || undefined
       };
 
-      // 1. Update the course metadata to persist daily_release_enabled on the course record
+      // 1. Update the course metadata to persist daily_release_enabled, start date, and interval on the course record
       await courseStudioService.updateCourse(course.id, {
-        daily_release_enabled: dailyReleaseEnabled
+        daily_release_enabled: dailyReleaseEnabled,
+        course_start_date: startDate || undefined,
+        daily_release_interval_days: dailyReleaseIntervalDays
       }).catch(err => {
         console.warn('Non-fatal error updating course daily_release_enabled:', err);
       });
@@ -166,7 +186,9 @@ export const CoursePublishModal: React.FC<Props> = ({
         start_date: startDate ? new Date(startDate).toISOString() : new Date().toISOString(),
         due_date: dueDate ? new Date(dueDate).toISOString() : null,
         settings: mergedSettings,
-        daily_release_enabled: dailyReleaseEnabled
+        daily_release_enabled: dailyReleaseEnabled,
+        course_start_date: startDate || undefined,
+        daily_release_interval_days: dailyReleaseIntervalDays
       });
 
       setSuccessResult({
@@ -430,48 +452,98 @@ export const CoursePublishModal: React.FC<Props> = ({
               </div>
 
               {/* ============================================================= */}
-              {/* DELIVERABLE 2: LEARNING PACE & ACCESS (ONE LESSON PER DAY)     */}
+              {/* DELIVERABLE 2: DAILY LESSON UNLOCK                            */}
               {/* ============================================================= */}
-              <div className="space-y-2.5 pt-2 border-t border-stone-200/70">
+              <div className="space-y-3 pt-2 border-t border-stone-200/70">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-[#026fc3]" />
-                    <span>Learning Pace & Access</span>
+                    <span>DAILY LESSON UNLOCK</span>
                   </label>
                 </div>
 
-                <div className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                <div className={`p-4 rounded-2xl border transition-all ${
                   dailyReleaseEnabled
                     ? 'bg-sky-50/70 border-sky-300 ring-1 ring-sky-200 shadow-xs'
                     : 'bg-white border-stone-200/80 hover:border-slate-300'
                 }`}>
-                  <label className="flex items-start gap-3 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={dailyReleaseEnabled}
-                      onChange={e => setDailyReleaseEnabled(e.target.checked)}
-                      className="mt-1 w-4 h-4 rounded text-[#026fc3] focus:ring-[#026fc3] accent-[#026fc3] cursor-pointer shrink-0"
-                    />
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-black text-slate-900">
-                          Unlock One Lesson Per Day
+                        <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                          DAILY LESSON UNLOCK
                         </span>
                         {dailyReleaseEnabled ? (
                           <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-sky-100 text-[#026fc3] border border-sky-200">
-                            Daily Release Active
+                            Enabled
                           </span>
                         ) : (
                           <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
-                            Pacing Off (All Open)
+                            Disabled
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                        When enabled, enrolled students can complete only <strong>1 newly completed lesson per calendar day</strong>. The next lesson unlocks automatically at midnight. Unfinished lessons remain accessible.
+                      <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
+                        Release one new micro lesson each day.
                       </p>
                     </div>
-                  </label>
+
+                    <div className="inline-flex rounded-xl p-1 bg-slate-100 border border-slate-200 shrink-0 self-start sm:self-center">
+                      <button
+                        type="button"
+                        onClick={() => setDailyReleaseEnabled(false)}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                          !dailyReleaseEnabled
+                            ? 'bg-white text-slate-900 shadow-2xs'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        Disabled
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDailyReleaseEnabled(true)}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                          dailyReleaseEnabled
+                            ? 'bg-[#026fc3] text-white shadow-2xs'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        Enabled
+                      </button>
+                    </div>
+                  </div>
+
+                  {dailyReleaseEnabled && (
+                    <div className="mt-4 pt-3.5 border-t border-sky-200/70 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-black text-slate-700 block">
+                          First Release Date
+                        </label>
+                        <input
+                          type="date"
+                          value={startDate}
+                          onChange={e => setStartDate(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-sky-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#026fc3] focus:outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-black text-slate-700 block">
+                          Daily Release Interval
+                        </label>
+                        <select
+                          value={dailyReleaseIntervalDays}
+                          onChange={e => setDailyReleaseIntervalDays(Math.max(1, Number(e.target.value) || 1))}
+                          className="w-full px-3 py-2 bg-white border border-sky-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#026fc3] focus:outline-none"
+                        >
+                          <option value={1}>Every 1 Day (Default)</option>
+                          <option value={2}>Every 2 Days</option>
+                          <option value={3}>Every 3 Days</option>
+                          <option value={7}>Every 7 Days (Weekly)</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

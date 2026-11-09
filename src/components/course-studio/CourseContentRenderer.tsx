@@ -106,6 +106,17 @@ interface Props {
   onOpenAddQuestions?: () => void;
   themeId?: string;
   isCourseReader?: boolean;
+  courseCoverUrl?: string | null;
+  dailyReleaseEnabled?: boolean;
+  courseStartDate?: string | null;
+  dailyReleaseIntervalDays?: number;
+  nextUnlockDateLabel?: string;
+  nextUnlockCountdown?: string;
+  onUpdateDailyUnlockSettings?: (settings: {
+    daily_release_enabled: boolean;
+    course_start_date?: string;
+    daily_release_interval_days?: number;
+  }) => Promise<void> | void;
 }
 
 export function getValidLessonQuestions(questions?: CourseQuestion[]): CourseQuestion[] {
@@ -151,7 +162,14 @@ export const CourseContentRenderer: React.FC<Props> = ({
   onOpenAiAssistant,
   onOpenAddQuestions,
   themeId = 'midnight-navy',
-  isCourseReader = false
+  isCourseReader = false,
+  courseCoverUrl = null,
+  dailyReleaseEnabled = false,
+  courseStartDate = null,
+  dailyReleaseIntervalDays = 1,
+  nextUnlockDateLabel,
+  nextUnlockCountdown,
+  onUpdateDailyUnlockSettings
 }) => {
   const isEditMode = mode === 'edit';
   const activeTheme = getThemePreset(themeId);
@@ -875,6 +893,10 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   }}
                   onOpenAddQuestionsModal={onOpenAddQuestions}
                   onPreviewStudentExperience={onPreviewStudentExperience}
+                  dailyReleaseEnabled={dailyReleaseEnabled}
+                  courseStartDate={courseStartDate}
+                  dailyReleaseIntervalDays={dailyReleaseIntervalDays}
+                  onUpdateDailyUnlockSettings={onUpdateDailyUnlockSettings}
                 />
               );
             }
@@ -896,6 +918,10 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   onQuitLesson={onQuitLesson || onReturnToCourse}
                   hasNextShort={hasNextLesson}
                   isLessonCompleted={isLessonCompleted}
+                  courseCoverUrl={courseCoverUrl}
+                  dailyReleaseEnabled={dailyReleaseEnabled}
+                  nextUnlockDateLabel={nextUnlockDateLabel}
+                  nextUnlockCountdown={nextUnlockCountdown}
                 />
               </div>
             );

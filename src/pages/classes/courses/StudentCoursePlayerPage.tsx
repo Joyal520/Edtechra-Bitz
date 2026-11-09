@@ -32,7 +32,7 @@ import { LessonCompletionModal } from '@/components/course-studio/LessonCompleti
 import { TextScale } from '@/utils/courseTextFormatting';
 import { getThemePreset, DEFAULT_THEME_ID } from '@/utils/courseThemes';
 import { ThemeSelectorPopover } from '@/components/course-studio/ThemeSelectorPopover';
-import { computeCourseRoadmap } from '@/utils/dailyReleaseEngine';
+import { computeCourseRoadmap, getNextDailyUnlockSummary } from '@/utils/dailyReleaseEngine';
 import { LiquidButton } from '@/components/course-studio/liquid';
 import { CourseHeroBanner } from '@/components/course-studio/CourseHeroBanner';
 import { AnnabelleCinematicHeader } from '@/components/course-studio/AnnabelleCinematicHeader';
@@ -216,14 +216,31 @@ export const StudentCoursePlayerPage: React.FC = () => {
         resolveProfileName()
       ]);
 
-      setCourse(courseData);
+      const mergedCourseData: Course = {
+        ...courseData,
+        daily_release_enabled:
+          (progressData as any)?.daily_release_enabled !== undefined
+            ? Boolean((progressData as any).daily_release_enabled)
+            : courseData.daily_release_enabled,
+        daily_release_interval_days:
+          (progressData as any)?.daily_release_interval_days ||
+          courseData.daily_release_interval_days ||
+          1,
+        course_start_date:
+          (progressData as any)?.course_start_date || courseData.course_start_date || null,
+        course_timezone:
+          (progressData as any)?.course_timezone || courseData.course_timezone || 'Asia/Colombo',
+        server_time: (progressData as any)?.server_time || courseData.server_time
+      };
+
+      setCourse(mergedCourseData);
 
       if (Array.isArray((progressData as any)?.attempts) && (progressData as any).attempts.length > 0) {
         applyAttemptsList((progressData as any).attempts);
       }
 
       const isTeacher = Boolean((progressData as any)?.is_teacher);
-      const isPaused = Boolean((progressData as any)?.is_paused) || Boolean(courseData?.is_paused);
+      const isPaused = Boolean((progressData as any)?.is_paused) || Boolean(mergedCourseData?.is_paused);
       setIsTeacherPreview(isTeacher);
       setIsCoursePaused(isPaused);
 
@@ -245,7 +262,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
       // Compute initial roadmap with actual completed lessons & exact daily release state
       const roadmap = computeCourseRoadmap({
-        course: courseData,
+        course: mergedCourseData,
         completedEpisodeIds: completedSet,
         completedEpisodesMap: (progressData as any)?.completedEpisodesMap,
         studentStartDate: progressData.enrollment?.created_at || null,
@@ -254,10 +271,10 @@ export const StudentCoursePlayerPage: React.FC = () => {
       });
 
       if (roadmap.currentAvailableEpisode) {
-        const found = findEpisodeById(courseData, roadmap.currentAvailableEpisode.id);
+        const found = findEpisodeById(mergedCourseData, roadmap.currentAvailableEpisode.id);
         if (found) setSelectedEpisode(found);
       } else {
-        const firstUnit = courseData.units?.[0];
+        const firstUnit = mergedCourseData.units?.[0];
         if (firstUnit?.episodes?.[0]) setSelectedEpisode(firstUnit.episodes[0]);
       }
     } catch (err: any) {
@@ -436,14 +453,25 @@ export const StudentCoursePlayerPage: React.FC = () => {
     }
 
     const epId = selectedEpisode.id;
+    const hasShortBlock = (selectedEpisode.blocks || []).some(
+      b =>
+        b.block_type === 'learn_with_shorts' ||
+        (b.block_type === 'youtube_short' && Boolean((b.content as any)?.is_learn_with_shorts))
+    );
 
     // Teacher Preview Guard: Do NOT record student progress or alter leaderboard points
     if (isTeacherPreview) {
       setCompletedEpisodeIds(prev => new Set([...prev, epId]));
+      setCompletedEpisodesMap(prev => ({
+        ...prev,
+        [epId]: { completed_at: new Date().toISOString() }
+      }));
       setCelebratedIds(prev => new Set([...prev, epId]));
       setToastMessage('Teacher Preview: Lesson completed in simulation. No student progress or points were recorded to the database.');
       setTimeout(() => setToastMessage(null), 4000);
-      handleAfterCelebrationContinue();
+      if (!hasShortBlock) {
+        handleAfterCelebrationContinue();
+      }
       return;
     }
 
@@ -497,6 +525,10 @@ export const StudentCoursePlayerPage: React.FC = () => {
       }
 
       setCompletedEpisodeIds(prev => new Set([...prev, epId]));
+      setCompletedEpisodesMap(prev => ({
+        ...prev,
+        [epId]: { completed_at: new Date().toISOString() }
+      }));
 
       const alreadyAwarded = Boolean(res?.already_awarded);
       // Only show what the backend actually confirmed - never a client-side guess.
@@ -506,12 +538,6 @@ export const StudentCoursePlayerPage: React.FC = () => {
         : null;
 
       // Only trigger celebration modal ONCE when backend confirms new lesson completion & reward
-      const hasShortBlock = (selectedEpisode.blocks || []).some(
-        b =>
-          b.block_type === 'learn_with_shorts' ||
-          (b.block_type === 'youtube_short' && Boolean((b.content as any)?.is_learn_with_shorts))
-      );
-
       if (!hasShortBlock) {
         if (!alreadyAwarded && !celebratedIds.has(epId)) {
           setCelebratedIds(prev => new Set([...prev, epId]));
@@ -669,6 +695,11 @@ export const StudentCoursePlayerPage: React.FC = () => {
       unlockMessage: roadItem?.unlock_message || null
     };
   });
+
+  const nextUnlockSummary = getNextDailyUnlockSummary(course);
+  const nextRoadItem = nextItem ? roadmapData?.items.find(i => i.id === nextItem.episode.id) : null;
+  const nextLessonUnlockDateLabel = nextRoadItem?.release_date_str || nextUnlockSummary.nextUnlockDateLabel;
+  const nextLessonUnlockCountdown = nextRoadItem?.next_unlock_countdown || nextUnlockSummary.countdownLabel;
 
   return (
     <div
@@ -953,7 +984,10 @@ export const StudentCoursePlayerPage: React.FC = () => {
               }
             >
 
-            {/* EDITORIAL LESSON HEADER */}
+            {/* EDITORIAL LESSON HEADER (Hidden for unlocked Learn with Shorts lessons so Stage 1 Intro Screen stands alone) */}
+            {isLearnWithShortsLesson && !isCurrentEpisodeLocked ? (
+              <div id="student-lesson-header" />
+            ) : (
             <header
               id="student-lesson-header"
               className={
@@ -1010,6 +1044,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
                 </p>
               )}
             </header>
+            )}
 
             {isCurrentEpisodeLocked ? (
               <div className="py-14 sm:py-20 text-center space-y-4 max-w-md mx-auto surface-card rounded-3xl p-6 sm:p-8 border border-[var(--theme-border-primary)] shadow-sm">
@@ -1019,8 +1054,14 @@ export const StudentCoursePlayerPage: React.FC = () => {
                 <div className="space-y-2">
                   <h3 className="text-xl font-black text-theme-primary">This Lesson is Locked</h3>
                   <p className="text-xs sm:text-sm text-theme-secondary font-medium leading-relaxed">
-                    {currentRoadmapItem?.unlock_message || 'Unlock One Lesson Per Day is active for this course. This lesson unlocks tomorrow at midnight.'}
+                    {currentRoadmapItem?.unlock_message || 'Daily Lesson Unlock is active for this course. This lesson will unlock tomorrow.'}
                   </p>
+                  {currentRoadmapItem?.release_date_str && (
+                    <p className="text-xs font-bold text-amber-400">
+                      Unlocks {currentRoadmapItem.release_date_str}
+                      {currentRoadmapItem.next_unlock_countdown ? ` (${currentRoadmapItem.next_unlock_countdown})` : ''}
+                    </p>
+                  )}
                 </div>
                 <div className="pt-2">
                   <button
@@ -1048,6 +1089,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
                   episodeId={selectedEpisode.id}
                   userId={user?.id}
                   courseTitle={course.title}
+                  courseCoverUrl={course.cover_image_url || (isBitzShortsCourse ? '/images/creepy_legends_cover.png' : undefined)}
                   lessonTitle={selectedEpisode.title}
                   userAnswers={userAnswers}
                   feedbackState={feedbackState}
@@ -1056,6 +1098,12 @@ export const StudentCoursePlayerPage: React.FC = () => {
                   onNextLesson={
                     nextItem
                       ? () => {
+                          if (course.daily_release_enabled && nextRoadItem?.is_locked && !isTeacherPreview) {
+                            setToastMessage(nextRoadItem.unlock_message || 'Your next lesson will unlock tomorrow.');
+                            setTimeout(() => setToastMessage(null), 3500);
+                            setViewMode('roadmap');
+                            return;
+                          }
                           setSelectedEpisode(nextItem.episode);
                           setViewMode('lesson');
                           mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1066,6 +1114,11 @@ export const StudentCoursePlayerPage: React.FC = () => {
                   onQuitLesson={() => setViewMode('roadmap')}
                   hasNextLesson={Boolean(nextItem)}
                   isLessonCompleted={isEpisodeCompleted}
+                  dailyReleaseEnabled={Boolean(course.daily_release_enabled)}
+                  courseStartDate={course.course_start_date || null}
+                  dailyReleaseIntervalDays={course.daily_release_interval_days || 1}
+                  nextUnlockDateLabel={nextLessonUnlockDateLabel}
+                  nextUnlockCountdown={nextLessonUnlockCountdown}
                   onProgressChange={handleProgressChange}
                   onVideoCompletionChange={setVideoCompletionStatus}
                   isCourseReader={useCinematicHeaderCourse}

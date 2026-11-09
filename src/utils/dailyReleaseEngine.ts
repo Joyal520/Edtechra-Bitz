@@ -1,13 +1,16 @@
 // ============================================================================
 // EDTECHRA DIGITAL CLASSROOM: DAILY RELEASE & PROGRESSION ENGINE
 // Calculates student lesson unlock schedule based on course timezone,
-// authoritative lesson completions, explicit lesson order, and pause states.
+// authoritative server time, lesson completions, explicit lesson order,
+// first release date, daily release interval, and pause states.
 //
 // STRICT RULE:
-// When One Lesson Per Day is ON:
-// - A student can complete at most ONE newly completed lesson per calendar day.
-// - The next sequential lesson unlocks at midnight (00:00) after the previous
-//   lesson's completion date.
+// When DAILY LESSON UNLOCK is Enabled:
+// - Lessons unlock sequentially according to the course's first release date
+//   and daily release interval (default 1 day), AND
+// - A student can complete at most ONE newly completed lesson per release interval.
+// - The next sequential lesson unlocks at midnight (00:00 in the course timezone)
+//   after the previous lesson's completion date + interval.
 // - Unfinished lessons in progress remain accessible across days until completed.
 // - All subsequent lessons remain strictly locked until prior lessons are finished.
 // ============================================================================
@@ -36,6 +39,10 @@ export interface DailyReleaseCalculationOptions {
  */
 export function getDateStringInTimezone(dateInput: Date | string | number, timeZone = 'Asia/Colombo'): string {
   try {
+    const str = String(dateInput || '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      return str;
+    }
     const d = new Date(dateInput);
     const formatter = new Intl.DateTimeFormat('en-CA', {
       timeZone,
@@ -45,9 +52,95 @@ export function getDateStringInTimezone(dateInput: Date | string | number, timeZ
     });
     return formatter.format(d);
   } catch (_err) {
-    // Fallback to UTC if timezone is invalid
     return new Date(dateInput).toISOString().split('T')[0];
   }
+}
+
+/**
+ * Converts a YYYY-MM-DD string to UTC midnight milliseconds for deterministic day arithmetic.
+ */
+export function ymdToUtcMs(ymd: string): number {
+  const parts = String(ymd || '').split('-').map(Number);
+  return Date.UTC(parts[0] || 1970, (parts[1] || 1) - 1, parts[2] || 1);
+}
+
+/**
+ * Formats a UTC midnight timestamp (or YYYY-MM-DD) into a readable date string like "Nov 10, 2026".
+ */
+export function formatUnlockDateLabel(ymdOrMs: string | number): string {
+  try {
+    const ms = typeof ymdOrMs === 'number' ? ymdOrMs : ymdToUtcMs(ymdOrMs);
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'UTC',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    }).format(new Date(ms));
+  } catch (_e) {
+    return String(ymdOrMs);
+  }
+}
+
+/**
+ * Computes countdown string (e.g., "11h 25m") until the next midnight (or target day) in the course timezone.
+ */
+export function getCountdownInTimezone(
+  nowInput: Date | string | number = new Date(),
+  daysAhead = 1,
+  timeZone = 'Asia/Colombo'
+): string {
+  try {
+    const now = new Date(nowInput);
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    }).formatToParts(now);
+
+    const h = Number(parts.find(p => p.type === 'hour')?.value || 0) % 24;
+    const m = Number(parts.find(p => p.type === 'minute')?.value || 0);
+    const s = Number(parts.find(p => p.type === 'second')?.value || 0);
+
+    const secondsRemainingToday = Math.max(0, 86400 - (h * 3600 + m * 60 + s));
+    const totalSeconds = secondsRemainingToday + Math.max(0, daysAhead - 1) * 86400;
+
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const mins = Math.max(1, Math.floor((totalSeconds % 3600) / 60));
+
+    if (days > 0) {
+      return `${days}d ${hours}h`;
+    }
+    return `${hours}h ${mins}m`;
+  } catch (_e) {
+    return '24h';
+  }
+}
+
+/**
+ * Returns next unlock summary for the Reward Screen when DAILY LESSON UNLOCK is enabled.
+ */
+export function getNextDailyUnlockSummary(
+  course?: Partial<Course> | null,
+  currentDateInput?: Date | string | null
+): {
+  nextUnlockDateLabel: string;
+  countdownLabel: string;
+  intervalDays: number;
+} {
+  const timeZone = course?.course_timezone || 'Asia/Colombo';
+  const intervalDays = Math.max(1, Number(course?.daily_release_interval_days || 1) || 1);
+  const effectiveNow = currentDateInput || course?.server_time || new Date();
+  const todayStr = getDateStringInTimezone(effectiveNow, timeZone);
+  const nextUnlockMs = ymdToUtcMs(todayStr) + intervalDays * 86400000;
+
+  return {
+    nextUnlockDateLabel: formatUnlockDateLabel(nextUnlockMs),
+    countdownLabel: getCountdownInTimezone(effectiveNow, intervalDays, timeZone),
+    intervalDays
+  };
 }
 
 /**
@@ -81,19 +174,11 @@ export function getCalendarDaysElapsed(
   const startStr = getDateStringInTimezone(startDateInput, timeZone);
   const currentStr = getDateStringInTimezone(currentDateInput, timeZone);
 
-  const startUTC = Date.UTC(
-    parseInt(startStr.substring(0, 4), 10),
-    parseInt(startStr.substring(5, 7), 10) - 1,
-    parseInt(startStr.substring(8, 10), 10)
-  );
-  const currentUTC = Date.UTC(
-    parseInt(currentStr.substring(0, 4), 10),
-    parseInt(currentStr.substring(5, 7), 10) - 1,
-    parseInt(currentStr.substring(8, 10), 10)
-  );
+  const startUTC = ymdToUtcMs(startStr);
+  const currentUTC = ymdToUtcMs(currentStr);
 
   const diffMs = currentUTC - startUTC;
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const diffDays = Math.floor(diffMs / 86400000);
   return Math.max(1, diffDays + 1);
 }
 
@@ -117,7 +202,7 @@ export function computeCourseRoadmap(options: DailyReleaseCalculationOptions): {
     completedEpisodesMap = {},
     lastCompletedAt,
     studentStartDate,
-    currentDate = new Date(),
+    currentDate,
     currentActiveEpisodeId,
     isPaused = false
   } = options;
@@ -128,14 +213,23 @@ export function computeCourseRoadmap(options: DailyReleaseCalculationOptions): {
 
   const dailyReleaseEnabled = Boolean(course.daily_release_enabled);
   const timeZone = course.course_timezone || 'Asia/Colombo';
-  const effectiveStartDate: Date | string = studentStartDate || course.course_start_date || course.created_at || new Date();
-  const effectiveCurrentDate: Date | string = currentDate || new Date();
+  const intervalDays = Math.max(1, Number(course.daily_release_interval_days || 1) || 1);
+  const effectiveStartDate: Date | string =
+    course.course_start_date || studentStartDate || course.created_at || new Date();
+  const effectiveCurrentDate: Date | string =
+    currentDate || course.server_time || new Date();
   const daysElapsed = getCalendarDaysElapsed(effectiveStartDate, effectiveCurrentDate, timeZone);
+
+  const todayStr = getDateStringInTimezone(effectiveCurrentDate, timeZone);
+  const todayUtcMs = ymdToUtcMs(todayStr);
+  const startDateStr = course.course_start_date
+    ? getDateStringInTimezone(course.course_start_date, timeZone)
+    : null;
+  const startDateUtcMs = startDateStr ? ymdToUtcMs(startDateStr) : null;
 
   const rawEpisodes: Array<{ ep: CourseEpisode; unitTitle: string; unitId: string; unitIndex: number }> = [];
 
   (course.units || []).forEach((unit, uIdx) => {
-    // Sort episodes by order_index / position
     const sortedEps = [...(unit.episodes || [])].sort((a, b) => {
       const posA = a.position !== undefined ? a.position : a.order_index;
       const posB = b.position !== undefined ? b.position : b.order_index;
@@ -161,70 +255,91 @@ export function computeCourseRoadmap(options: DailyReleaseCalculationOptions): {
   const items: RoadmapLessonItem[] = rawEpisodes.map((item, index) => {
     const ep = item.ep;
     const position = ep.position || globalPosition++;
-    const releaseDay = position;
+    const releaseDay = 1 + index * intervalDays;
     const isCompleted = completedSet.has(ep.id);
 
     let isLocked = false;
     let status: LessonProgressionStatus = 'available';
     let unlockMessage = '';
+    let releaseDateStr: string | undefined;
+    let nextUnlockCountdown: string | undefined;
+
+    // Compute scheduled release date if course_start_date is configured
+    const scheduledUnlockMs = startDateUtcMs !== null
+      ? startDateUtcMs + index * intervalDays * 86400000
+      : null;
 
     if (isCompleted) {
       status = 'completed';
       isLocked = false;
     } else if (isPaused) {
-      // Course is paused by teacher
       isLocked = true;
       status = 'paused';
       unlockMessage = 'Student access is temporarily disabled by the teacher.';
     } else if (ep.is_manually_unlocked) {
-      // Teacher manual override to unlock specific episode
       isLocked = false;
       status = (currentActiveEpisodeId === ep.id) ? 'in_progress' : 'available';
     } else if (dailyReleaseEnabled) {
-      // One Lesson Per Day is active
-      if (firstUncompletedIndex === -1) {
-        // All lessons completed
+      // Check if scheduled start/release date is in the future
+      if (scheduledUnlockMs !== null && todayUtcMs < scheduledUnlockMs) {
+        const daysWait = Math.max(1, Math.round((scheduledUnlockMs - todayUtcMs) / 86400000));
+        releaseDateStr = formatUnlockDateLabel(scheduledUnlockMs);
+        nextUnlockCountdown = getCountdownInTimezone(effectiveCurrentDate, daysWait, timeZone);
+        isLocked = true;
+        status = 'locked';
+        unlockMessage = daysWait === 1
+          ? `Unlocks tomorrow (${releaseDateStr}) in ${nextUnlockCountdown}.`
+          : `Unlocks on ${releaseDateStr} (${nextUnlockCountdown}).`;
+      } else if (firstUncompletedIndex === -1) {
         status = 'completed';
         isLocked = false;
       } else if (index === firstUncompletedIndex) {
-        // This is the FIRST uncompleted lesson
         if (index === 0) {
-          // Lesson 1 is ALWAYS available to start
           isLocked = false;
           status = (currentActiveEpisodeId === ep.id) ? 'in_progress' : 'available';
         } else {
-          // Lesson 2 or higher: check when the previous lesson was completed
           const prevEpId = rawEpisodes[index - 1].ep.id;
           const prevCompletion = completedEpisodesMap[prevEpId];
           const prevCompletedAt = prevCompletion?.completed_at || lastCompletedAt;
 
           if (prevCompletedAt) {
-            const completedToday = isSameCalendarDay(prevCompletedAt, effectiveCurrentDate, timeZone);
-            if (completedToday) {
-              // The previous lesson was completed TODAY -> next lesson unlocks tomorrow at midnight
+            const prevCompStr = getDateStringInTimezone(prevCompletedAt, timeZone);
+            const prevCompMs = ymdToUtcMs(prevCompStr);
+            const nextAllowedMs = prevCompMs + intervalDays * 86400000;
+
+            if (todayUtcMs < nextAllowedMs) {
+              const daysWait = Math.max(1, Math.round((nextAllowedMs - todayUtcMs) / 86400000));
+              releaseDateStr = formatUnlockDateLabel(nextAllowedMs);
+              nextUnlockCountdown = getCountdownInTimezone(effectiveCurrentDate, daysWait, timeZone);
               isLocked = true;
               status = 'locked';
-              unlockMessage = `Lesson ${index + 1} is locked. It will open tomorrow at 12:00 AM.`;
+              unlockMessage = daysWait === 1
+                ? `Unlocks tomorrow (${releaseDateStr}) • ${nextUnlockCountdown}`
+                : `Unlocks ${releaseDateStr} • ${nextUnlockCountdown}`;
             } else {
-              // The previous lesson was completed on a PREVIOUS calendar day -> unlocked!
               isLocked = false;
               status = (currentActiveEpisodeId === ep.id) ? 'in_progress' : 'available';
             }
           } else {
-            // No completion timestamp found for previous lesson -> default lock
+            const nextAllowedMs = todayUtcMs + intervalDays * 86400000;
+            releaseDateStr = formatUnlockDateLabel(nextAllowedMs);
+            nextUnlockCountdown = getCountdownInTimezone(effectiveCurrentDate, intervalDays, timeZone);
             isLocked = true;
             status = 'locked';
-            unlockMessage = `Lesson ${index + 1} is locked. It will open tomorrow at 12:00 AM.`;
+            unlockMessage = `Unlocks tomorrow (${releaseDateStr}) • ${nextUnlockCountdown}`;
           }
         }
       } else {
-        // Any uncompleted lesson beyond the first uncompleted lesson is strictly locked
+        const stepsAfterFirst = Math.max(1, index - Math.max(0, firstUncompletedIndex));
+        const estimatedUnlockMs = scheduledUnlockMs !== null && scheduledUnlockMs > todayUtcMs
+          ? scheduledUnlockMs
+          : todayUtcMs + stepsAfterFirst * intervalDays * 86400000;
+        releaseDateStr = formatUnlockDateLabel(estimatedUnlockMs);
         isLocked = true;
         status = 'locked';
-        unlockMessage = `Lesson ${index + 1} is locked. Complete Lesson ${index} first.`;
+        unlockMessage = `Complete Lesson ${index} first • Unlocks ${releaseDateStr}`;
       }
     } else {
-      // Daily release is OFF -> sequential availability or all available
       isLocked = false;
       status = (currentActiveEpisodeId === ep.id) ? 'in_progress' : 'available';
     }
@@ -242,6 +357,8 @@ export function computeCourseRoadmap(options: DailyReleaseCalculationOptions): {
       release_day: releaseDay,
       is_locked: isLocked,
       unlock_message: unlockMessage,
+      release_date_str: releaseDateStr,
+      next_unlock_countdown: nextUnlockCountdown,
       questions_count: ep.questions?.length || 0
     };
   });
@@ -251,7 +368,6 @@ export function computeCourseRoadmap(options: DailyReleaseCalculationOptions): {
     ? Math.round((completedLessons / totalLessons) * 100)
     : 0;
 
-  // Find the primary available lesson to continue
   const currentAvailableEpisode = items.find(i => i.status === 'in_progress')
     || items.find(i => i.status === 'available')
     || (items.length > 0 ? items[items.length - 1] : null);

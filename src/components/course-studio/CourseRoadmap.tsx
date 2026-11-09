@@ -186,7 +186,9 @@ export const CourseRoadmap: React.FC<Props> = ({
                   )}
                   {isLocked && !isPaused && (
                     <span className="px-2 py-0.5 rounded-full bg-[var(--theme-surface-subtle)] text-theme-muted text-[10px] font-black uppercase tracking-wider border border-[var(--theme-border-subtle)] reader-badge">
-                      {item.unlock_message?.includes('tomorrow')
+                      {item.release_date_str
+                        ? `🔒 Unlocks ${item.release_date_str}${item.next_unlock_countdown ? ` (${item.next_unlock_countdown})` : ''}`
+                        : item.unlock_message?.includes('tomorrow')
                         ? '🔒 Available Tomorrow'
                         : item.unlock_message
                         ? `🔒 ${item.unlock_message.replace(/^Lesson \d+ is locked\.\s*/, '')}`

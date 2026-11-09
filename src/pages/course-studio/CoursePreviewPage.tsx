@@ -66,7 +66,7 @@ import { CoursePlayerSkeleton } from '@/components/course-studio/CoursePlayerSke
 import { TextScale } from '@/utils/courseTextFormatting';
 import { getThemePreset, DEFAULT_THEME_ID } from '@/utils/courseThemes';
 import { ThemeSelectorPopover } from '@/components/course-studio/ThemeSelectorPopover';
-import { computeCourseRoadmap } from '@/utils/dailyReleaseEngine';
+import { computeCourseRoadmap, getNextDailyUnlockSummary } from '@/utils/dailyReleaseEngine';
 import { LiquidButton } from '@/components/course-studio/liquid';
 import {
   extractCanonicalLessonTranscript,
@@ -685,11 +685,14 @@ export const CoursePreviewPage: React.FC = () => {
   const prevItem = currentIndex > 0 ? allEpisodes[currentIndex - 1] : null;
   const nextItem = currentIndex < allEpisodes.length - 1 ? allEpisodes[currentIndex + 1] : null;
 
+  const [completedEpisodesMap, setCompletedEpisodesMap] = useState<Record<string, { completed_at?: string }>>({});
+
   // Compute preview roadmap
   const roadmapData = course
     ? computeCourseRoadmap({
         course,
         completedEpisodeIds,
+        completedEpisodesMap,
         currentActiveEpisodeId: selectedEpisode?.id || null
       })
     : null;
@@ -738,6 +741,10 @@ export const CoursePreviewPage: React.FC = () => {
     const epId = selectedEpisode.id;
     const pointsForLesson = (selectedEpisode.questions || []).reduce((sum, q) => sum + (q.points || 10), 0) || 10;
     setCompletedEpisodeIds(prev => new Set([...prev, epId]));
+    setCompletedEpisodesMap(prev => ({
+      ...prev,
+      [epId]: { completed_at: new Date().toISOString() }
+    }));
     setLastCompletedTitle(selectedEpisode.title);
     setLastCompletedPos(selectedEpisode.position || currentIndex + 1);
     setLastCompletedPoints(pointsForLesson);
@@ -865,6 +872,46 @@ export const CoursePreviewPage: React.FC = () => {
       unlockMessage: roadItem?.unlock_message || null
     };
   });
+
+  const nextUnlockSummary = getNextDailyUnlockSummary(course);
+  const nextRoadItem = nextItem ? roadmapData?.items.find(i => i.id === nextItem.episode.id) : null;
+  const nextLessonUnlockDateLabel = nextRoadItem?.release_date_str || nextUnlockSummary.nextUnlockDateLabel;
+  const nextLessonUnlockCountdown = nextRoadItem?.next_unlock_countdown || nextUnlockSummary.countdownLabel;
+
+  const handleUpdateDailyUnlockSettings = async (settings: {
+    daily_release_enabled: boolean;
+    course_start_date?: string | null;
+    daily_release_interval_days?: number;
+  }) => {
+    const nextCourse: Course = {
+      ...course,
+      daily_release_enabled: settings.daily_release_enabled,
+      course_start_date:
+        settings.course_start_date !== undefined
+          ? settings.course_start_date || undefined
+          : course.course_start_date,
+      daily_release_interval_days:
+        settings.daily_release_interval_days ?? course.daily_release_interval_days ?? 1,
+      course_timezone: course.course_timezone || 'Asia/Colombo'
+    };
+    setCourse(nextCourse);
+    try {
+      await courseStudioService.updateCourse(course.id, {
+        daily_release_enabled: nextCourse.daily_release_enabled,
+        course_start_date: nextCourse.course_start_date || undefined,
+        daily_release_interval_days: nextCourse.daily_release_interval_days || 1,
+        course_timezone: nextCourse.course_timezone || 'Asia/Colombo'
+      });
+      showToast(
+        nextCourse.daily_release_enabled
+          ? 'Daily Lesson Unlock enabled.'
+          : 'Daily Lesson Unlock disabled (all lessons available).'
+      );
+    } catch (err) {
+      console.error('Failed to save Daily Lesson Unlock settings:', err);
+      showToast('Failed to save Daily Lesson Unlock settings.');
+    }
+  };
 
   // --------------------------------------------------------------------------
   // REUSABLE COURSE OUTLINE RENDERER (SHARED BETWEEN DESKTOP SIDEBAR & MOBILE DRAWER)
@@ -1025,7 +1072,10 @@ export const CoursePreviewPage: React.FC = () => {
                           key={ep.id}
                           onClick={() => {
                             if (isLocked) {
-                              showToast(`Lesson ${ep.position || 1} is locked. Opens on Day ${roadItem?.release_day}.`);
+                              showToast(
+                                roadItem?.unlock_message ||
+                                  `Lesson ${ep.position || 1} is locked. Opens on Day ${roadItem?.release_day}.`
+                              );
                               return;
                             }
                             setSelectedEpisode(ep);
@@ -1582,7 +1632,10 @@ export const CoursePreviewPage: React.FC = () => {
                 }
               >
 
-              {/* EDITORIAL LESSON HEADER */}
+              {/* EDITORIAL LESSON HEADER (Hidden in student mode for Learn with Shorts so Stage 1 Intro Screen stands alone) */}
+              {!isEditMode && isLearnWithShortsLesson ? (
+                <div id="lesson-content-anchor" />
+              ) : (
               <header
                 id="lesson-content-anchor"
                 className={
@@ -1666,6 +1719,7 @@ export const CoursePreviewPage: React.FC = () => {
                   </p>
                 )}
               </header>
+              )}
 
               {/* UNIFIED CONTENT ENGINE (ONE ENGINE FOR BOTH EDIT & STUDENT MODES) */}
               <CourseContentRenderer
@@ -1678,11 +1732,17 @@ export const CoursePreviewPage: React.FC = () => {
                 courseId={course.id}
                 episodeId={selectedEpisode.id}
                 courseTitle={course.title}
+                courseCoverUrl={course.cover_image_url || (isBitzShortsCourse ? '/images/creepy_legends_cover.png' : undefined)}
                 lessonTitle={selectedEpisode.title}
                 onCompleteLesson={handleCompleteEpisode}
                 onNextLesson={
                   nextItem
                     ? () => {
+                        if (!isEditMode && course.daily_release_enabled && nextRoadItem?.is_locked) {
+                          showToast(nextRoadItem.unlock_message || 'Your next lesson will unlock tomorrow.');
+                          setViewMode('roadmap');
+                          return;
+                        }
                         setSelectedEpisode(nextItem.episode);
                         setViewMode('lesson');
                         mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1693,6 +1753,12 @@ export const CoursePreviewPage: React.FC = () => {
                 onQuitLesson={() => setViewMode('roadmap')}
                 hasNextLesson={Boolean(nextItem)}
                 isLessonCompleted={isEpisodeCompleted}
+                dailyReleaseEnabled={Boolean(course.daily_release_enabled)}
+                courseStartDate={course.course_start_date || null}
+                dailyReleaseIntervalDays={course.daily_release_interval_days || 1}
+                nextUnlockDateLabel={nextLessonUnlockDateLabel}
+                nextUnlockCountdown={nextLessonUnlockCountdown}
+                onUpdateDailyUnlockSettings={handleUpdateDailyUnlockSettings}
                 onPreviewStudentExperience={() => handleToggleMode(false)}
                 onProgressChange={handleProgressChange}
                 onVideoCompletionChange={setVideoCompletionStatus}
