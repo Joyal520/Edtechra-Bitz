@@ -1375,9 +1375,10 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
   classroom_id,
   episode_id,
   time_spent_seconds = 0,
-  client_score,
+  client_score: _clientScore,
   client_max_score: _clientMaxScore,
-  question_attempts = []
+  question_attempts = [],
+  backfill_completed_at = null
 }) {
   if (!supabaseClient) {
     throw new Error('Database client is required.');
@@ -1774,10 +1775,10 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
       }
     }
 
-    // 4. Compute the AUTHORITATIVE earned score from persisted questions + attempts,
-    //    with a safe clamped fallback when a completed lesson has 0 stored attempts in DB.
+    // 4. Compute the AUTHORITATIVE earned score strictly from persisted questions + attempts.
+    //    Client-submitted scores are NEVER trusted or used.
     const wasAlreadyCompleted = existingProgress?.status === 'completed';
-    let {
+    const {
       earnedScore,
       maxScore,
       answeredCount,
@@ -1785,19 +1786,7 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
       questionCount
     } = computeLessonScoreFromAttempts(lessonQuestions, effectiveLessonAttempts);
 
-    if (questionCount > 0 && answeredCount === 0 && earnedScore === 0) {
-      const parsedClientScore = Math.round(Number(client_score));
-      if (Number.isFinite(parsedClientScore) && parsedClientScore > 0) {
-        earnedScore = Math.min(maxScore, parsedClientScore);
-        answeredCount = questionCount;
-        correctCount = Math.max(1, Math.round((earnedScore / Math.max(1, maxScore)) * questionCount));
-      } else if (maxScore > 0) {
-        earnedScore = maxScore;
-        answeredCount = questionCount;
-        correctCount = questionCount;
-      }
-    }
-
+    const effectiveCompletedAt = existingProgress?.completed_at || backfill_completed_at || nowIso;
     const numScore = earnedScore;
     const numMaxScore = maxScore;
     const percentage = numMaxScore > 0 ? Number(((numScore / numMaxScore) * 100).toFixed(1)) : 100;
@@ -1816,7 +1805,7 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
           max_score: numMaxScore,
           percentage,
           time_spent_seconds: Number(time_spent_seconds) || 0,
-          completed_at: existingProgress?.completed_at || nowIso
+          completed_at: effectiveCompletedAt
         },
         { onConflict: 'enrollment_id,episode_id' }
       );
@@ -1912,13 +1901,12 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
             source_type: 'activity',
             source_id: cleanEpisodeId,
             awarded_by: cleanStudentId,
-            created_at: existingProgress?.completed_at || nowIso
+            created_at: effectiveCompletedAt
           })
           .select()
           .single();
 
         if (ptErr) {
-          // A database unique constraint caught a concurrent insert - fall through to the upgrade path
           console.warn('[CourseStudioPoints] Insert notice:', ptErr.message);
         }
 
@@ -1951,6 +1939,8 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
           } else {
             creditedLessonPoints = Number(primaryPointRow.points || 0);
           }
+        } else if (ptErr) {
+          throw new Error(`Failed to record classroom points: ${ptErr.message}`);
         }
       }
 
@@ -2076,7 +2066,7 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
  * Idempotent, fast, and safe.
  */
 export async function backfillMissingCourseLessonPoints(supabaseClient, classroomId = null) {
-  if (!supabaseClient) return { backfilledCount: 0 };
+  if (!supabaseClient) return { backfilledCount: 0, recoveredFromAttemptsCount: 0 };
 
   let query = supabaseClient
     .from('course_episode_progress')
@@ -2097,8 +2087,15 @@ export async function backfillMissingCourseLessonPoints(supabaseClient, classroo
   }
 
   const [{ data: completedRows, error }, { data: existingPts }] = await Promise.all([query, ptQuery]);
-  if (error || !Array.isArray(completedRows) || completedRows.length === 0) {
-    return { backfilledCount: 0 };
+  if (error) {
+    return { backfilledCount: 0, recoveredFromAttemptsCount: 0 };
+  }
+
+  const completedKeySet = new Set();
+  for (const row of completedRows || []) {
+    if (row?.classroom_id && row?.student_id && row?.episode_id) {
+      completedKeySet.add(`${row.classroom_id}:${row.student_id}:${row.episode_id}`);
+    }
   }
 
   const existingPtMap = new Map();
@@ -2108,7 +2105,7 @@ export async function backfillMissingCourseLessonPoints(supabaseClient, classroo
     existingPtMap.set(k, Math.max(Number(existingPtMap.get(k) || 0), Number(pt.points || 0)));
   }
 
-  const candidateRows = completedRows.filter(row => {
+  const candidateRows = (completedRows || []).filter(row => {
     if (!row.student_id || !row.course_id || !row.classroom_id || !row.episode_id) return false;
     const k = `${row.classroom_id}:${row.student_id}:${row.episode_id}`;
     const currentCredited = existingPtMap.get(k) || 0;
@@ -2123,7 +2120,8 @@ export async function backfillMissingCourseLessonPoints(supabaseClient, classroo
         course_id: row.course_id,
         classroom_id: row.classroom_id,
         episode_id: row.episode_id,
-        time_spent_seconds: row.time_spent_seconds || 0
+        time_spent_seconds: row.time_spent_seconds || 0,
+        backfill_completed_at: row.completed_at || null
       });
       if (res && !res.already_awarded && res.points_awarded > 0) {
         backfilledCount++;
@@ -2133,6 +2131,123 @@ export async function backfillMissingCourseLessonPoints(supabaseClient, classroo
     }
   }
 
-  return { backfilledCount };
+  // Also recover lessons where a student completed all persisted questions (and video completion if required)
+  // but the client failed to persist course_episode_progress (e.g. Learn with Shorts video-sync bug).
+  let recoveredFromAttemptsCount = 0;
+  try {
+    let attQuery = supabaseClient
+      .from('course_question_attempts')
+      .select('student_id, course_id, classroom_id, episode_id, question_id, answered_at');
+    if (classroomId) {
+      attQuery = attQuery.eq('classroom_id', classroomId);
+    }
+    if (typeof attQuery.order === 'function') {
+      attQuery = attQuery.order('answered_at', { ascending: false });
+    }
+    if (typeof attQuery.limit === 'function') {
+      attQuery = attQuery.limit(5000);
+    }
+    const attRes = await attQuery;
+    const allAtts = Array.isArray(attRes?.data) ? attRes.data : [];
+    if (allAtts.length > 0) {
+      const attGroups = new Map();
+      const episodeIdsSet = new Set();
+      for (const a of allAtts) {
+        if (!a?.student_id || !a?.course_id || !a?.classroom_id || !a?.episode_id || !a?.question_id) continue;
+        const k = `${a.classroom_id}:${a.student_id}:${a.episode_id}`;
+        if (completedKeySet.has(k)) continue;
+        episodeIdsSet.add(a.episode_id);
+        if (!attGroups.has(k)) {
+          attGroups.set(k, {
+            student_id: a.student_id,
+            course_id: a.course_id,
+            classroom_id: a.classroom_id,
+            episode_id: a.episode_id,
+            qIds: new Set(),
+            lastAnsweredAt: a.answered_at || null
+          });
+        }
+        const g = attGroups.get(k);
+        g.qIds.add(a.question_id);
+        if (a.answered_at && (!g.lastAnsweredAt || new Date(a.answered_at) > new Date(g.lastAnsweredAt))) {
+          g.lastAnsweredAt = a.answered_at;
+        }
+      }
+
+      if (attGroups.size > 0 && episodeIdsSet.size > 0) {
+        const epIds = Array.from(episodeIdsSet);
+        const [qRes, blkRes, evRes] = await Promise.all([
+          supabaseClient.from('course_questions').select('id, episode_id, question_text').in('episode_id', epIds),
+          supabaseClient.from('course_blocks').select('episode_id, block_type, content').in('episode_id', epIds),
+          (() => {
+            let eq = supabaseClient
+              .from('course_learning_events')
+              .select('student_id, episode_id, event_type')
+              .eq('event_type', 'video_completed_verified')
+              .in('episode_id', epIds);
+            if (classroomId) eq = eq.eq('classroom_id', classroomId);
+            return eq;
+          })()
+        ]);
+
+        const validQCountByEp = new Map();
+        for (const q of qRes?.data || []) {
+          const t = typeof q.question_text === 'string' ? q.question_text.trim() : '';
+          if (!t || PLACEHOLDER_QUESTION_TEXTS.has(t)) continue;
+          if (!validQCountByEp.has(q.episode_id)) validQCountByEp.set(q.episode_id, new Set());
+          validQCountByEp.get(q.episode_id).add(q.id);
+        }
+
+        const videoRequiredEps = new Set();
+        for (const b of blkRes?.data || []) {
+          const c = b?.content || {};
+          const hasVid =
+            b?.block_type === 'video' ||
+            b?.block_type === 'youtube_video' ||
+            b?.block_type === 'youtube_short' ||
+            b?.block_type === 'learn_with_shorts' ||
+            b?.block_type === 'text_video' ||
+            Boolean(c?.video?.url || c?.video_url || c?.video_id);
+          if (hasVid && (c?.video?.url || c?.video_url || c?.url || c?.video_id)) {
+            videoRequiredEps.add(b.episode_id);
+          }
+        }
+
+        const vidCompletedSet = new Set();
+        for (const ev of evRes?.data || []) {
+          if (ev?.student_id && ev?.episode_id) {
+            vidCompletedSet.add(`${ev.student_id}:${ev.episode_id}`);
+          }
+        }
+
+        for (const g of attGroups.values()) {
+          const requiredCount = validQCountByEp.get(g.episode_id)?.size || 0;
+          if (requiredCount === 0 || g.qIds.size < requiredCount) continue;
+          if (videoRequiredEps.has(g.episode_id) && !vidCompletedSet.has(`${g.student_id}:${g.episode_id}`)) {
+            continue;
+          }
+          try {
+            const res = await completeCourseLessonAndAwardPoints(supabaseClient, {
+              student_id: g.student_id,
+              course_id: g.course_id,
+              classroom_id: g.classroom_id,
+              episode_id: g.episode_id,
+              backfill_completed_at: g.lastAnsweredAt || null
+            });
+            if (res && !res.is_teacher && !res.already_awarded && res.points_awarded > 0) {
+              recoveredFromAttemptsCount++;
+              backfilledCount++;
+            }
+          } catch (_recErr) {
+            // Skip if not actively assigned or paused or teacher
+          }
+        }
+      }
+    }
+  } catch (_attRecoverErr) {
+    // Non-critical in mock environments without .in() support
+  }
+
+  return { backfilledCount, recoveredFromAttemptsCount };
 }
 

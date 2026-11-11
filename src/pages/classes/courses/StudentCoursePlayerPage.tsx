@@ -99,6 +99,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
   // In-flight question-attempt writes. Lesson completion waits for these so the
   // server-side score (computed from persisted attempts) includes every answer.
   const pendingAttemptsRef = useRef<Set<Promise<unknown>>>(new Set());
+  const attemptsByQuestionIdRef = useRef<Record<string, any>>({});
 
   const handleShortsStageChange = React.useCallback(
     (newStage: 'intro' | 'watch' | 'read' | 'watch_again' | 'challenge' | 'reward') => {
@@ -144,6 +145,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
       }
     });
 
+    attemptsByQuestionIdRef.current = { ...attemptsByQuestionIdRef.current, ...rawMap };
     setAttemptsByQuestionId(prev => ({ ...prev, ...rawMap }));
     setUserAnswers(prev => ({ ...prev, ...answersMap }));
     setFeedbackState(prev => ({ ...prev, ...feedbackMap }));
@@ -393,19 +395,25 @@ export const StudentCoursePlayerPage: React.FC = () => {
         ? pointsAwarded
         : 0;
 
+    const attemptRecord = {
+      question_id: questionId,
+      student_answer: answer,
+      is_correct: isCorrect,
+      points_awarded: effectivePoints,
+      ...(extraData || {})
+    };
+    attemptsByQuestionIdRef.current = {
+      ...attemptsByQuestionIdRef.current,
+      [questionId]: attemptRecord
+    };
+
     setQuestionScores(prev => ({
       ...prev,
       [questionId]: effectivePoints
     }));
     setAttemptsByQuestionId(prev => ({
       ...prev,
-      [questionId]: {
-        question_id: questionId,
-        student_answer: answer,
-        is_correct: isCorrect,
-        points_awarded: effectivePoints,
-        ...(extraData || {})
-      }
+      [questionId]: attemptRecord
     }));
 
     try {
@@ -444,11 +452,29 @@ export const StudentCoursePlayerPage: React.FC = () => {
     }
   };
 
-  const totalRequiredQuestions = selectedEpisode
-    ? getValidLessonQuestions(selectedEpisode.questions).length
-    : questionProgress.total;
-  const answeredQuestionsCount = Math.min(questionProgress.answered, totalRequiredQuestions);
-  const areRequiredVideosCompleted = videoCompletionStatus.totalVideos === 0 || videoCompletionStatus.allCompleted || completedEpisodeIds.has(selectedEpisode?.id || '');
+  const validEpisodeQuestions = selectedEpisode
+    ? getValidLessonQuestions(selectedEpisode.questions)
+    : [];
+  const totalRequiredQuestions = validEpisodeQuestions.length || questionProgress.total;
+  const answeredFromAttemptsRef = validEpisodeQuestions.filter(q =>
+    Boolean(attemptsByQuestionIdRef.current[q.id] || attemptsByQuestionId[q.id])
+  ).length;
+  const answeredQuestionsCount = Math.min(
+    Math.max(questionProgress.answered, answeredFromAttemptsRef),
+    totalRequiredQuestions
+  );
+  const isShortsChallengeOrReward = Boolean(
+    (selectedEpisode?.blocks || []).some(
+      b =>
+        b.block_type === 'learn_with_shorts' ||
+        (b.block_type === 'youtube_short' && Boolean((b.content as any)?.is_learn_with_shorts))
+    ) && (shortsStage === 'challenge' || shortsStage === 'reward')
+  );
+  const areRequiredVideosCompleted =
+    videoCompletionStatus.totalVideos === 0 ||
+    videoCompletionStatus.allCompleted ||
+    isShortsChallengeOrReward ||
+    completedEpisodeIds.has(selectedEpisode?.id || '');
   const canCompleteLesson =
     areRequiredVideosCompleted &&
     (totalRequiredQuestions === 0 || answeredQuestionsCount >= totalRequiredQuestions);
@@ -516,7 +542,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
         0
       );
       const episodeAttempts = episodeValidQuestions
-        .map(q => attemptsByQuestionId[q.id])
+        .map(q => attemptsByQuestionIdRef.current[q.id] || attemptsByQuestionId[q.id])
         .filter(Boolean);
 
       // The server computes the authoritative earned score and max score from persisted

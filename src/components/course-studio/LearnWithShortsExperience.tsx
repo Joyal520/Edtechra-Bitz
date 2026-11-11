@@ -1395,6 +1395,8 @@ export interface LearnWithShortsStudentPlayerProps {
   nextUnlockDateLabel?: string;
   nextUnlockCountdown?: string;
   onStageChange?: (stage: 'intro' | 'watch' | 'read' | 'watch_again' | 'challenge' | 'reward') => void;
+  onVideoProgressUpdate?: (state: VideoProgressState) => void;
+  onVideoCompleted?: (state: VideoProgressState) => void;
 }
 
 export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayerProps> = ({
@@ -1417,7 +1419,9 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   dailyReleaseEnabled = false,
   nextUnlockDateLabel,
   nextUnlockCountdown,
-  onStageChange
+  onStageChange,
+  onVideoProgressUpdate,
+  onVideoCompleted
 }) => {
   const content = (block.content || {}) as Record<string, any>;
   const shortTitle = String(content.title ?? content.video?.title ?? 'Micro Lesson Short');
@@ -1454,6 +1458,10 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   // Notify parent ONLY when `stage` actually transitions (never on ordinary scroll re-renders)
   const onStageChangeRef = useRef(onStageChange);
   onStageChangeRef.current = onStageChange;
+  const onVideoProgressUpdateRef = useRef(onVideoProgressUpdate);
+  onVideoProgressUpdateRef.current = onVideoProgressUpdate;
+  const onVideoCompletedRef = useRef(onVideoCompleted);
+  onVideoCompletedRef.current = onVideoCompleted;
   useEffect(() => {
     onStageChangeRef.current?.(stage);
   }, [stage]);
@@ -1805,11 +1813,20 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
       } else {
         setProgressState(nextState);
         if (isNowCompleted) setWatch1Unlocked(true);
+        onVideoProgressUpdateRef.current?.(nextState);
+      }
+
+      if (isNowCompleted) {
+        onVideoCompletedRef.current?.({
+          ...nextState,
+          videoKey: baseVideoKey,
+          isCompleted: true
+        });
       }
 
       syncProgressToServer(nextState, justCompleted);
     },
-    [syncProgressToServer]
+    [baseVideoKey, syncProgressToServer]
   );
 
   // Autoplay HTML5 vertical video on open (subject to browser autoplay policy)
@@ -2074,11 +2091,25 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   const handleFinishChallengeAndShowRewards = async () => {
     setIsSubmittingReward(true);
     try {
+      onVideoCompletedRef.current?.({
+        ...progressRef.current,
+        videoKey: baseVideoKey,
+        isCompleted: true,
+        watchedPercent: Math.max(91, progressRef.current.watchedPercent || 100)
+      });
       if (onCompleteLesson && !rewardClaimedOnce) {
         const res = await onCompleteLesson();
-        setRewardClaimedOnce(true);
-        if (res && typeof res.points_awarded === 'number' && res.points_awarded > 0) {
-          setServerAwardedXp(res.points_awarded);
+        if (res && res.success !== false) {
+          setRewardClaimedOnce(true);
+          const confirmedXp =
+            typeof res.credited_lesson_points === 'number' && res.credited_lesson_points > 0
+              ? res.credited_lesson_points
+              : typeof res.points_awarded === 'number' && res.points_awarded > 0
+              ? res.points_awarded
+              : null;
+          if (confirmedXp !== null) {
+            setServerAwardedXp(confirmedXp);
+          }
         }
       }
       courseAudio.playCompleteSound();

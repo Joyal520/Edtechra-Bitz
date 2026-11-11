@@ -46,6 +46,7 @@ import {
 import { isExcludedStudentSection } from '@/components/course-studio/CreepyLegendsStudentView';
 import { CanvaInlineTextEditor } from '@/components/course-studio/CanvaInlineTextEditor';
 import { getThemePreset } from '@/utils/courseThemes';
+import { courseStudioService } from '@/services/courseStudioService';
 import {
   getCanonicalBlockTranscript,
   setCanonicalBlockTranscript
@@ -196,20 +197,63 @@ export const CourseContentRenderer: React.FC<Props> = ({
   const [videoProgressMap, setVideoProgressMap] = useState<Record<string, VideoProgressState>>(() => {
     const map: Record<string, VideoProgressState> = {};
     extractEpisodeRequiredVideos(blocks).forEach(v => {
-      const saved = loadLocalVideoProgress(effectiveCourseId, effectiveEpisodeId, v.videoKey);
+      const saved = loadLocalVideoProgress(effectiveCourseId, effectiveEpisodeId, v.videoKey, userId);
       if (saved) map[v.videoKey] = saved;
     });
     return map;
   });
 
   useEffect(() => {
+    let active = true;
     const map: Record<string, VideoProgressState> = {};
     extractEpisodeRequiredVideos(blocks).forEach(v => {
-      const saved = loadLocalVideoProgress(effectiveCourseId, effectiveEpisodeId, v.videoKey);
+      const saved = loadLocalVideoProgress(effectiveCourseId, effectiveEpisodeId, v.videoKey, userId);
       if (saved) map[v.videoKey] = saved;
     });
     setVideoProgressMap(map);
-  }, [effectiveCourseId, effectiveEpisodeId, blocks]);
+
+    if (!isEditMode && effectiveCourseId && effectiveEpisodeId && effectiveCourseId !== 'course' && effectiveEpisodeId !== 'episode') {
+      courseStudioService
+        .getVideoProgress(effectiveCourseId, effectiveEpisodeId)
+        .then(serverList => {
+          if (!active || !Array.isArray(serverList) || serverList.length === 0) return;
+          setVideoProgressMap(prev => {
+            const next = { ...prev };
+            for (const row of serverList) {
+              const rawKey = String(row.video_key || '').replace(/_watch2$/, '');
+              const targetKeys = [row.video_key, rawKey].filter(Boolean);
+              for (const k of targetKeys) {
+                const isDone = Boolean(row.is_completed || row.completed || Number(row.watched_percent || 0) >= 90);
+                const prevRow = next[k];
+                if (!prevRow || isDone || Number(row.watched_percent || 0) > Number(prevRow.watchedPercent || 0)) {
+                  next[k] = {
+                    courseId: effectiveCourseId,
+                    episodeId: effectiveEpisodeId,
+                    videoKey: k,
+                    watchedSeconds: Number(row.watched_seconds || prevRow?.watchedSeconds || 0),
+                    durationSeconds: Number(row.duration_seconds || prevRow?.durationSeconds || 0),
+                    watchedPercent: Math.max(Number(row.watched_percent || 0), Number(prevRow?.watchedPercent || 0)),
+                    watchedSegments: Array.isArray(row.watched_segments) ? row.watched_segments : (prevRow?.watchedSegments || []),
+                    maxAllowedPosition: Number(row.max_allowed_position || prevRow?.maxAllowedPosition || 0),
+                    isCompleted: Boolean(prevRow?.isCompleted || isDone),
+                    completedAt: prevRow?.completedAt || row.completed_at || null,
+                    updatedAt: row.updated_at || new Date().toISOString()
+                  };
+                }
+              }
+            }
+            return next;
+          });
+        })
+        .catch(() => {
+          // Non-blocking fallback: localStorage remains authoritative offline
+        });
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [effectiveCourseId, effectiveEpisodeId, blocks, userId, isEditMode]);
 
   const allRequiredVideosCompleted = React.useMemo(() => {
     if (isEditMode || requiredVideos.length === 0) return true;
@@ -911,6 +955,10 @@ export const CourseContentRenderer: React.FC<Props> = ({
               );
             }
 
+            const shortsContent = (content || {}) as any;
+            const shortsUrl = String(shortsContent.video_url ?? shortsContent.url ?? shortsContent.video?.url ?? '').trim();
+            const canonicalVideoKey = extractYouTubeId(shortsUrl) || block.id || `video_${idx}`;
+
             return (
               <div key={block.id || idx} className="w-full m-0 p-0">
                 <LearnWithShortsStudentPlayer
@@ -933,6 +981,18 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   nextUnlockDateLabel={nextUnlockDateLabel}
                   nextUnlockCountdown={nextUnlockCountdown}
                   onStageChange={onShortsStageChange}
+                  onVideoProgressUpdate={state => {
+                    setVideoProgressMap(prev => ({
+                      ...prev,
+                      [canonicalVideoKey]: { ...state, videoKey: canonicalVideoKey }
+                    }));
+                  }}
+                  onVideoCompleted={state => {
+                    setVideoProgressMap(prev => ({
+                      ...prev,
+                      [canonicalVideoKey]: { ...state, videoKey: canonicalVideoKey, isCompleted: true }
+                    }));
+                  }}
                 />
               </div>
             );
@@ -943,6 +1003,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
             block_type === 'text_video' ||
             block_type === 'video' ||
             block_type === 'youtube_video' ||
+            (block_type === 'youtube_short' && !(content as any)?.is_learn_with_shorts) ||
             (block_type === 'text' && (content as any)?.video?.url)
           ) {
             const item = content as any;
@@ -1146,7 +1207,9 @@ export const CourseContentRenderer: React.FC<Props> = ({
                     url={vidUrl}
                     title={vidTitle}
                     courseId={effectiveCourseId}
+                    classroomId={classroomId}
                     episodeId={effectiveEpisodeId}
+                    userId={userId}
                     videoKey={extractYouTubeId(vidUrl) || block.id || `video_${idx}`}
                     isDark={activeTheme.isDark}
                     onProgressUpdate={state => {
