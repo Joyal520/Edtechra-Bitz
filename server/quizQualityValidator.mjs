@@ -34,6 +34,14 @@ const FORBIDDEN_PLACEHOLDER_PATTERNS = [
 ];
 
 export const OBJECT_PRONOUNS_SET = new Set(['me', 'you', 'him', 'her', 'it', 'us', 'them', 'whom']);
+export const SUBJECT_PRONOUNS_SET = new Set(['i', 'you', 'he', 'she', 'it', 'we', 'they']);
+export const SUBJECT_ONLY_PRONOUNS_SET = new Set(['i', 'he', 'she', 'we', 'they']);
+export const OBJECT_ONLY_PRONOUNS_SET = new Set(['me', 'him', 'us', 'them', 'whom']);
+export const POSSESSIVE_ADJECTIVES_SET = new Set(['my', 'your', 'his', 'her', 'its', 'our', 'their']);
+export const POSSESSIVE_PRONOUNS_SET = new Set(['mine', 'yours', 'his', 'hers', 'its', 'ours', 'theirs']);
+export const REFLEXIVE_PRONOUNS_SET = new Set([
+  'myself', 'yourself', 'himself', 'herself', 'itself', 'ourselves', 'yourselves', 'themselves'
+]);
 
 /**
  * Normalizes text for duplicate and similarity comparisons.
@@ -296,6 +304,169 @@ export function checkQuestionDifficultyCompliance(questionObj, requestedDifficul
 }
 
 /**
+ * PART 12.B: Enforces strict concept boundaries (e.g., Subject vs Object vs Possessive vs Reflexive pronouns)
+ * so related concepts do not leak into the wrong topic quiz.
+ */
+export function checkConceptBoundary({ questionText = '', correctAnswer = '', questionFormat = '' }, topic = '') {
+  const normTopic = normalizeQuestionText(topic);
+  const normAns = normalizeQuestionText(correctAnswer);
+  const ansWords = normAns.split(' ').filter(Boolean);
+  const singleAns = ansWords.length === 1 ? ansWords[0] : '';
+
+  if (normTopic.includes('object pronoun')) {
+    if (singleAns) {
+      if (SUBJECT_ONLY_PRONOUNS_SET.has(singleAns)) {
+        return {
+          valid: false,
+          reason: `Concept leakage: "${correctAnswer}" is a subject pronoun, not an object pronoun.`
+        };
+      }
+      if (POSSESSIVE_PRONOUNS_SET.has(singleAns) && singleAns !== 'his' && singleAns !== 'its') {
+        return {
+          valid: false,
+          reason: `Concept leakage: "${correctAnswer}" is a possessive pronoun, not an object pronoun.`
+        };
+      }
+      if (['my', 'your', 'our', 'their'].includes(singleAns)) {
+        return {
+          valid: false,
+          reason: `Concept leakage: "${correctAnswer}" is a possessive adjective, not an object pronoun.`
+        };
+      }
+      if (REFLEXIVE_PRONOUNS_SET.has(singleAns)) {
+        return {
+          valid: false,
+          reason: `Concept leakage: "${correctAnswer}" is a reflexive pronoun, not an object pronoun.`
+        };
+      }
+    }
+
+    // Reject blanks in subject position (e.g., "Tom and Sarah are friends. ___ help each other.")
+    const body = extractQuestionBody(questionText);
+    if (
+      questionFormat !== 'error_identification' &&
+      questionFormat !== 'correct_sentence' &&
+      /(?:^|[.!?]\s+)(?:_+|\[\s*_+\s*\])\s+[a-z]{2,}/i.test(body)
+    ) {
+      // Allow imperatives/questions like "___, please" only if not followed by finite verb, otherwise subject position!
+      const afterBlankMatch = body.match(/(?:^|[.!?]\s+)(?:_+|\[\s*_+\s*\])\s+([a-z]+)/i);
+      const nextWord = afterBlankMatch?.[1]?.toLowerCase() || '';
+      if (nextWord && !['and', 'or', 'is', 'are'].includes(nextWord)) {
+        return {
+          valid: false,
+          reason: 'Blank appears in subject position, which tests Subject Pronouns instead of Object Pronouns.'
+        };
+      }
+    }
+  } else if (normTopic.includes('subject pronoun')) {
+    if (singleAns) {
+      if (OBJECT_ONLY_PRONOUNS_SET.has(singleAns)) {
+        return {
+          valid: false,
+          reason: `Concept leakage: "${correctAnswer}" is an object pronoun, not a subject pronoun.`
+        };
+      }
+      if (REFLEXIVE_PRONOUNS_SET.has(singleAns) || POSSESSIVE_PRONOUNS_SET.has(singleAns)) {
+        return {
+          valid: false,
+          reason: `Concept leakage: "${correctAnswer}" is not a subject pronoun.`
+        };
+      }
+    }
+  } else if (normTopic.includes('possessive pronoun')) {
+    if (singleAns && (['my', 'your', 'our', 'their'].includes(singleAns) || OBJECT_ONLY_PRONOUNS_SET.has(singleAns))) {
+      return {
+        valid: false,
+        reason: `Concept leakage: "${correctAnswer}" is not a possessive pronoun.`
+      };
+    }
+  } else if (normTopic.includes('possessive adjective')) {
+    if (singleAns && (['mine', 'yours', 'hers', 'ours', 'theirs'].includes(singleAns) || OBJECT_ONLY_PRONOUNS_SET.has(singleAns))) {
+      return {
+        valid: false,
+        reason: `Concept leakage: "${correctAnswer}" is a possessive pronoun, not a possessive adjective.`
+      };
+    }
+  } else if (normTopic.includes('reflexive pronoun')) {
+    if (singleAns && !REFLEXIVE_PRONOUNS_SET.has(singleAns) && (SUBJECT_PRONOUNS_SET.has(singleAns) || OBJECT_PRONOUNS_SET.has(singleAns))) {
+      return {
+        valid: false,
+        reason: `Concept leakage: "${correctAnswer}" is not a reflexive pronoun.`
+      };
+    }
+  }
+
+  return { valid: true };
+}
+
+/**
+ * PART 12.F: Validates explanation accuracy and prevents hallucinated antecedents or contradictory rules.
+ */
+export function validateExplanationAccuracy({ questionText = '', correctAnswer = '', explanation = '' }) {
+  const exp = String(explanation || '').trim();
+  if (!exp || exp.length < 15) {
+    return {
+      valid: false,
+      reason: 'Explanation is missing or too brief to explain the grammatical/subject rule.'
+    };
+  }
+  if (/^(this is (the )?correct( answer)?|option [a-d] is correct)\.?$/i.test(exp)) {
+    return {
+      valid: false,
+      reason: 'Explanation is generic boilerplate instead of explaining the actual rule.'
+    };
+  }
+
+  // Check for hallucinated antecedents: if explanation says "replaces <Name>" or "refers to <Name>",
+  // verify <Name> appears in the question text.
+  const refMatches = [...exp.matchAll(/\b(?:replaces|refers to|antecedent(?:\s+is)?)\s+["']?([A-Z][a-z]{2,})["']?/g)];
+  for (const m of refMatches) {
+    const mentionedName = m[1];
+    if (
+      mentionedName &&
+      !['The', 'This', 'That', 'Object', 'Subject', 'Pronoun', 'Noun', 'Plural', 'Singular', 'English'].includes(mentionedName) &&
+      !questionText.includes(mentionedName)
+    ) {
+      return {
+        valid: false,
+        reason: `Explanation invents antecedent "${mentionedName}" not present in the question.`
+      };
+    }
+  }
+
+  // Check if explanation explicitly claims a different single-word pronoun is the correct answer
+  const ansNorm = normalizeQuestionText(correctAnswer);
+  const explicitClaim = exp.match(/\b(?:correct (?:answer|pronoun|option|word) is)\s+["']?([a-zA-Z]+)["']?/i);
+  if (explicitClaim && explicitClaim[1]) {
+    const claimedNorm = normalizeQuestionText(explicitClaim[1]);
+    if (ansNorm && claimedNorm && claimedNorm !== ansNorm && ansNorm.split(' ').length === 1) {
+      return {
+        valid: false,
+        reason: `Explanation states "${explicitClaim[1]}" is correct, contradicting answer "${correctAnswer}".`
+      };
+    }
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Extracts a structural pattern signature (instruction prefix + length bucket) to detect repetitive templates.
+ */
+export function getQuestionPatternSignature(questionText = '') {
+  const raw = String(questionText || '').trim();
+  const colonIdx = raw.indexOf(':');
+  const prefix = colonIdx > 0 && colonIdx < 60 ? normalizeQuestionText(raw.slice(0, colonIdx)) : 'noprefix';
+  const body = extractQuestionBody(raw);
+  const skeleton = normalizeQuestionText(body)
+    .split(' ')
+    .map((w) => (w.length <= 2 ? w : 'W'))
+    .slice(0, 8)
+    .join('_');
+  return `${prefix}::${skeleton}`;
+}
+
+/**
  * Sanitizes and validates a single AI-generated quiz question without truncating valid multi-word options.
  */
 export function sanitizeAndValidateSingleQuestion(
@@ -431,9 +602,32 @@ export function sanitizeAndValidateSingleQuestion(
     reasons.push(diffCheck.reason || `Does not match requested difficulty "${difficulty}".`);
   }
 
+  // PART 12.B Concept Boundary Check (Subject vs Object vs Possessive vs Reflexive)
+  const conceptCheck = checkConceptBoundary(
+    {
+      questionText,
+      correctAnswer: cleanedOptions[correctIndex] || '',
+      questionFormat: rawQ.questionFormat || rawQ.question_format || rawQ.questionType || rawQ.question_type || ''
+    },
+    topic
+  );
+  if (!conceptCheck.valid) {
+    reasons.push(conceptCheck.reason || 'Concept boundary violation.');
+  }
+
+  // PART 12.F Explanation Validation
   const explanation =
     String(rawQ.explanation || '').trim() ||
-    `The correct choice is "${cleanedOptions[correctIndex] || ''}" because it accurately applies the rules of ${topic}.`;
+    `The correct choice is "${cleanedOptions[correctIndex] || ''}" because it accurately applies the grammatical rules of ${topic}.`;
+
+  const expCheck = validateExplanationAccuracy({
+    questionText,
+    correctAnswer: cleanedOptions[correctIndex] || '',
+    explanation
+  });
+  if (!expCheck.valid) {
+    reasons.push(expCheck.reason || 'Invalid explanation.');
+  }
 
   const learningObjective =
     String(rawQ.learningObjective || rawQ.learning_objective || '').trim() ||
@@ -504,8 +698,9 @@ export function validateQuizBatch(
   let difficultyCompliantCount = 0;
   let duplicateCount = 0;
 
-  // Track answer frequencies so the AI doesn't ask 10 questions with the exact same correct answer word
+  // Track answer frequencies and structural pattern frequencies so the AI doesn't repeat the same template
   const answerWordCounts = new Map();
+  const patternCounts = new Map();
   const maxSameCorrectAnswerWord = Math.max(3, Math.ceil(expectedCount * 0.45));
 
   for (let i = 0; i < expectedCount; i++) {
@@ -562,6 +757,16 @@ export function validateQuizBatch(
           `Repeated answer pattern: correct answer "${q.correctAnswer}" already used ${currentAnswerCount} times.`
         );
       }
+
+      // Check repeated sentence-pattern template (Part 12.G)
+      const patSig = getQuestionPatternSignature(q.question);
+      const currentPatCount = patternCounts.get(patSig) || 0;
+      if (currentPatCount >= 2) {
+        isDuplicate = true;
+        itemReasons.push(
+          `Repeated sentence pattern detected (${patSig}); vary question format and sentence structure.`
+        );
+      }
     }
 
     if (isDuplicate) {
@@ -575,6 +780,8 @@ export function validateQuizBatch(
     if (itemReasons.length === 0 && q) {
       const correctWordNorm = normalizeQuestionText(q.correctAnswer);
       answerWordCounts.set(correctWordNorm, (answerWordCounts.get(correctWordNorm) || 0) + 1);
+      const patSig = getQuestionPatternSignature(q.question);
+      patternCounts.set(patSig, (patternCounts.get(patSig) || 0) + 1);
       acceptedQuestions[i] = q;
     } else {
       acceptedQuestions[i] = null;

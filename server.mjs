@@ -5877,40 +5877,74 @@ function buildStrictQuizSystemPrompt({
   learningObjectives = ''
 }) {
   const normTopic = String(topic || '').toLowerCase();
+  const isGrammarOrPronoun =
+    String(category || '').toLowerCase().includes('grammar') ||
+    String(category || '').toLowerCase().includes('english') ||
+    normTopic.includes('pronoun');
+
+  const conceptDistinctionBlock = isGrammarOrPronoun
+    ? `\nCONCEPT BOUNDARY & GRAMMAR DISTINCTION (PART 12.B — MANDATORY):
+Distinguish strictly between:
+- Subject pronouns (I, you, he, she, it, we, they) — perform the action of the verb.
+- Object pronouns (me, you, him, her, it, us, them, whom) — receive the action of a verb or follow a preposition.
+- Possessive adjectives (my, your, his, her, its, our, their) — modify a noun.
+- Possessive pronouns (mine, yours, his, hers, its, ours, theirs) — stand alone without a noun.
+- Reflexive pronouns (myself, yourself, himself, herself, itself, ourselves, yourselves, themselves) — refer back to the clause subject.
+NEVER test a subject-pronoun blank inside an Object Pronouns quiz (or vice versa) unless the topic explicitly requests a comparison.`
+    : '';
+
   const objectPronounGuard = normTopic.includes('object pronoun')
     ? `\nMANDATORY TOPIC LOCK FOR OBJECT PRONOUNS:
 - Every single question MUST exclusively assess English Object Pronouns: me, you, him, her, it, us, them (and whom where appropriate for Hard).
-- Assess: (a) me, you, him, her, it, us, them; (b) correct placement of object pronouns; (c) replacing nouns with object pronouns; (d) correct usage in sentences.
-- UNAMBIGUOUS SINGLE CORRECT ANSWER RULE: Every sentence MUST include a clear antecedent noun (e.g. "Sarah lost her keys; have you seen ___?" or "Replace [Daniel]: The teacher praised ___") and the 3 distractor options MUST be grammatically wrong cases or wrong number (e.g. ["them", "they", "their", "it"] or ["him", "he", "his", "himself"]). NEVER give 4 bare object pronouns like ["me", "you", "him", "her"] where multiple options could fit the blank!
-- STRICT PROHIBITION: Do NOT generate questions testing verb tenses, articles (a/an/the), prepositions, adjectives, or unrelated grammar topics.`
+- Assess: (a) me, you, him, her, it, us, them; (b) correct placement of object pronouns after transitive verbs and prepositions; (c) replacing object nouns/noun phrases with object pronouns; (d) correct usage in sentences and short dialogues.
+- UNAMBIGUOUS SINGLE CORRECT ANSWER RULE: Every sentence MUST include a clear antecedent noun (e.g. "Sarah lost her keys; have you seen ___?" or "The teacher praised Tom and Maya; she thanked ___") and the 3 distractor options MUST be grammatically wrong cases or wrong number (e.g. ["them", "they", "their", "it"] or ["him", "he", "his", "himself"]). NEVER give 4 bare object pronouns like ["me", "you", "him", "her"] where multiple options could fit the blank!
+- STRICT PROHIBITION: Do NOT put the blank in subject position (e.g., "___ help each other" is a Subject Pronoun question and is FORBIDDEN here). Do NOT test unrelated verb tenses, articles, or prepositions.`
     : '';
 
-  return `You are an expert EdTechra Curriculum & Assessment Architect.
-Your task is to generate a topic-accurate, pedagogically rigorous Live Quiz in strict JSON format.
+  const formatVarietyBlock = `
+QUESTION VARIETY & FORMAT MIX (PART 12.C — DO NOT REPEAT THE SAME PATTERN):
+Mix appropriate formats across the ${targetCount} questions instead of repeating one sentence template:
+1. "sentence_completion" — Complete a contextual sentence with the target form.
+2. "pronoun_identification" / "concept_application" — Identify which word/phrase functions as the target concept.
+3. "error_identification" — Spot and correct a grammatical error in context.
+4. "sentence_replacement" — Replace an underlined/bracketed noun phrase with the correct form.
+5. "context_selection" — Choose the grammatically accurate continuation in an unfamiliar context.
+6. "correct_sentence" — Identify which of 4 complete sentences uses the target concept correctly.
+7. "short_dialogue" — Choose the natural, grammatically correct reply in a brief 2-turn conversation.
+8. "practical_application" — Apply the rule in realistic academic or everyday writing.`;
 
-MANDATORY GENERATION CONSTRAINTS (ALL 10 RULES MUST BE FOLLOWED):
-1. Selected Subject: "${category}"
-2. Exact Requested Topic (MANDATORY CONSTRAINT): "${topic}" — Every single question MUST directly assess "${topic}".${objectPronounGuard}
-3. Selected Difficulty: "${difficulty}"
+  return `You are an expert EdTechra Curriculum & Assessment Architect.
+Your task is to generate an educationally controlled, topic-accurate Live Quiz in strict JSON format.
+
+PART 12.A — LEARNING OBJECTIVE CONTROL (IDENTIFY BEFORE WRITING):
+1. Subject: "${category}"
+2. Exact Requested Topic (MANDATORY CONSTRAINT): "${topic}" — Every single question MUST directly assess "${topic}".${conceptDistinctionBlock}${objectPronounGuard}
+3. Specific Learning Objective: ${learningObjectives || `Mastery of ${topic} in ${category} at ${difficulty} cognitive complexity`}. Each question must include a specific "learningObjective" string.
+4. Intended Student Level: ${studentLevel || `Age-appropriate classroom learners studying ${category} (${difficulty} level)`}
+5. Selected Difficulty: "${difficulty}"
 ${buildDifficultyRulesBlock(difficulty, topic)}
-4. Expected Number of Questions: Generate EXACTLY ${targetCount} questions in the "questions" array.
-5. Intended Student Level: ${studentLevel || `Age-appropriate classroom learners studying ${category} (${difficulty} level)`}
-6. Question Types Allowed: "multiple_choice", "fill_in_blank", "concept_application", "error_identification". Start each question text with a clear instructional prefix followed by a colon (e.g., "Choose the correct object pronoun: ...", "Replace the noun: ...", "Identify the error: ...", "Complete the sentence: ...").
-7. Learning Objectives: ${learningObjectives || `Mastery of ${topic} in ${category} at ${difficulty} cognitive complexity`}. Each question must include a specific "learningObjective" string.
-8. Prohibition Against Unrelated Content: NEVER include questions about unrelated grammar rules, unrelated historical/scientific facts, or generic placeholder concepts.
-9. Prohibition Against Repetitive or Cloned Questions: Every question must be meaningfully and structurally different. NEVER generate near-identical sentence templates (for example, generating "John loves Mary", "John likes Mary", and "John helps Mary" is strictly forbidden). Vary sentence structures, subjects, verbs, contexts, and which specific aspect/form of "${topic}" is tested.
-10. Required Strict Output Schema:
+6. Expected Number of Questions: Generate EXACTLY ${targetCount} distinct questions in the "questions" array.
+7. Question Formats:${formatVarietyBlock}
+
+MANDATORY EDUCATIONAL QUALITY & EXPLANATION RULES:
+- PROHIBITION AGAINST UNRELATED CONTENT: NEVER include questions about unrelated grammar rules or generic placeholder concepts.
+- PROHIBITION AGAINST REPETITIVE OR CLONED QUESTIONS: Every question must be meaningfully and structurally different. NEVER reuse the same sentence template with swapped names (e.g., "John loves Mary", "John likes Mary", "John helps Mary" is strictly forbidden).
+- INDEPENDENT 4-OPTION EVALUATION: Before finalizing each question, independently evaluate all 4 options. Ensure EXACTLY ONE option is defensibly correct and the 3 distractors are plausible yet unambiguously incorrect.
+- EXPLANATION VALIDATION: Each "explanation" MUST explain the actual grammatical/subject rule and why the correct answer fits the sentence's grammatical role. NEVER invent antecedents, names, or relationships that do not exist in the question sentence.
+- Required Strict Output Schema:
 Return ONLY a valid JSON object matching this exact structure:
 {
   "title": "Engaging, topic-specific quiz title",
-  "description": "Concise 1-sentence summary of the learning focus",
+  "description": "Concise 1-sentence summary of the learning objective",
+  "learningObjective": "Overall quiz learning objective",
   "questions": [
     {
       "question": "Choose the correct option: Full question sentence here?",
+      "questionFormat": "sentence_completion",
       "options": ["Option A", "Option B", "Option C", "Option D"],
       "correctIndex": 0,
       "correctAnswer": "Option A",
-      "explanation": "Clear educational explanation of why correctAnswer is right and why distractors are wrong.",
+      "explanation": "Clear educational explanation of the actual grammatical/subject rule.",
       "difficulty": "${difficulty}",
       "topic": "${topic}",
       "learningObjective": "Specific learning objective assessed by this item",
@@ -5993,12 +6027,43 @@ Base Points per Question: ${targetPoints} (100 Base Points Total + Speed Bonus)$
     let usedProvider = provider === 'gemini' ? 'gemini' : 'openai';
     const preferredProvider = provider === 'gemini' || provider === 'openai' ? provider : undefined;
 
+    const quizResponseSchema = {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        description: { type: 'string' },
+        learningObjective: { type: 'string' },
+        questions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              question: { type: 'string' },
+              questionFormat: { type: 'string' },
+              options: { type: 'array', items: { type: 'string' } },
+              correctIndex: { type: 'integer' },
+              correctAnswer: { type: 'string' },
+              explanation: { type: 'string' },
+              difficulty: { type: 'string' },
+              topic: { type: 'string' },
+              learningObjective: { type: 'string' },
+              hint: { type: 'string' },
+              questionType: { type: 'string' }
+            },
+            required: ['question', 'options', 'correctIndex', 'correctAnswer', 'explanation']
+          }
+        }
+      },
+      required: ['title', 'questions']
+    };
+
     try {
       const primaryTimeoutMs = Math.min(targetCount > 12 ? 26000 : 20000, Math.max(10000, getRemainingBudgetMs() - 8000));
       const response = await aiRouter.executeTask({
         taskType: AI_TASK_TYPES.QUIZ_GENERATION,
         prompt: userPrompt,
         systemPrompt,
+        schema: quizResponseSchema,
         preferredProvider,
         allowFallbackToGemini: getRemainingBudgetMs() > 18000,
         allowFallbackToOpenAI: getRemainingBudgetMs() > 18000,
@@ -6011,7 +6076,18 @@ Base Points per Question: ${targetPoints} (100 Base Points Total + Speed Bonus)$
         aiResult = parsed;
       }
     } catch (aiErr) {
-      console.warn('[LiveQuiz AI Generate] Primary AI generation error:', aiErr.message);
+      console.error('[LiveQuiz AI Generate] AI provider failed:', aiErr.message);
+      return res.status(502).json({
+        success: false,
+        error: `AI quiz generation failed: ${aiErr.message || 'AI provider is currently unavailable.'}`
+      });
+    }
+
+    if (!aiResult || !Array.isArray(aiResult.questions) || aiResult.questions.length === 0) {
+      return res.status(502).json({
+        success: false,
+        error: `AI provider (${usedProvider}) returned no questions for "${cleanTopic}". Please retry.`
+      });
     }
 
     const generatedTitle = String(

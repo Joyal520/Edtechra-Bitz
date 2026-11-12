@@ -609,6 +609,74 @@ class QuizAudioService {
       console.warn('[QuizAudioService] playQuizComplete notice:', err);
     }
   }
+
+  /**
+   * Part 13.G: Optional Celebration Sounds for Cinematic Podium
+   * Synthesized via Web Audio API (zero external asset dependencies).
+   */
+  public playPodiumEntrance(): void {
+    if (!this.isSoundEnabled()) return;
+    try {
+      const ctx = this.getAudioContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      // Low bass drum thud / whoosh announcing podium entrance
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(140, now);
+      osc.frequency.exponentialRampToValueAtTime(45, now + 0.55);
+      gain.gain.setValueAtTime(0.35, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.65);
+    } catch {}
+  }
+
+  public playConfettiBurst(): void {
+    if (!this.isSoundEnabled()) return;
+    try {
+      const ctx = this.getAudioContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      // Bright sparkly burst pop
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(650, now);
+      osc.frequency.exponentialRampToValueAtTime(1200, now + 0.18);
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.25);
+    } catch {}
+  }
+
+  public playTrophyReveal(): void {
+    if (!this.isSoundEnabled()) return;
+    try {
+      const ctx = this.getAudioContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      // High bright metallic chime (Gold trophy reveal)
+      [1318.51, 1567.98, 2093.00].forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+        gain.gain.setValueAtTime(0.20, now + idx * 0.08);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.55);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + idx * 0.08);
+        osc.stop(now + idx * 0.08 + 0.6);
+      });
+    } catch {}
+  }
 }
 
 export const quizAudioService = new QuizAudioService();

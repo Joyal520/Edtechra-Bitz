@@ -63,11 +63,18 @@ export const LiveQuizPodium: React.FC<LiveQuizPodiumProps> = ({
   };
 
   const activeSessionId = sessionId || initialSession?.id || loadedSession?.id || 'quiz_session';
+  const playedAudioRef = React.useRef(false);
 
   useEffect(() => {
     quizAudioService.setQuizFinished(true);
     quizAudioService.stopBackgroundMusic();
-    quizAudioService.playQuizComplete(activeSessionId);
+    if (!playedAudioRef.current) {
+      playedAudioRef.current = true;
+      quizAudioService.playPodiumEntrance();
+      setTimeout(() => quizAudioService.playTrophyReveal(), 550);
+      setTimeout(() => quizAudioService.playConfettiBurst(), 900);
+      quizAudioService.playQuizComplete(activeSessionId);
+    }
 
     return () => {
       quizAudioService.stopBackgroundMusic();
@@ -290,11 +297,13 @@ export const LiveQuizPodium: React.FC<LiveQuizPodiumProps> = ({
     <div className="relative w-full max-w-[460px] mx-auto my-auto select-none">
       {/* Celebration Particles */}
       {showConfetti && sortedPlayers.length > 0 && (
-        <ConfettiCelebration onComplete={() => setShowConfetti(false)} durationMs={2800} />
+        <ConfettiCelebration onComplete={() => setShowConfetti(false)} durationMs={3800} />
       )}
 
-      {/* Main Results Container Card */}
-      <div className="relative rounded-[28px] overflow-hidden bg-gradient-to-b from-[#EAF7FF] via-[#F2FAFF] to-white border border-[#DCEBFA] shadow-[0_20px_50px_rgba(8,124,245,0.08)]">
+      {/* Main Results Container Card with Part 13.D Camera Entrance */}
+      <div className="relative rounded-[28px] overflow-hidden bg-gradient-to-b from-[#EAF7FF] via-[#F2FAFF] to-white border border-[#DCEBFA] shadow-[0_20px_50px_rgba(8,124,245,0.08)] animate-lq-camera-in">
+        {/* Dramatic stage lighting spotlight behind podium */}
+        <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-96 h-60 bg-gradient-to-b from-[#FEF08A]/40 via-[#93C5FD]/25 to-transparent blur-3xl pointer-events-none animate-lq-spotlight" />
         {/* Top Section: Header + Podium Hero */}
         <div className="px-4 sm:px-6 pt-4 sm:pt-5 pb-0">
           {/* 1. TOP NAVIGATION BAR */}

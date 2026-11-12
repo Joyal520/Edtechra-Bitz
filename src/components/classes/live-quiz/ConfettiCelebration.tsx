@@ -3,6 +3,7 @@ import React, { useEffect, useRef } from 'react';
 interface ConfettiCelebrationProps {
   onComplete?: () => void;
   durationMs?: number;
+  stage?: 'entrance' | 'bronze' | 'silver' | 'gold' | 'celebration';
 }
 
 interface Particle {
@@ -15,23 +16,25 @@ interface Particle {
   color: string;
   rotation: number;
   vRot: number;
-  shape: 'rect' | 'circle';
+  shape: 'rect' | 'circle' | 'star';
   opacity: number;
 }
 
 const CONFETTI_COLORS = [
-  '#10b981', // Emerald
-  '#f59e0b', // Amber/Gold
-  '#6366f1', // Indigo
-  '#a855f7', // Purple
-  '#06b6d4', // Cyan
-  '#ec4899', // Pink
-  '#3b82f6'  // Blue
+  '#F59E0B', // Gold
+  '#FCD34D', // Bright Gold
+  '#10B981', // Emerald
+  '#6366F1', // Indigo
+  '#EC4899', // Pink
+  '#06B6D4', // Cyan
+  '#3B82F6', // Blue
+  '#FFFFFF'  // White sparkle
 ];
 
 export const ConfettiCelebration: React.FC<ConfettiCelebrationProps> = ({
   onComplete,
-  durationMs = 1500
+  durationMs = 3800,
+  stage = 'celebration'
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -55,32 +58,76 @@ export const ConfettiCelebration: React.FC<ConfettiCelebrationProps> = ({
     const width = (canvas.width = window.innerWidth);
     const height = (canvas.height = window.innerHeight);
 
-    // Initialize ~48 confetti particles
+    // Part 13.C: Particle effects — side cannons, golden confetti shower, and firework bursts
     const particles: Particle[] = [];
-    const originX = width / 2;
-    const originY = height * 0.45;
 
-    for (let i = 0; i < 48; i++) {
-      const angle = (Math.PI * 2 * i) / 48 + (Math.random() - 0.5) * 0.4;
-      const speed = 6 + Math.random() * 9;
-
+    // Left cannon
+    for (let i = 0; i < 40; i++) {
+      const angle = -Math.PI / 4 + (Math.random() - 0.5) * 0.55;
+      const speed = 12 + Math.random() * 14;
       particles.push({
-        x: originX + (Math.random() - 0.5) * 40,
-        y: originY + (Math.random() - 0.5) * 30,
+        x: 0,
+        y: height * 0.85,
         vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 3.5, // Initial upward burst
-        w: 6 + Math.random() * 6,
-        h: 4 + Math.random() * 8,
+        vy: Math.sin(angle) * speed,
+        w: 6 + Math.random() * 8,
+        h: 4 + Math.random() * 9,
         color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
         rotation: Math.random() * Math.PI * 2,
-        vRot: (Math.random() - 0.5) * 0.25,
-        shape: i % 4 === 0 ? 'circle' : 'rect',
+        vRot: (Math.random() - 0.5) * 0.3,
+        shape: i % 5 === 0 ? 'star' : i % 3 === 0 ? 'circle' : 'rect',
         opacity: 1
+      });
+    }
+
+    // Right cannon
+    for (let i = 0; i < 40; i++) {
+      const angle = (-3 * Math.PI) / 4 + (Math.random() - 0.5) * 0.55;
+      const speed = 12 + Math.random() * 14;
+      particles.push({
+        x: width,
+        y: height * 0.85,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        w: 6 + Math.random() * 8,
+        h: 4 + Math.random() * 9,
+        color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+        rotation: Math.random() * Math.PI * 2,
+        vRot: (Math.random() - 0.5) * 0.3,
+        shape: i % 5 === 0 ? 'star' : i % 3 === 0 ? 'circle' : 'rect',
+        opacity: 1
+      });
+    }
+
+    // Center Gold Shower
+    for (let i = 0; i < 45; i++) {
+      particles.push({
+        x: width * 0.2 + Math.random() * (width * 0.6),
+        y: -10 - Math.random() * 60,
+        vx: (Math.random() - 0.5) * 3,
+        vy: 2.5 + Math.random() * 4,
+        w: 5 + Math.random() * 6,
+        h: 5 + Math.random() * 7,
+        color: i % 2 === 0 ? '#F59E0B' : '#FCD34D',
+        rotation: Math.random() * Math.PI * 2,
+        vRot: (Math.random() - 0.5) * 0.2,
+        shape: i % 4 === 0 ? 'star' : 'rect',
+        opacity: 0.95
       });
     }
 
     let animId: number;
     const startTime = performance.now();
+
+    const drawStar = (c: CanvasRenderingContext2D, r: number) => {
+      c.beginPath();
+      for (let i = 0; i < 5; i++) {
+        c.lineTo(Math.cos(((18 + i * 72) * Math.PI) / 180) * r, -Math.sin(((18 + i * 72) * Math.PI) / 180) * r);
+        c.lineTo(Math.cos(((54 + i * 72) * Math.PI) / 180) * (r * 0.5), -Math.sin(((54 + i * 72) * Math.PI) / 180) * (r * 0.5));
+      }
+      c.closePath();
+      c.fill();
+    };
 
     const render = (now: number) => {
       const elapsed = now - startTime;
@@ -89,16 +136,14 @@ export const ConfettiCelebration: React.FC<ConfettiCelebrationProps> = ({
       ctx.clearRect(0, 0, width, height);
 
       particles.forEach((p) => {
-        // Physics update
         p.x += p.vx;
         p.y += p.vy;
-        p.vy += 0.32; // Gravity
-        p.vx *= 0.985; // Air drag
+        p.vy += 0.26; // Gravity
+        p.vx *= 0.988; // Air drag
         p.rotation += p.vRot;
 
-        // Fade out in last 30% of duration
-        if (progress > 0.6) {
-          p.opacity = Math.max(0, 1 - (progress - 0.6) / 0.4);
+        if (progress > 0.65) {
+          p.opacity = Math.max(0, 1 - (progress - 0.65) / 0.35);
         }
 
         ctx.save();
@@ -107,7 +152,9 @@ export const ConfettiCelebration: React.FC<ConfettiCelebrationProps> = ({
         ctx.globalAlpha = p.opacity;
         ctx.fillStyle = p.color;
 
-        if (p.shape === 'circle') {
+        if (p.shape === 'star') {
+          drawStar(ctx, p.w * 0.7);
+        } else if (p.shape === 'circle') {
           ctx.beginPath();
           ctx.arc(0, 0, p.w / 2, 0, Math.PI * 2);
           ctx.fill();
@@ -130,7 +177,7 @@ export const ConfettiCelebration: React.FC<ConfettiCelebrationProps> = ({
     return () => {
       cancelAnimationFrame(animId);
     };
-  }, [durationMs, onComplete]);
+  }, [durationMs, onComplete, stage]);
 
   return (
     <canvas
