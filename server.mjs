@@ -6079,6 +6079,7 @@ app.get('/api/course-studio/courses/:id', async (req, res) => {
       course: {
         ...course,
         daily_release_interval_days: resolvedIntervalDays,
+        allow_retries: activeAssignmentSettings?.allow_retries !== false,
         server_time: serverTimeIso,
         units: enrichedUnits,
         assignments: assignments || [],
@@ -7716,6 +7717,7 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
       courseRow?.course_start_date || assignment?.settings?.course_start_date || assignment?.start_date || null;
     const resolvedTimezone =
       courseRow?.course_timezone || assignment?.settings?.course_timezone || 'Asia/Colombo';
+    const resolvedAllowRetries = assignment?.settings?.allow_retries !== false;
     const serverTimeIso = new Date().toISOString();
 
     const isTeacher =
@@ -7742,7 +7744,8 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
         daily_release_enabled: resolvedDailyReleaseEnabled,
         daily_release_interval_days: resolvedIntervalDays,
         course_start_date: resolvedStartDate,
-        course_timezone: resolvedTimezone
+        course_timezone: resolvedTimezone,
+        allow_retries: resolvedAllowRetries
       });
     }
 
@@ -7817,7 +7820,8 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
       daily_release_enabled: resolvedDailyReleaseEnabled,
       daily_release_interval_days: resolvedIntervalDays,
       course_start_date: resolvedStartDate,
-      course_timezone: resolvedTimezone
+      course_timezone: resolvedTimezone,
+      allow_retries: resolvedAllowRetries
     });
   } catch (err) {
     console.error('Error in GET student progress:', err);
@@ -7882,7 +7886,7 @@ app.post('/api/course-studio/student/progress', async (req, res) => {
 
     const { data: assignment } = await serverSupabase
       .from('course_classroom_assignments')
-      .select('id, status')
+      .select('id, status, settings')
       .eq('course_id', course_id)
       .eq('classroom_id', classroom_id)
       .maybeSingle();
@@ -7979,7 +7983,7 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
 
     const { data: assignment } = await serverSupabase
       .from('course_classroom_assignments')
-      .select('id, status')
+      .select('id, status, settings')
       .eq('course_id', course_id)
       .eq('classroom_id', classroom_id)
       .maybeSingle();
@@ -8062,7 +8066,10 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
       ? 0
       : clampQuestionPoints(questionRow, effectiveIsCorrect, points_awarded);
 
-    // Anti-Retry Protection: If an attempt already exists, upgrade only when the new attempt improves upon a 0-point / retryable record
+    // Anti-Retry Protection:
+    // - If teacher disabled "Allow Question Retries" (allow_retries === false), reject all repeat attempts.
+    // - Otherwise, allow retrying 0-point/incorrect answers or upgrading to a higher score without ever downgrading.
+    const allowRetries = assignment?.settings?.allow_retries !== false;
     const { data: existingAttempt } = await serverSupabase
       .from('course_question_attempts')
       .select('*')
@@ -8072,7 +8079,7 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
 
     if (existingAttempt) {
       const prevAwarded = Number(existingAttempt.points_awarded || 0);
-      if (validatedPointsAwarded > prevAwarded || prevAwarded === 0) {
+      if (allowRetries && (validatedPointsAwarded > prevAwarded || prevAwarded === 0)) {
         const { data: updatedAttempt } = await serverSupabase
           .from('course_question_attempts')
           .update({
@@ -8093,7 +8100,10 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
       return res.status(409).json({
         success: false,
         already_answered: true,
-        error: 'Question already answered.',
+        retries_disabled: !allowRetries,
+        error: allowRetries
+          ? 'Question already answered.'
+          : 'Question retries are disabled by your teacher.',
         attempt: existingAttempt
       });
     }

@@ -1548,6 +1548,7 @@ export interface LearnWithShortsStudentPlayerProps {
   onQuitLesson?: () => void;
   hasNextShort?: boolean;
   isLessonCompleted?: boolean;
+  allowRetries?: boolean;
   isPreview?: boolean;
   courseCoverUrl?: string | null;
   dailyReleaseEnabled?: boolean;
@@ -1573,6 +1574,7 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   onQuitLesson,
   hasNextShort = false,
   isLessonCompleted = false,
+  allowRetries = true,
   isPreview = false,
   courseCoverUrl = null,
   dailyReleaseEnabled = false,
@@ -2404,6 +2406,7 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
 
   // Clear a single incorrect response to retry immediately
   const handleRetryQuestion = (questionId: string) => {
+    if (!allowRetries) return;
     setRetriedQuestionIds((prev) => ({ ...prev, [questionId]: true }));
     setLocalResponses((prev) => {
       if (!prev[questionId]) return prev;
@@ -2415,6 +2418,7 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
 
   // Retry all incorrect questions from Reward screen (or all questions if user wants to practice again)
   const handleRetryIncorrectFromReward = () => {
+    if (!allowRetries) return;
     courseAudio.playClick();
     const wrongIds: string[] = [];
     validQuestions.forEach((q, idx) => {
@@ -2698,11 +2702,11 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
     return (
       <div
         data-testid="shorts-intro-stage"
-        className="w-full max-w-xl mx-auto py-2 sm:py-4 animate-in fade-in duration-300 select-none"
+        className="w-full max-w-2xl mx-auto py-2 sm:py-4 animate-in fade-in duration-300 select-none"
       >
         <div className="relative rounded-3xl overflow-hidden border border-sky-500/25 bg-[#071529] shadow-2xl">
           {/* Cover / Thumbnail Artwork with Dark Readability Overlay */}
-          <div className="relative min-h-[340px] sm:min-h-[380px] flex flex-col justify-end p-6 sm:p-8">
+          <div className="relative min-h-[380px] sm:min-h-[430px] flex flex-col justify-end p-6 sm:p-9">
             <img
               src={coverArtworkUrl}
               alt={shortTitle}
@@ -2711,9 +2715,9 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
                 (e.currentTarget as HTMLImageElement).src = '/images/creepy-legends-cover.jpg';
               }}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#040d1a] via-[#061529]/80 to-[#040d1a]/35" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#030b18] via-[#051428]/88 to-[#040d1a]/45" />
 
-            <div className="relative z-10 space-y-4 text-center sm:text-left">
+            <div className="relative z-10 space-y-4 sm:space-y-5 text-center sm:text-left">
               {hasVocabularyStage && (
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500/20 border border-sky-400/35 text-sky-200 text-[11px] font-black uppercase tracking-wider">
                   <Sparkles className="w-3.5 h-3.5 text-amber-300" />
@@ -2726,7 +2730,10 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
               </h2>
 
               {hookText && (
-                <p className="text-sm sm:text-base text-sky-100/95 font-medium leading-relaxed max-w-lg">
+                <p
+                  data-testid="shorts-intro-paragraph"
+                  className="text-[18px] sm:text-[20px] text-sky-50 font-normal leading-[1.75] max-w-2xl drop-shadow-sm"
+                >
                   {hookText}
                 </p>
               )}
@@ -2768,84 +2775,170 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   // STAGE 2: KEY VOCABULARY CARDS (WITH PRONUNCIATION AUDIO)
   // ==========================================================================
   if (stage === 'vocabulary') {
+    const vocabProgressPct =
+      vocabularyCards.length > 0
+        ? Math.round((listenedVocabWords.length / vocabularyCards.length) * 100)
+        : 0;
+
+    const renderHighlightedExample = (sentence: string, targetWord: string) => {
+      const cleanWord = targetWord.trim();
+      if (!cleanWord) return sentence;
+      const escaped = cleanWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`(${escaped}[a-z]*)`, 'gi');
+      const parts = sentence.split(regex);
+      return parts.map((part, i) =>
+        i % 2 === 1 ? (
+          <span key={i} className="not-italic font-bold text-amber-300">
+            {part}
+          </span>
+        ) : (
+          <React.Fragment key={i}>{part}</React.Fragment>
+        )
+      );
+    };
+
     return (
       <div
         data-testid="shorts-vocabulary-stage"
-        className="w-full max-w-[720px] mx-auto px-4 sm:px-0 py-3 space-y-4 animate-in fade-in duration-300 box-border"
+        className="w-full max-w-[780px] mx-auto px-3 sm:px-0 py-3 space-y-4 animate-in fade-in duration-300 box-border"
       >
         {renderSectionStepper('vocabulary')}
 
-        <div className="rounded-3xl bg-[#07162c] border border-sky-500/25 p-5 sm:p-7 shadow-xl text-white space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="space-y-1">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-400/15 border border-amber-400/35 text-amber-300 text-[11px] font-black uppercase tracking-wider">
-                <BookOpen className="w-3.5 h-3.5" />
-                <span>Section 02 • Key Vocabulary</span>
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-[#071833] via-[#07152b] to-[#050f20] border border-sky-400/25 p-5 sm:p-7 shadow-2xl text-white space-y-6">
+          <div className="pointer-events-none -top-24 -right-24 absolute w-64 h-64 rounded-full bg-sky-500/10 blur-3xl" />
+          <div className="pointer-events-none -bottom-24 -left-24 absolute w-64 h-64 rounded-full bg-amber-400/10 blur-3xl" />
+
+          {/* Deck Header & Progress */}
+          <div className="relative z-10 space-y-3.5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-1.5">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/15 border border-amber-400/35 text-amber-300 text-[11px] font-black uppercase tracking-wider">
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Section 02 • Key Vocabulary</span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                  Unlock These {vocabularyCards.length} Mystery Words
+                </h2>
+                <p className="text-sm sm:text-base text-sky-100/85 leading-relaxed max-w-xl">
+                  Tap the audio button on each card to hear clear English pronunciation before you watch the Short.
+                </p>
               </div>
-              <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-                Learn These {vocabularyCards.length} Words First
-              </h2>
-              <p className="text-xs sm:text-sm text-sky-200/85">
-                Tap the speaker icon on each card to hear the English pronunciation before watching the Short.
-              </p>
+              <div className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-[#0b2345] border border-sky-400/30 shadow-inner">
+                <CheckCircle2
+                  className={`w-4 h-4 ${
+                    listenedVocabWords.length === vocabularyCards.length && vocabularyCards.length > 0
+                      ? 'text-emerald-400'
+                      : 'text-sky-300'
+                  }`}
+                />
+                <span className="text-xs sm:text-sm font-black text-white">
+                  {listenedVocabWords.length}/{vocabularyCards.length} Practised
+                </span>
+              </div>
             </div>
-            <div className="px-3 py-1.5 rounded-xl bg-sky-500/15 border border-sky-400/30 text-xs font-extrabold text-sky-200">
-              {listenedVocabWords.length}/{vocabularyCards.length} Practised
+
+            <div className="w-full h-2 rounded-full bg-[#0c2142] overflow-hidden border border-sky-500/20">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-sky-400 via-cyan-300 to-emerald-400 transition-all duration-500"
+                style={{ width: `${vocabProgressPct}%` }}
+              />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Vocabulary Cards Grid */}
+          <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-4">
             {vocabularyCards.map((card, vIdx) => {
               const isSpeaking = speakingVocabWord === card.word;
               const isListened = listenedVocabWords.includes(card.word);
+              const cardIndexLabel = String(vIdx + 1).padStart(2, '0');
               return (
                 <div
                   key={`${card.word}_${vIdx}`}
                   data-testid={`shorts-vocab-card-${vIdx}`}
-                  className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
+                  className={`group relative overflow-hidden rounded-2xl border transition-all duration-200 flex flex-col justify-between ${
                     isSpeaking
-                      ? 'bg-[#0c264a] border-amber-400/70 shadow-lg shadow-amber-500/10'
-                      : 'bg-[#0b2140]/90 border-sky-400/25'
+                      ? 'bg-gradient-to-br from-[#0e2d57] to-[#081d3b] border-amber-400/80 shadow-[0_12px_32px_rgba(251,191,36,0.18)] -translate-y-0.5'
+                      : isListened
+                      ? 'bg-gradient-to-br from-[#0a2342] to-[#071830] border-emerald-400/45 shadow-lg'
+                      : 'bg-gradient-to-br from-[#0b2344]/95 to-[#07172e] border-sky-400/25 hover:border-sky-300/50 shadow-md'
                   }`}
                 >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-lg font-black text-white tracking-tight">
-                        {card.word}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => speakVocabWord(card.word, card.example)}
-                        aria-label={`Listen to pronunciation of ${card.word}`}
-                        className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 transition-all cursor-pointer ${
-                          isSpeaking
-                            ? 'bg-amber-400 text-slate-950 shadow-sm'
-                            : isListened
-                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40'
-                            : 'bg-sky-500/20 hover:bg-sky-500/35 text-sky-200 border border-sky-400/35'
-                        }`}
-                      >
-                        <Volume2 className="w-3.5 h-3.5" />
-                        <span>{isSpeaking ? 'Speaking...' : isListened ? 'Practised' : 'Listen'}</span>
-                      </button>
-                    </div>
-                    <p className="text-sm font-medium text-sky-100 leading-snug">
-                      {card.meaning}
-                    </p>
-                  </div>
+                  {/* Top Accent Strip */}
+                  <div
+                    className={`h-1.5 w-full ${
+                      isSpeaking
+                        ? 'bg-gradient-to-r from-amber-300 via-amber-400 to-orange-400'
+                        : isListened
+                        ? 'bg-gradient-to-r from-emerald-400 to-teal-400'
+                        : 'bg-gradient-to-r from-sky-500/70 via-cyan-400/70 to-indigo-400/70'
+                    }`}
+                  />
 
-                  {card.example && (
-                    <div className="px-3 py-2 rounded-xl bg-[#061326] border border-sky-500/15 text-xs text-sky-200/90 italic">
-                      “{card.example}”
+                  <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between gap-4">
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span
+                            className={`w-7 h-7 rounded-lg text-[11px] font-black flex items-center justify-center shrink-0 border ${
+                              isSpeaking
+                                ? 'bg-amber-400/20 text-amber-300 border-amber-400/50'
+                                : isListened
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
+                                : 'bg-sky-500/15 text-sky-300 border-sky-400/30'
+                            }`}
+                          >
+                            {cardIndexLabel}
+                          </span>
+                          <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight truncate">
+                            {card.word}
+                          </h3>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => speakVocabWord(card.word, card.example)}
+                          aria-label={`Listen to pronunciation of ${card.word}`}
+                          className={`min-h-[38px] px-3.5 py-1.5 rounded-full text-xs font-black inline-flex items-center gap-1.5 shrink-0 transition-all cursor-pointer active:scale-95 ${
+                            isSpeaking
+                              ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30'
+                              : isListened
+                              ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-400/45'
+                              : 'bg-sky-500/25 hover:bg-sky-400/35 text-white border border-sky-300/40 shadow-sm'
+                          }`}
+                        >
+                          <Volume2 className={`w-4 h-4 ${isSpeaking ? 'animate-pulse' : ''}`} />
+                          <span>{isSpeaking ? 'Speaking' : isListened ? 'Practised' : 'Listen'}</span>
+                        </button>
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="block text-[10px] font-black uppercase tracking-widest text-sky-300/80">
+                          Meaning
+                        </span>
+                        <p className="text-[15px] sm:text-base font-medium text-sky-50 leading-relaxed">
+                          {card.meaning}
+                        </p>
+                      </div>
                     </div>
-                  )}
+
+                    {card.example && (
+                      <div className="px-3.5 py-2.5 rounded-xl bg-[#040f20]/90 border border-sky-500/20 border-l-2 border-l-amber-400/80 space-y-1">
+                        <span className="block text-[10px] font-black uppercase tracking-widest text-amber-300/85">
+                          Example
+                        </span>
+                        <p className="text-sm text-sky-100/90 italic leading-relaxed">
+                          “{renderHighlightedExample(card.example, card.word)}”
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}
           </div>
 
-          <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-sky-400/20">
-            <p className="text-xs text-sky-200/80 font-medium">
+          <div className="relative z-10 pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-sky-400/20">
+            <p className="text-xs sm:text-sm text-sky-100/85 font-medium">
               Ready to see these words in action? Watch the short video now.
             </p>
             <button
@@ -3226,7 +3319,7 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
               question={activeQuestion}
               index={currentQuestionIndex}
               response={activeResponse}
-              allowRetryIncorrect={true}
+              allowRetryIncorrect={allowRetries}
               onRetryQuestion={() => handleRetryQuestion(activeQuestionId)}
               onAnswerSubmit={(res) => handleSingleQuestionSubmit(res, activeQuestion)}
               isStudentView={true}
@@ -3526,8 +3619,8 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
             </div>
           )}
 
-          {/* Retry Option for Incorrect Questions or Review */}
-          {validQuestions.length > 0 && (
+          {/* Retry Option for Incorrect Questions or Review (only when teacher allows retries) */}
+          {allowRetries && validQuestions.length > 0 && (
             <button
               type="button"
               data-testid="shorts-retry-challenge"

@@ -456,6 +456,7 @@ export const courseStudioService = {
     daily_release_interval_days?: number;
     course_start_date?: string | null;
     course_timezone?: string;
+    allow_retries?: boolean;
     server_time?: string;
     is_paused?: boolean;
     is_teacher?: boolean;

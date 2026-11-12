@@ -1752,7 +1752,10 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
               answered_at: nowIso
             });
           }
-        } else if (clampedPts > Number(existingAtt.points_awarded || 0)) {
+        } else if (
+          assignment?.settings?.allow_retries !== false &&
+          clampedPts > Number(existingAtt.points_awarded || 0)
+        ) {
           existingAtt.points_awarded = clampedPts;
           existingAtt.is_correct = isCorr;
           existingAtt.answered_at = nowIso;

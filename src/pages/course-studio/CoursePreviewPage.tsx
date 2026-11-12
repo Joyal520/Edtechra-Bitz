@@ -1786,6 +1786,7 @@ export const CoursePreviewPage: React.FC = () => {
                 onQuitLesson={() => setViewMode('roadmap')}
                 hasNextLesson={Boolean(nextItem)}
                 isLessonCompleted={isEpisodeCompleted}
+                allowQuestionRetries={(course as any)?.allow_retries !== false}
                 dailyReleaseEnabled={Boolean(course.daily_release_enabled)}
                 courseStartDate={course.course_start_date || null}
                 dailyReleaseIntervalDays={course.daily_release_interval_days || 1}

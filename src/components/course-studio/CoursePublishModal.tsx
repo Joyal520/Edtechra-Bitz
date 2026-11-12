@@ -103,10 +103,19 @@ export const CoursePublishModal: React.FC<Props> = ({
       let currentAssigned: string[] = [];
       try {
         const fullCourse = await courseStudioService.getCourse(course.id);
-        const activeAssigned = ((fullCourse as any)?.assignments || (fullCourse as any)?.course_classroom_assignments || [])
+        const allAssignments = (fullCourse as any)?.assignments || (fullCourse as any)?.course_classroom_assignments || [];
+        const activeAssigned = allAssignments
           .filter((a: any) => a.status === 'active')
           .map((a: any) => a.classroom_id);
         currentAssigned = activeAssigned;
+
+        const targetAssignment =
+          (initialClassroomId && allAssignments.find((a: any) => a.classroom_id === initialClassroomId)) ||
+          allAssignments.find((a: any) => a.status === 'active') ||
+          allAssignments[0];
+        if (targetAssignment?.settings && typeof targetAssignment.settings === 'object') {
+          setSettings(s => ({ ...s, ...targetAssignment.settings }));
+        }
 
         if (typeof (fullCourse as any)?.daily_release_enabled === 'boolean') {
           setDailyReleaseEnabled((fullCourse as any).daily_release_enabled);

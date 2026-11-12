@@ -95,6 +95,7 @@ interface Props {
   onQuitLesson?: () => void;
   hasNextLesson?: boolean;
   isLessonCompleted?: boolean;
+  allowQuestionRetries?: boolean;
   onPreviewStudentExperience?: () => void;
   onProgressChange?: (answeredCount: number, totalCount: number) => void;
   onVideoCompletionChange?: (status: { allCompleted: boolean; watchedPercent: number; totalVideos: number }) => void;
@@ -153,6 +154,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
   onQuitLesson,
   hasNextLesson = false,
   isLessonCompleted = false,
+  allowQuestionRetries = true,
   onPreviewStudentExperience,
   onProgressChange,
   onVideoCompletionChange,
@@ -976,6 +978,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   onQuitLesson={onQuitLesson || onReturnToCourse}
                   hasNextShort={hasNextLesson}
                   isLessonCompleted={isLessonCompleted}
+                  allowRetries={allowQuestionRetries}
                   courseCoverUrl={courseCoverUrl}
                   dailyReleaseEnabled={dailyReleaseEnabled}
                   nextUnlockDateLabel={nextUnlockDateLabel}

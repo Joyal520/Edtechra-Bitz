@@ -70,6 +70,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
   const [completedEpisodesMap, setCompletedEpisodesMap] = useState<Record<string, { completed_at?: string }>>({});
   const [isTeacherPreview, setIsTeacherPreview] = useState(false);
   const [isCoursePaused, setIsCoursePaused] = useState(false);
+  const [allowQuestionRetries, setAllowQuestionRetries] = useState(true);
   const [completingEpisode, setCompletingEpisode] = useState(false);
 
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
@@ -258,8 +259,13 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
       const isTeacher = Boolean((progressData as any)?.is_teacher);
       const isPaused = Boolean((progressData as any)?.is_paused) || Boolean(mergedCourseData?.is_paused);
+      const resolvedAllowRetries =
+        (progressData as any)?.allow_retries !== undefined
+          ? Boolean((progressData as any).allow_retries)
+          : (mergedCourseData as any)?.allow_retries !== false;
       setIsTeacherPreview(isTeacher);
       setIsCoursePaused(isPaused);
+      setAllowQuestionRetries(resolvedAllowRetries);
 
       if ((progressData as any)?.completedEpisodesMap) {
         setCompletedEpisodesMap((progressData as any).completedEpisodesMap);
@@ -1173,6 +1179,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
                   onQuitLesson={() => setViewMode('roadmap')}
                   hasNextLesson={Boolean(nextItem)}
                   isLessonCompleted={isEpisodeCompleted}
+                  allowQuestionRetries={allowQuestionRetries}
                   dailyReleaseEnabled={Boolean(course.daily_release_enabled)}
                   courseStartDate={course.course_start_date || null}
                   dailyReleaseIntervalDays={course.daily_release_interval_days || 1}
