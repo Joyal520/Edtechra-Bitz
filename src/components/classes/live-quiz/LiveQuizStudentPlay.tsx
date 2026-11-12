@@ -139,7 +139,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     points?: number;
   } | null>(null);
 
-  const [, setSelectedIndex] = useState<number | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [selectedDisplayIndex, setSelectedDisplayIndex] = useState<number | null>(null);
   const [isLocked, setIsLocked] = useState(false);
   const [isChangingAnswer, setIsChangingAnswer] = useState(false);
@@ -570,11 +570,14 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   }, [isTotalTimed, getEffectiveExpirationMs, syncWithDatabase]);
 
   // ---- answer selection & submission --------------------------------------------------
+  const pendingNetworkRetryRef = useRef(false);
+
   const handlePickOption = (displayIndex: number) => {
     if ((isLocked && !isChangingAnswer) || isSubmitting || revealData) return;
     quizAudioService.playClick();
     quizAudioService.unlockAudio();
     setSelectedDisplayIndex(displayIndex);
+    setSubmitError(null);
   };
 
   const handleEnableChangeAnswer = () => {
@@ -585,23 +588,29 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     setSubmitError(null);
   };
 
-  const handleSubmitAnswer = async () => {
+  const handleSubmitAnswer = useCallback(async () => {
     if (submittingRef.current || (isLocked && !isChangingAnswer) || revealData || !questionData || selectedDisplayIndex === null) return;
-
-    quizAudioService.playClick();
-    quizAudioService.unlockAudio();
 
     const displayIndex = selectedDisplayIndex;
     const canonicalIndex = questionData.permutation?.[displayIndex] ?? displayIndex;
     const submittedForIndex = questionData.qIndex;
     const allowChangeFlag = isChangingAnswer || Boolean(answerResult);
 
+    // Prevent accidental duplicate submission of the exact same option when changing answer
+    if (allowChangeFlag && answerResult && selectedIndex === canonicalIndex) {
+      setIsChangingAnswer(false);
+      setIsLocked(true);
+      setSubmitError('Answer already submitted for this option.');
+      return;
+    }
+
+    quizAudioService.playClick();
+    quizAudioService.unlockAudio();
+
     submittingRef.current = true;
     setIsSubmitting(true);
     setSubmitError(null);
-    setSelectedIndex(canonicalIndex);
-    setIsLocked(true);
-    setIsChangingAnswer(false);
+    // Keep selection highlighted, but do NOT set isLocked=true or show confirmation until backend confirms!
 
     try {
       const res = await liveQuizService.submitAnswer({
@@ -614,6 +623,23 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       if (!mountedRef.current) return;
 
       if (res.data) {
+        pendingNetworkRetryRef.current = false;
+
+        // Backend confirmed! Lock submission and show confirmation state
+        if (activeQIndexRef.current === submittedForIndex) {
+          setSelectedIndex(canonicalIndex);
+          setIsLocked(true);
+          setIsChangingAnswer(false);
+          setAnswerResult({
+            isCorrect: res.data.is_correct,
+            points: res.data.points_awarded,
+            basePoints: res.data.base_points,
+            speedBonus: res.data.speed_bonus,
+            responseTimeMs: res.data.response_time_ms
+          });
+          setPointsEarned(res.data.points_awarded);
+        }
+
         // Fast-lane broadcast to teacher host so the live counter updates within milliseconds
         if (channelRef.current && user?.id) {
           channelRef.current.send({
@@ -628,16 +654,6 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
           }).catch(() => {});
         }
 
-        if (activeQIndexRef.current === submittedForIndex) {
-          setAnswerResult({
-            isCorrect: res.data.is_correct,
-            points: res.data.points_awarded,
-            basePoints: res.data.base_points,
-            speedBonus: res.data.speed_bonus,
-            responseTimeMs: res.data.response_time_ms
-          });
-          setPointsEarned(res.data.points_awarded);
-        }
         if (typeof res.data.current_score === 'number') {
           setTotalScore(res.data.current_score);
         }
@@ -645,35 +661,68 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
           await syncWithDatabase();
         }
       } else {
+        // IMPORTANT SAFEGUARD: Never clear selectedDisplayIndex on error!
+        // Preserve the student's selected option so they don't lose their answer on temporary network glitches.
         if (activeQIndexRef.current === submittedForIndex) {
-          setSelectedIndex(null);
-          setSelectedDisplayIndex(null);
           setIsLocked(false);
         }
-        if (res.code === 'LATE') {
-          setSubmitError('Your answer reached the server after time ran out.');
-        } else if (res.code === 'QUESTION_MISMATCH' || res.code === 'NOT_ACTIVE') {
-          setSubmitError('That question has already moved on.');
+        if (res.code === 'NETWORK_ERROR') {
+          pendingNetworkRetryRef.current = true;
+          setSubmitError(res.error || 'Network unavailable. Your selection is kept — retrying when back online.');
+        } else if (res.code === 'SESSION_EXPIRED' || res.code === 'AUTH') {
+          setSubmitError(res.error || 'Session expired. Please refresh or sign in again.');
+        } else if (res.code === 'LATE') {
+          setSubmitError('Question already closed (time expired).');
+          await syncWithDatabase();
+        } else if (res.code === 'QUESTION_MISMATCH' || res.code === 'NOT_ACTIVE' || res.code === 'QUESTION_CLOSED') {
+          setSubmitError('Question already closed. Syncing to the active question...');
+          await syncWithDatabase();
+        } else if (res.code === 'ALREADY_SUBMITTED') {
+          setIsLocked(true);
+          setIsChangingAnswer(false);
+          setSubmitError('Answer already submitted.');
         } else if (res.code === 'ENGINE_NOT_INSTALLED') {
-          setSubmitError('Live quiz server update is not installed yet. Please tell your teacher.');
+          setSubmitError('Live quiz grading service is not installed yet. Please notify your teacher.');
         } else {
-          setSubmitError('Could not submit your answer. Please tap an option again.');
+          setSubmitError(res.error || 'Database submission failed. Your option is still selected — please tap Submit Answer again.');
         }
-        await syncWithDatabase();
       }
     } catch (err) {
-      console.error('Error submitting answer:', err);
+      console.error('[LiveQuizStudentPlay] Error submitting answer:', err);
       if (mountedRef.current && activeQIndexRef.current === submittedForIndex) {
-        setSelectedIndex(null);
-        setSelectedDisplayIndex(null);
+        // Keep selectedDisplayIndex intact so student does not lose their selection
+        pendingNetworkRetryRef.current = true;
         setIsLocked(false);
-        setSubmitError('Network problem. Please tap an option again.');
+        setSubmitError('Network unavailable. Your selected option is preserved — please tap Submit Answer again.');
       }
     } finally {
       submittingRef.current = false;
       if (mountedRef.current) setIsSubmitting(false);
     }
-  };
+  }, [
+    isLocked,
+    isChangingAnswer,
+    revealData,
+    questionData,
+    selectedDisplayIndex,
+    answerResult,
+    selectedIndex,
+    session.id,
+    user?.id,
+    syncWithDatabase
+  ]);
+
+  // Automatic recovery when network connection returns after a temporary interruption
+  useEffect(() => {
+    const onOnlineRecover = () => {
+      if (pendingNetworkRetryRef.current && selectedDisplayIndex !== null && !isLocked && !revealData) {
+        pendingNetworkRetryRef.current = false;
+        handleSubmitAnswer();
+      }
+    };
+    window.addEventListener('online', onOnlineRecover);
+    return () => window.removeEventListener('online', onOnlineRecover);
+  }, [selectedDisplayIndex, isLocked, revealData, handleSubmitAnswer]);
 
   // Auto-submit pending choice if countdown reaches <= 1s
   useEffect(() => {

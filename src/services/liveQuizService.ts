@@ -355,6 +355,8 @@ class LiveQuizService {
     questionCount: number;
     timePerQuestion: number;
     pointsPerQuestion?: number;
+    studentLevel?: string;
+    learningObjectives?: string;
     provider?: 'auto' | 'openai' | 'gemini';
     generateCover?: boolean;
   }): Promise<{
@@ -369,6 +371,16 @@ class LiveQuizService {
       coverImageUrl?: string | null;
       questions: LiveQuizQuestion[];
       provider?: string;
+      validationReport?: {
+        passed: boolean;
+        totalQuestions: number;
+        topicRelevance: string;
+        duplicateQuestions: number;
+        validAnswerOptions: string;
+        correctAnswersIdentified: string;
+        difficultyCompliance: string;
+        regeneratedCount?: number;
+      };
     };
     error?: string;
   }> {
@@ -385,7 +397,8 @@ class LiveQuizService {
       return {
         data: {
           ...json.quiz,
-          provider: json.provider
+          provider: json.provider,
+          validationReport: json.validationReport || json.quiz.validationReport
         }
       };
     } catch (err: any) {
@@ -1762,49 +1775,191 @@ class LiveQuizService {
       changed?: boolean;
     };
     error?: string;
-    code?: 'LATE' | 'NOT_ACTIVE' | 'QUESTION_MISMATCH' | 'RPC_ERROR' | 'ENGINE_NOT_INSTALLED' | 'AUTH';
+    code?:
+      | 'LATE'
+      | 'NOT_ACTIVE'
+      | 'QUESTION_MISMATCH'
+      | 'RPC_ERROR'
+      | 'ENGINE_NOT_INSTALLED'
+      | 'AUTH'
+      | 'SESSION_EXPIRED'
+      | 'NETWORK_ERROR'
+      | 'ALREADY_SUBMITTED'
+      | 'QUESTION_CLOSED';
     current_question_index?: number;
   }> {
-    if (!supabase) return { error: 'Supabase is not configured', code: 'RPC_ERROR' };
-    const userId = await this.getUserId();
-    if (!userId) return { error: 'Authentication required', code: 'AUTH' };
+    if (!supabase) {
+      return { error: 'Database connection is not configured.', code: 'RPC_ERROR' };
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return {
+        error: 'Network unavailable. Your selected answer is preserved — it will submit when your connection returns.',
+        code: 'NETWORK_ERROR'
+      };
+    }
+
+    let userId = await this.getUserId();
+    if (!userId) {
+      try {
+        const { data: refreshed } = await supabase.auth.refreshSession();
+        userId = refreshed?.session?.user?.id || null;
+      } catch {
+        // Ignore refresh error
+      }
+    }
+    if (!userId) {
+      return {
+        error: 'Session expired. Please sign in again to submit your answer.',
+        code: 'SESSION_EXPIRED'
+      };
+    }
 
     let rpcData: any = null;
     let rpcError: any = null;
 
-    if (payload.allow_change) {
-      const attempt4 = await supabase.rpc('submit_live_quiz_answer', {
-        p_session_id: payload.session_id,
-        p_question_index: payload.question_index,
-        p_selected_option_index: payload.selected_option_index,
-        p_allow_change: true
-      });
-      rpcData = attempt4.data;
-      rpcError = attempt4.error;
-    }
+    const executeRpcCall = async () => {
+      let data: any = null;
+      let error: any = null;
 
-    if (!payload.allow_change || (rpcError && /function|signature|parameter/i.test(rpcError.message || ''))) {
-      const attempt3 = await supabase.rpc('submit_live_quiz_answer', {
-        p_session_id: payload.session_id,
-        p_question_index: payload.question_index,
-        p_selected_option_index: payload.selected_option_index
-      });
-      rpcData = attempt3.data;
-      rpcError = attempt3.error;
+      if (payload.allow_change) {
+        const attempt4 = await supabase!.rpc('submit_live_quiz_answer', {
+          p_session_id: payload.session_id,
+          p_question_index: payload.question_index,
+          p_selected_option_index: payload.selected_option_index,
+          p_allow_change: true
+        });
+        data = attempt4.data;
+        error = attempt4.error;
+      }
+
+      if (!payload.allow_change || (error && /function|signature|parameter/i.test(error.message || ''))) {
+        const attempt3 = await supabase!.rpc('submit_live_quiz_answer', {
+          p_session_id: payload.session_id,
+          p_question_index: payload.question_index,
+          p_selected_option_index: payload.selected_option_index
+        });
+        data = attempt3.data;
+        error = attempt3.error;
+      }
+      return { data, error };
+    };
+
+    // Execute with up to 2 automatic retries on transient network errors
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await executeRpcCall();
+        rpcData = res.data;
+        rpcError = res.error;
+
+        if (!rpcError) break;
+
+        const errMsg = String(rpcError.message || '');
+        const isTransientNetwork =
+          /failed to fetch|networkerror|load failed|network request failed|timeout|fetch/i.test(errMsg);
+        const isAuthError =
+          rpcError.code === 'PGRST301' || /jwt|unauthorized|not authenticated|token/i.test(errMsg);
+
+        if (isAuthError && attempt === 0) {
+          await supabase.auth.refreshSession().catch(() => {});
+          continue;
+        }
+
+        if (isTransientNetwork && attempt < 2) {
+          await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+          continue;
+        }
+        break;
+      } catch (err: any) {
+        rpcError = err;
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+          continue;
+        }
+      }
     }
 
     if (rpcError) {
-      const msg = rpcError.message || 'Failed to submit answer';
-      console.error('[LiveQuizService] submit_live_quiz_answer RPC error:', rpcError);
+      const msg = String(rpcError.message || 'Database submission failed');
+      console.error('[LiveQuizService] submit_live_quiz_answer RPC failure:', {
+        code: rpcError.code,
+        message: msg,
+        details: rpcError.details,
+        hint: rpcError.hint,
+        sessionId: payload.session_id,
+        questionIndex: payload.question_index
+      });
+
+      if (/failed to fetch|networkerror|load failed|network request failed|offline/i.test(msg)) {
+        return {
+          error: 'Network unavailable. Your selected option is still highlighted — tap Submit Answer to retry.',
+          code: 'NETWORK_ERROR'
+        };
+      }
+      if (rpcError.code === 'PGRST301' || /jwt|not authenticated|authentication|session expired/i.test(msg)) {
+        return {
+          error: 'Session expired. Please refresh the page or sign in again.',
+          code: 'SESSION_EXPIRED'
+        };
+      }
       const missing = (rpcError as any).code === 'PGRST202' || /could not find the function/i.test(msg);
-      return { error: msg, code: missing ? 'ENGINE_NOT_INSTALLED' : 'RPC_ERROR' };
+      return {
+        error: missing
+          ? 'Live quiz grading service is unavailable.'
+          : 'Database submission failed. Your selection is saved on screen — please tap Submit Answer again.',
+        code: missing ? 'ENGINE_NOT_INSTALLED' : 'RPC_ERROR'
+      };
     }
-    if (!rpcData) return { error: 'Empty response from server', code: 'RPC_ERROR' };
+
+    if (!rpcData) {
+      return {
+        error: 'Database submission failed (empty server response). Please tap Submit Answer again.',
+        code: 'RPC_ERROR'
+      };
+    }
 
     if (rpcData.ok === false) {
+      const rawCode = String(rpcData.code || 'REJECTED');
+      console.warn('[LiveQuizService] submit_live_quiz_answer rejected by server rule:', {
+        code: rawCode,
+        status: rpcData.status,
+        currentQuestionIndex: rpcData.current_question_index,
+        requestedQuestionIndex: payload.question_index
+      });
+
+      if (rawCode === 'SESSION_EXPIRED' || rawCode === 'AUTH') {
+        return {
+          error: rpcData.message || 'Session expired. Please sign in again.',
+          code: 'SESSION_EXPIRED'
+        };
+      }
+      if (rawCode === 'LATE') {
+        return {
+          error: rpcData.message || 'Question already closed (time expired).',
+          code: 'LATE',
+          current_question_index:
+            typeof rpcData.current_question_index === 'number' ? rpcData.current_question_index : undefined
+        };
+      }
+      if (rawCode === 'QUESTION_MISMATCH') {
+        return {
+          error: rpcData.message || 'Question already closed. Syncing to the active question...',
+          code: 'QUESTION_MISMATCH',
+          current_question_index:
+            typeof rpcData.current_question_index === 'number' ? rpcData.current_question_index : undefined
+        };
+      }
+      if (rawCode === 'SESSION_NOT_ACTIVE' || rawCode === 'NOT_ACTIVE') {
+        return {
+          error: rpcData.message || 'Question already closed.',
+          code: 'NOT_ACTIVE',
+          current_question_index:
+            typeof rpcData.current_question_index === 'number' ? rpcData.current_question_index : undefined
+        };
+      }
       return {
-        error: rpcData.code || 'REJECTED',
-        code: rpcData.code === 'SESSION_NOT_ACTIVE' ? 'NOT_ACTIVE' : rpcData.code,
+        error: rpcData.message || `Submission rejected (${rawCode}).`,
+        code: 'RPC_ERROR',
         current_question_index:
           typeof rpcData.current_question_index === 'number' ? rpcData.current_question_index : undefined
       };
@@ -2006,18 +2161,30 @@ class LiveQuizService {
   }
 
   /**
-   * Teacher triggers answer reveal
+   * Teacher triggers answer reveal (guarded by expectedQuestionIndex so a late reveal
+   * never overwrites an already-advanced question).
    */
-  async revealAnswer(sessionId: string, correctIndex: number): Promise<{ error?: string }> {
+  async revealAnswer(
+    sessionId: string,
+    correctIndex: number,
+    expectedQuestionIndex?: number
+  ): Promise<{ error?: string }> {
     if (!supabase) return { error: 'Supabase is not configured' };
     try {
-      const { error } = await supabase
+      let query = supabase
         .from('live_quiz_sessions')
         .update({
           status: 'reveal',
           correct_answer_index: correctIndex
         })
-        .eq('id', sessionId);
+        .eq('id', sessionId)
+        .eq('status', 'in_progress');
+
+      if (typeof expectedQuestionIndex === 'number') {
+        query = query.eq('current_question_index', expectedQuestionIndex);
+      }
+
+      const { error } = await query;
 
       if (error) throw error;
       return {};

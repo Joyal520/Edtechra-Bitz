@@ -7,9 +7,9 @@ import { OpenAI } from 'openai';
 import { logAIUsage } from './aiUsageLogger.mjs';
 
 const CANDIDATE_GEMINI_MODELS = [
-  'gemini-3.5-flash',
-  'gemini-3.1-flash-lite',
+  'gemini-2.5-flash',
   'gemini-flash-latest',
+  'gemini-2.0-flash',
   'gemini-pro-latest'
 ];
 
@@ -262,7 +262,7 @@ export class OpenAIProvider extends AIProvider {
    * Strips repetitive instructions and truncates oversized contexts
    * to conserve prepaid tokens before invoking GPT-5 nano.
    */
-  pruneContext(content, maxChars = 8000) {
+  pruneContext(content, maxChars = 16000) {
     if (!content || typeof content !== 'string') return content;
     if (content.length <= maxChars) return content;
 
@@ -314,8 +314,10 @@ export class OpenAIProvider extends AIProvider {
           messages,
           response_format: responseFormat
         };
-        if (!isReasoningOrGpt5) {
-          reqPayload.temperature = 0.2;
+        if (isReasoningOrGpt5) {
+          reqPayload.reasoning_effort = 'low';
+        } else {
+          reqPayload.temperature = 0.35;
         }
 
         const completion = await this.client.chat.completions.create(reqPayload);

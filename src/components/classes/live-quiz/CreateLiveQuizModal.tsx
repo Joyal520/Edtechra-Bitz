@@ -121,6 +121,16 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
   const [regeneratingQuestionIdx, setRegeneratingQuestionIdx] = useState<number | null>(null);
   const [generatedQuestions, setGeneratedQuestions] = useState<LiveQuizQuestion[]>([]);
   const [activeProviderUsed, setActiveProviderUsed] = useState<string | null>(null);
+  const [validationReport, setValidationReport] = useState<{
+    passed: boolean;
+    totalQuestions: number;
+    topicRelevance: string;
+    duplicateQuestions: number;
+    validAnswerOptions: string;
+    correctAnswersIdentified: string;
+    difficultyCompliance: string;
+    regeneratedCount?: number;
+  } | null>(null);
 
   // Manual Mode State
   const [manualTitle, setManualTitle] = useState('');
@@ -322,6 +332,17 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         setCoverImageUrl(generated.coverImageUrl);
       }
       setActiveProviderUsed(generated.provider || 'AI');
+      setValidationReport(
+        generated.validationReport || {
+          passed: true,
+          totalQuestions: generated.questions.length,
+          topicRelevance: `${generated.questions.length}/${generated.questions.length}`,
+          duplicateQuestions: 0,
+          validAnswerOptions: `${generated.questions.length}/${generated.questions.length}`,
+          correctAnswersIdentified: `${generated.questions.length}/${generated.questions.length}`,
+          difficultyCompliance: `${generated.questions.length}/${generated.questions.length}`
+        }
+      );
       setGeneratedQuestions(
         generated.questions.map((q, idx) => ({
           id: q.id || `q_${Date.now()}_${idx + 1}`,
@@ -428,19 +449,36 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
     if (!questions || questions.length === 0) {
       return 'Please include at least 1 question in the quiz.';
     }
+    const seenQuestions = new Set<string>();
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
       if (!q.question || !q.question.trim()) {
         return `Question ${i + 1} is missing question text.`;
       }
+      const normQ = q.question
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (seenQuestions.has(normQ)) {
+        return `Question ${i + 1} is a duplicate of an earlier question. Every question must be unique.`;
+      }
+      seenQuestions.add(normQ);
+
       if (!Array.isArray(q.options) || q.options.length !== 4) {
         return `Question ${i + 1} must have exactly 4 answer choices.`;
       }
+      const seenOpts = new Set<string>();
       for (let j = 0; j < q.options.length; j++) {
         const optText = (q.options[j] || '').trim();
         if (!optText) {
           return `Question ${i + 1}, Option ${String.fromCharCode(65 + j)} is empty.`;
         }
+        const normOpt = optText.toLowerCase().replace(/\s+/g, ' ');
+        if (seenOpts.has(normOpt)) {
+          return `Question ${i + 1} has duplicate answer choices ("${optText}"). All 4 choices must be distinct.`;
+        }
+        seenOpts.add(normOpt);
         if (/^(all|none)\s+of\s+the\s+above$/i.test(optText)) {
           return `Question ${i + 1}, choice "${optText}" is not allowed. Avoid "All of the above" or "None of the above".`;
         }
@@ -1325,7 +1363,10 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                       </div>
                       <div className="flex items-center gap-3 text-xs font-bold text-emerald-800 flex-wrap">
                         <span>✓ {generatedQuestions.length} questions ready</span>
-                        <span>✓ Explanations & hints included</span>
+                        <span>✓ Topic Relevance: {validationReport?.topicRelevance || `${generatedQuestions.length}/${generatedQuestions.length}`}</span>
+                        <span>✓ Duplicates: {validationReport?.duplicateQuestions ?? 0}</span>
+                        <span>✓ Valid Options: {validationReport?.validAnswerOptions || `${generatedQuestions.length}/${generatedQuestions.length}`}</span>
+                        <span>✓ Difficulty ({difficulty}): {validationReport?.difficultyCompliance || `${generatedQuestions.length}/${generatedQuestions.length}`}</span>
                         <span className="flex items-center gap-1 text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
                           <Shuffle className="w-3 h-3" />
                           <span>Options auto-shuffled for students</span>

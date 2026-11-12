@@ -52,15 +52,19 @@ class AIRouter {
     userPrompt,
     systemPrompt = '',
     schema = null,
+     preferredProvider = null,
     fallbackFactory = null,
-    allowFallbackToGemini = false,
+    allowFallbackToGemini = true,
     allowFallbackToOpenAI = true,
     validateQuestions = false,
     questionValidationOptions = {},
     validatePlan = false,
-    timeoutMs = 15000
+    timeoutMs = 25000
   }) {
-    const designatedProvider = getAIProvider(taskType);
+    const designatedProvider =
+      preferredProvider === 'openai' || preferredProvider === 'gemini'
+        ? preferredProvider
+        : getAIProvider(taskType);
     const preferredModel = getPreferredModel(designatedProvider, taskType);
     const startTime = Date.now();
     const effectivePrompt = prompt || userPrompt || '';
@@ -330,6 +334,16 @@ class AIRouter {
         throw err;
       }
     }
+  }
+  /**
+   * Compatibility alias for structured task execution (`routeRequest` -> `executeTask`).
+   */
+  async routeRequest(options = {}) {
+    return this.executeTask({
+      allowFallbackToGemini: true,
+      allowFallbackToOpenAI: true,
+      ...options
+    });
   }
 }
 

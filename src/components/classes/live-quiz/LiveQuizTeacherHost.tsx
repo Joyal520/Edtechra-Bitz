@@ -436,8 +436,8 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
 
     const correctIdx = activeQuestion?.correctIndex ?? 0;
 
-    // 1. Persist reveal state in DB
-    await liveQuizService.revealAnswer(session.id, correctIdx);
+    // 1. Persist reveal state in DB (guarded by currentQIndex)
+    await liveQuizService.revealAnswer(session.id, correctIdx, currentQIndex);
 
     // 2. Broadcast question_reveal to all students
     safeBroadcast({

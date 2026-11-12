@@ -11,7 +11,7 @@ export const LiveQuizPlayPage: React.FC = () => {
   const { classroomId, sessionId } = useParams<{ classroomId: string; sessionId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isTeacher } = useAuth();
+  const { user, profile, isTeacher } = useAuth();
   const initialSession = (location.state as any)?.initialSession as LiveQuizSession | undefined;
 
   const [session, setSession] = useState<LiveQuizSession | null>(initialSession || null);
@@ -40,14 +40,33 @@ export const LiveQuizPlayPage: React.FC = () => {
     try {
       const s = await liveQuizService.getSessionById(sessionId || '');
       if (s) {
-        // Strict Host Guard: If current user is the host teacher, redirect to host controls!
-        const isHost = (s.teacher_id && user?.id && s.teacher_id === user.id) || isTeacher;
+        // Strict Host Guard: Only the session's actual teacher_id is redirected to host controls
+        const isHost = s.teacher_id
+          ? Boolean(user?.id && s.teacher_id === user.id)
+          : Boolean(isTeacher);
         if (isHost) {
           navigate(`/classes/${classroomId || s.classroom_id}/live-quiz/host/${s.id}`, {
             state: { initialSession: s },
             replace: true
           });
           return;
+        }
+
+        // Ensure student participant record is registered in live_quiz_participants
+        if (user?.id) {
+          const displayName =
+            profile?.full_name ||
+            (profile as any)?.name ||
+            user.user_metadata?.full_name ||
+            user.email?.split('@')[0] ||
+            'Student';
+          liveQuizService
+            .joinSession({
+              session_id: s.id,
+              display_name: displayName,
+              avatar_url: profile?.avatar_url || (profile as any)?.avatarUrl || undefined
+            })
+            .catch(() => {});
         }
         const scheduledTimeStr = s.scheduled_start_at || s.started_at;
         const isScheduledTimeReached = Boolean(

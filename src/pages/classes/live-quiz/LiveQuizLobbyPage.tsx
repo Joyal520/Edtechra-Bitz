@@ -31,7 +31,9 @@ export const LiveQuizLobbyPage: React.FC = () => {
         return;
       }
 
-      const isHostTeacher = isTeacher || s.teacher_id === user?.id;
+      const isHostTeacher = s.teacher_id
+        ? Boolean(user?.id && s.teacher_id === user.id)
+        : Boolean(isTeacher);
 
       // Only navigate to host/play if session is actively in progress or reveal
       if (s.status === 'in_progress' || s.status === 'reveal') {
@@ -104,7 +106,9 @@ export const LiveQuizLobbyPage: React.FC = () => {
     );
   }
 
-  const isHostTeacher = isTeacher || session.teacher_id === user?.id;
+  const isHostTeacher = session.teacher_id
+    ? Boolean(user?.id && session.teacher_id === user.id)
+    : Boolean(isTeacher);
 
   return (
     <div className="w-full min-h-[100dvh] overflow-y-auto flex flex-col justify-center items-center px-3 sm:px-4 py-4 sm:py-6 bg-gradient-to-br from-[#EAF7FF] via-[#F5FBFF] to-[#E6F4FF]">

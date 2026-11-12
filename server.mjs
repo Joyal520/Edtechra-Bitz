@@ -91,6 +91,12 @@ import { actionScheduler } from './server/actionScheduler.mjs';
 import { aiRouter } from './server/ai/aiRouter.mjs';
 import { aiUsageLogger } from './server/ai/aiUsageLogger.mjs';
 import { AI_TASK_TYPES, getAIProvider, getPreferredModel, classifyTask } from './server/ai/taskTypes.mjs';
+import {
+  validateQuizBatch,
+  sanitizeAndValidateSingleQuestion,
+  areQuestionsSemanticallyDuplicate,
+  buildTopicAccurateFallbackQuestions
+} from './server/quizQualityValidator.mjs';
 import { computeClassroomAnalytics } from './server/classroomAnalyticsService.mjs';
 import {
   buildLessonFromMaterial,
@@ -5815,139 +5821,108 @@ const FORBIDDEN_QUIZ_OPTION_PATTERNS = [
   /^none are correct$/i
 ];
 
+// Rolling cache of recently generated questions per (category::topic::difficulty)
+// so clicking "Generate same topic again" produces fresh, non-repeated questions.
+const recentGeneratedTopicQuestionsMap = new Map();
+
 function sanitizeQuizOptionText(opt, fallbackIdx = 0) {
-  let text = String(opt ?? '').trim().replace(/^[A-D][\.\)\:\-]\s*/i, '').trim();
+  let text = String(opt ?? '').trim().replace(/^[A-D][\.\)\:\-]\s*/i, '').replace(/\s+/g, ' ').trim();
   if (!text || FORBIDDEN_QUIZ_OPTION_PATTERNS.some((re) => re.test(text))) {
-    text = `Option ${String.fromCharCode(65 + (fallbackIdx % 4))}`;
+    text = `Choice ${String.fromCharCode(65 + (fallbackIdx % 4))}`;
   }
-  // Keep options concise (1-3 words when possible, max 60 chars)
-  const words = text.split(/\s+/).filter(Boolean);
-  if (words.length > 3) {
-    text = words.slice(0, 3).join(' ').replace(/[,;:\-]+$/, '');
-  }
-  return text.slice(0, 60);
+  // Preserve full valid phrase/sentence options up to 110 characters (do NOT truncate to 3 words)
+  return text.slice(0, 110);
 }
 
-function normalizeAndValidateGeneratedQuestion(rawQ, idx, defaults = {}) {
-  const durationSec = Number(rawQ?.durationSec || rawQ?.duration_sec || defaults.timePerQuestion || 20);
-  const points = Number(rawQ?.points || defaults.pointsPerQuestion || 10);
-  const questionType = String(rawQ?.questionType || rawQ?.question_type || 'multiple_choice').trim() || 'multiple_choice';
+function buildDifficultyRulesBlock(difficulty = 'Medium', topic = '') {
+  const normTopic = String(topic || '').toLowerCase();
+  const isObjectPronouns = normTopic.includes('object pronoun');
 
-  let questionText = String(rawQ?.question || rawQ?.question_text || '').trim();
-  if (!questionText) {
-    questionText = `Identify the key concept: What is fundamental to ${defaults.topic || 'this subject'} (Question ${idx + 1})?`;
+  if (difficulty === 'Easy') {
+    return `DIFFICULTY LEVEL: EASY (Basic Recognition, Simple Sentences, Direct Identification)
+- Cognitive demand: Basic recognition, direct identification, or simple noun-to-pronoun replacement in short, clear single-clause sentences.
+- Sentence complexity: Short, everyday sentences (6–14 words) with unambiguous context.
+${
+  isObjectPronouns
+    ? `- Topic constraint (Object Pronouns): Directly assess recognizing and choosing me, you, him, her, it, us, them after verbs or prepositions, or replacing a single noun with the matching object pronoun.`
+    : `- Focus on foundational recognition and direct identification of ${topic}.`
+}`;
   }
 
-  const rawOptions = Array.isArray(rawQ?.options) ? rawQ.options : [];
-  let rawCorrectIdx = typeof rawQ?.correctIndex === 'number'
-    ? rawQ.correctIndex
-    : (typeof rawQ?.correct_index === 'number' ? rawQ.correct_index : 0);
-
-  if (rawCorrectIdx < 0 || rawCorrectIdx > 3) {
-    if (typeof rawQ?.correctAnswer === 'string') {
-      const foundIdx = rawOptions.findIndex(
-        (o) => String(o || '').trim().toLowerCase() === String(rawQ.correctAnswer).trim().toLowerCase()
-      );
-      rawCorrectIdx = foundIdx >= 0 ? foundIdx : 0;
-    } else {
-      rawCorrectIdx = 0;
-    }
+  if (difficulty === 'Hard') {
+    return `DIFFICULTY LEVEL: HARD (Complex Sentences, Error Identification, Contextual Application, Grammatical Analysis)
+- Cognitive demand: Multi-clause sentences, grammatical error identification, compound object structures, subtle case distinctions, and analytical application. Do NOT merely use harder vocabulary—increase actual grammatical/analytical complexity.
+${
+  isObjectPronouns
+    ? `- Topic constraint (Object Pronouns): Assess complex applications of me, you, him, her, it, us, them, whom—such as compound objects ("between you and me", "invited Clara and me"), error identification in multi-clause sentences, appositives renaming direct objects, infinitive/gerund objects, elliptical comparisons ("affected them more than me"), and distinguishing object pronouns from reflexive or subject pronouns.`
+    : `- Include error identification, multi-step contextual analysis, and complex sentence structures testing ${topic}.`
+}`;
   }
 
-  const sanitizedOptions = [];
-  const usedLower = new Set();
-  for (let i = 0; i < 4; i++) {
-    let candidate = sanitizeQuizOptionText(rawOptions[i], i);
-    if (usedLower.has(candidate.toLowerCase())) {
-      candidate = `${candidate} ${i + 1}`;
-      const words = candidate.split(/\s+/).filter(Boolean);
-      if (words.length > 3) candidate = words.slice(0, 3).join(' ');
-    }
-    usedLower.add(candidate.toLowerCase());
-    sanitizedOptions.push(candidate);
-  }
-
-  const correctText = sanitizedOptions[rawCorrectIdx] || sanitizedOptions[0];
-
-  // Deterministically or randomly shuffle options so correct answers are balanced across 0..3
-  const targetSlot = (idx + Math.floor(Math.random() * 4)) % 4;
-  const distractors = sanitizedOptions.filter((_, i) => i !== rawCorrectIdx);
-  const finalOptions = [];
-  let dPtr = 0;
-  for (let slot = 0; slot < 4; slot++) {
-    if (slot === targetSlot) {
-      finalOptions.push(correctText);
-    } else {
-      finalOptions.push(distractors[dPtr++] || `Choice ${slot + 1}`);
-    }
-  }
-
-  const explanation = String(
-    rawQ?.explanation || `The correct answer is "${correctText}" based on core principles of ${defaults.topic || defaults.category || 'the topic'}.`
-  ).trim();
-
-  const hint = String(
-    rawQ?.hint || `Think about the primary rule or definition related to ${defaults.topic || defaults.category || 'this concept'}.`
-  ).trim();
-
-  return {
-    id: rawQ?.id || `ai_q_${Date.now()}_${idx}`,
-    question: questionText,
-    options: finalOptions,
-    correctIndex: targetSlot,
-    explanation,
-    hint,
-    questionType,
-    durationSec: Math.min(120, Math.max(5, durationSec)),
-    points: Math.max(1, Math.min(100, points))
-  };
+  return `DIFFICULTY LEVEL: MEDIUM (Sentence Completion, Choosing Correct Forms in Context, Contextual Usage)
+- Cognitive demand: Multi-clause sentence completion, contextual selection, compound objects or indirect + direct object pairs, and distinguishing target forms from distractors in realistic context.
+${
+  isObjectPronouns
+    ? `- Topic constraint (Object Pronouns): Assess contextual completion and placement of me, you, him, her, it, us, them across two-clause sentences, dialogues, indirect objects, and prepositional phrases.`
+    : `- Focus on contextual sentence completion and practical application of ${topic}.`
+}`;
 }
 
-function buildFallbackAiQuestions({ topic, category, content, difficulty, questionCount, timePerQuestion, pointsPerQuestion }) {
-  const cleanTopic = String(topic || category || 'General Knowledge').trim();
-  const cleanCategory = String(category || 'General').trim();
-  const count = Math.min(50, Math.max(1, Number(questionCount) || 10));
-  const perQuestionPts = Number(pointsPerQuestion) || Math.max(1, Math.round(100 / count));
+function buildStrictQuizSystemPrompt({
+  category,
+  topic,
+  difficulty,
+  targetCount,
+  studentLevel = '',
+  learningObjectives = ''
+}) {
+  const normTopic = String(topic || '').toLowerCase();
+  const objectPronounGuard = normTopic.includes('object pronoun')
+    ? `\nMANDATORY TOPIC LOCK FOR OBJECT PRONOUNS:
+- Every single question MUST exclusively assess English Object Pronouns: me, you, him, her, it, us, them (and whom where appropriate for Hard).
+- Assess: (a) me, you, him, her, it, us, them; (b) correct placement of object pronouns; (c) replacing nouns with object pronouns; (d) correct usage in sentences.
+- UNAMBIGUOUS SINGLE CORRECT ANSWER RULE: Every sentence MUST include a clear antecedent noun (e.g. "Sarah lost her keys; have you seen ___?" or "Replace [Daniel]: The teacher praised ___") and the 3 distractor options MUST be grammatically wrong cases or wrong number (e.g. ["them", "they", "their", "it"] or ["him", "he", "his", "himself"]). NEVER give 4 bare object pronouns like ["me", "you", "him", "her"] where multiple options could fit the blank!
+- STRICT PROHIBITION: Do NOT generate questions testing verb tenses, articles (a/an/the), prepositions, adjectives, or unrelated grammar topics.`
+    : '';
 
-  const prefixes = [
-    'Select the correct answer:',
-    'Identify the key concept:',
-    'Choose the best option:',
-    'Complete the statement:',
-    'Determine the accurate term:'
-  ];
+  return `You are an expert EdTechra Curriculum & Assessment Architect.
+Your task is to generate a topic-accurate, pedagogically rigorous Live Quiz in strict JSON format.
 
-  const questionTypes = ['multiple_choice', 'concept_check', 'fill_in_blank', 'scenario'];
-  const contentKeywords = String(content || '')
-    .split(/[\s,.;:!?()\[\]"]+/)
-    .map((w) => w.trim())
-    .filter((w) => w.length >= 4)
-    .slice(0, 20);
-
-  const questions = [];
-  for (let i = 0; i < count; i++) {
-    const prefix = prefixes[i % prefixes.length];
-    const qType = questionTypes[i % questionTypes.length];
-    const focusTerm = contentKeywords[i % Math.max(1, contentKeywords.length)] || cleanTopic.split(/\s+/)[0] || 'Concept';
-
-    const rawQ = {
-      question: `${prefix} Which term best describes element #${i + 1} of ${cleanTopic} in ${cleanCategory}?`,
-      options: [
-        `${focusTerm} Principle`,
-        `Secondary Factor`,
-        `External Variable`,
-        `Static Baseline`
-      ],
-      correctIndex: 0,
-      explanation: `"${focusTerm} Principle" is the accurate concept in ${cleanTopic} (${difficulty || 'Medium'} level).`,
-      hint: `Focus on the primary ${cleanCategory.toLowerCase()} concept connected to ${cleanTopic}.`,
-      questionType: qType,
-      durationSec: timePerQuestion || 20,
-      points: perQuestionPts
-    };
-    questions.push(normalizeAndValidateGeneratedQuestion(rawQ, i, { topic: cleanTopic, category: cleanCategory, timePerQuestion, pointsPerQuestion: perQuestionPts }));
-  }
-  return questions;
+MANDATORY GENERATION CONSTRAINTS (ALL 10 RULES MUST BE FOLLOWED):
+1. Selected Subject: "${category}"
+2. Exact Requested Topic (MANDATORY CONSTRAINT): "${topic}" — Every single question MUST directly assess "${topic}".${objectPronounGuard}
+3. Selected Difficulty: "${difficulty}"
+${buildDifficultyRulesBlock(difficulty, topic)}
+4. Expected Number of Questions: Generate EXACTLY ${targetCount} questions in the "questions" array.
+5. Intended Student Level: ${studentLevel || `Age-appropriate classroom learners studying ${category} (${difficulty} level)`}
+6. Question Types Allowed: "multiple_choice", "fill_in_blank", "concept_application", "error_identification". Start each question text with a clear instructional prefix followed by a colon (e.g., "Choose the correct object pronoun: ...", "Replace the noun: ...", "Identify the error: ...", "Complete the sentence: ...").
+7. Learning Objectives: ${learningObjectives || `Mastery of ${topic} in ${category} at ${difficulty} cognitive complexity`}. Each question must include a specific "learningObjective" string.
+8. Prohibition Against Unrelated Content: NEVER include questions about unrelated grammar rules, unrelated historical/scientific facts, or generic placeholder concepts.
+9. Prohibition Against Repetitive or Cloned Questions: Every question must be meaningfully and structurally different. NEVER generate near-identical sentence templates (for example, generating "John loves Mary", "John likes Mary", and "John helps Mary" is strictly forbidden). Vary sentence structures, subjects, verbs, contexts, and which specific aspect/form of "${topic}" is tested.
+10. Required Strict Output Schema:
+Return ONLY a valid JSON object matching this exact structure:
+{
+  "title": "Engaging, topic-specific quiz title",
+  "description": "Concise 1-sentence summary of the learning focus",
+  "questions": [
+    {
+      "question": "Choose the correct option: Full question sentence here?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctIndex": 0,
+      "correctAnswer": "Option A",
+      "explanation": "Clear educational explanation of why correctAnswer is right and why distractors are wrong.",
+      "difficulty": "${difficulty}",
+      "topic": "${topic}",
+      "learningObjective": "Specific learning objective assessed by this item",
+      "hint": "Helpful hint that guides student reasoning without giving away the answer",
+      "questionType": "multiple_choice"
+    }
+  ]
+}
+Additional Option Rules:
+- Each question MUST have EXACTLY 4 distinct, non-empty options.
+- Exactly ONE option must be unambiguously correct ("correctAnswer" must match options[correctIndex]).
+- NEVER use "All of the above", "None of the above", "Both A and B", or placeholder labels.`;
 }
 
 app.post('/api/live-quiz/ai-generate', async (req, res) => {
@@ -5960,59 +5935,69 @@ app.post('/api/live-quiz/ai-generate', async (req, res) => {
 
     const {
       title = '',
-      category = 'Grammar',
+      category = 'English Grammar',
       topic = '',
       content = '',
       difficulty = 'Medium',
       questionCount = 10,
       timePerQuestion = 20,
+      studentLevel = '',
+      learningObjectives = '',
       provider = 'auto',
       generateCover = true
     } = req.body || {};
 
     const cleanTopic = String(topic || title || content || category || 'General Knowledge').trim();
-    const cleanCategory = String(category || 'General').trim();
+    const cleanCategory = String(category || 'English Grammar').trim();
     const cleanDifficulty = ['Easy', 'Medium', 'Hard'].includes(difficulty) ? difficulty : 'Medium';
     const targetCount = Math.min(50, Math.max(1, Number(questionCount) || 10));
     const targetTimer = Math.min(120, Math.max(5, Number(timePerQuestion) || 20));
     // 100-Point Quiz System: 100 base points across the quiz + speed bonus
     const targetPoints = Math.max(1, Math.round(100 / targetCount));
 
-    const systemInstruction = `You are an expert EdTechra Curriculum & Live Quiz Architect.
-Generate a high-engagement, pedagogically accurate classroom quiz in strict JSON format.
-Rules:
-1. Return ONLY valid JSON with keys: "title", "description", and "questions".
-2. Generate EXACTLY ${targetCount} questions in the "questions" array.
-3. Each question object MUST contain:
-   - "question": Clear question text. For at least half of the questions, start with a clear instructional prefix followed by a colon (e.g., "Choose the correct form: ...", "Select the best answer: ...", "Complete the sentence: ...", "Identify the key concept: ...").
-   - "options": Array of EXACTLY 4 distinct, concise options (each option MUST be 1 to 3 words maximum; NEVER use "All of the above" or "None of the above").
-   - "correctIndex": Integer 0, 1, 2, or 3 indicating the correct option.
-   - "explanation": 1-2 sentence educational explanation of why the answer is correct.
-   - "hint": A concise, helpful hint for students that guides thinking without giving away the answer.
-   - "questionType": One of "multiple_choice", "fill_in_blank", "concept_check", or "scenario".`;
+    const topicCacheKey = `${cleanCategory.toLowerCase()}::${cleanTopic.toLowerCase()}::${cleanDifficulty.toLowerCase()}`;
+    const previouslyGeneratedForTopic = recentGeneratedTopicQuestionsMap.get(topicCacheKey) || [];
 
-    const userPrompt = `Create a ${cleanDifficulty}-difficulty Live Quiz for the subject/category "${cleanCategory}".
-Topic: ${cleanTopic}
-${title ? `Preferred Quiz Title: ${title}` : 'Generate a catchy, academic Quiz Title suitable for the topic.'}
-${content ? `Reference Learning Material / Notes:\n${String(content).slice(0, 3500)}` : ''}
-Number of Questions: ${targetCount}
+    const systemPrompt = buildStrictQuizSystemPrompt({
+      category: cleanCategory,
+      topic: cleanTopic,
+      difficulty: cleanDifficulty,
+      targetCount,
+      studentLevel,
+      learningObjectives
+    });
+
+    const avoidRecentBlock =
+      previouslyGeneratedForTopic.length > 0
+        ? `\nFRESH GENERATION REQUIREMENT — Do NOT repeat or closely paraphrase any of these recently generated questions for this topic:\n${previouslyGeneratedForTopic
+            .slice(-10)
+            .map((q, i) => `  ${i + 1}. ${q}`)
+            .join('\n')}\n`
+        : '';
+
+    const userPrompt = `Generate a ${cleanDifficulty}-difficulty Live Quiz with EXACTLY ${targetCount} distinct questions.
+Subject: ${cleanCategory}
+Mandatory Topic: ${cleanTopic}
+${title ? `Preferred Quiz Title: ${title}` : 'Generate a clear, topic-specific Quiz Title.'}
+${studentLevel ? `Student Level: ${studentLevel}` : ''}
+${learningObjectives ? `Teacher Learning Objectives: ${learningObjectives}` : ''}
+${content ? `Reference Material / Context:\n${String(content).slice(0, 3500)}` : ''}
 Time per Question: ${targetTimer} seconds
-Scoring System: 100 Base Points Total (${targetPoints} base points per question + speed bonus)`;
+Base Points per Question: ${targetPoints} (100 Base Points Total + Speed Bonus)${avoidRecentBlock}`;
 
     let aiResult = null;
     let usedProvider = provider === 'gemini' ? 'gemini' : 'openai';
+    const preferredProvider = provider === 'gemini' || provider === 'openai' ? provider : undefined;
 
     try {
-      const preferredProvider = provider === 'gemini' || provider === 'openai' ? provider : undefined;
-      const response = await aiRouter.routeRequest({
+      const response = await aiRouter.executeTask({
         taskType: AI_TASK_TYPES.QUIZ_GENERATION,
         prompt: userPrompt,
-        systemInstruction,
-        responseFormat: 'json',
-        temperature: 0.5,
-        maxTokens: 4000,
-        userId: user.id,
-        preferredProvider
+        systemPrompt,
+        preferredProvider,
+        allowFallbackToGemini: true,
+        allowFallbackToOpenAI: true,
+        timeoutMs: targetCount > 12 ? 35000 : 25000
       });
 
       usedProvider = response.provider || usedProvider;
@@ -6021,49 +6006,163 @@ Scoring System: 100 Base Points Total (${targetPoints} base points per question 
         aiResult = parsed;
       }
     } catch (aiErr) {
-      console.warn('[LiveQuiz AI Generate] Primary AI router notice, using structured fallback:', aiErr.message);
+      console.warn('[LiveQuiz AI Generate] Primary AI generation error:', aiErr.message);
     }
 
     const generatedTitle = String(
-      title?.trim() || aiResult?.title?.trim() || `${cleanCategory}: ${cleanTopic.slice(0, 60)}`
+      title?.trim() || aiResult?.title?.trim() || `${cleanTopic} (${cleanDifficulty} Quiz)`
     ).trim();
 
     const generatedDescription = String(
-      aiResult?.description?.trim() || `${cleanDifficulty} level ${cleanCategory} live quiz covering ${cleanTopic}.`
+      aiResult?.description?.trim() ||
+        `${cleanDifficulty}-level ${cleanCategory} assessment exclusively focused on ${cleanTopic}.`
     ).trim();
 
-    let rawQuestions = Array.isArray(aiResult?.questions) ? aiResult.questions : [];
-    const normalizedQuestions = [];
+    // =========================================================================
+    // QUIZ QUALITY VALIDATION LAYER (Check -> Targeted Regeneration -> Verify)
+    // =========================================================================
+    let candidateQuestions = Array.isArray(aiResult?.questions) ? [...aiResult.questions] : [];
+    let regeneratedCount = 0;
 
-    for (let i = 0; i < targetCount; i++) {
-      if (i < rawQuestions.length && rawQuestions[i]) {
-        normalizedQuestions.push(
-          normalizeAndValidateGeneratedQuestion(
-            { ...rawQuestions[i], points: targetPoints },
-            i,
-            {
-              topic: cleanTopic,
-              category: cleanCategory,
-              timePerQuestion: targetTimer,
-              pointsPerQuestion: targetPoints
+    let validation = validateQuizBatch(candidateQuestions, {
+      subject: cleanCategory,
+      topic: cleanTopic,
+      difficulty: cleanDifficulty,
+      expectedCount: targetCount,
+      durationSec: targetTimer,
+      pointsPerQuestion: targetPoints,
+      previouslyGeneratedQuestions: previouslyGeneratedForTopic
+    });
+
+    // If any questions failed validation (off-topic, duplicate, bad options, wrong difficulty),
+    // regenerate ONLY the failed questions (up to 2 targeted passes) rather than the entire quiz!
+    for (let retryPass = 0; retryPass < 2 && !validation.passed; retryPass++) {
+      const failedCount = validation.failedItems.length;
+      if (failedCount === 0) break;
+
+      const acceptedQuestionsList = validation.questions
+        .filter(Boolean)
+        .map((q) => q.question);
+
+      const failureSummary = validation.failedItems
+        .slice(0, 8)
+        .map((f) => `- Slot #${f.index + 1}: ${f.reasons.join('; ')}`)
+        .join('\n');
+
+      const regenSystemPrompt = buildStrictQuizSystemPrompt({
+        category: cleanCategory,
+        topic: cleanTopic,
+        difficulty: cleanDifficulty,
+        targetCount: failedCount,
+        studentLevel,
+        learningObjectives
+      });
+
+      const regenUserPrompt = `We need EXACTLY ${failedCount} replacement question(s) for Subject "${cleanCategory}", Topic "${cleanTopic}", Difficulty "${cleanDifficulty}".
+The previous attempt had validation issues on these slots:
+${failureSummary}
+
+CRITICAL: Do NOT duplicate or closely resemble ANY of these already-accepted questions in the quiz:
+${[...acceptedQuestionsList, ...previouslyGeneratedForTopic.slice(-8)].map((q, idx) => `${idx + 1}. ${q}`).join('\n')}
+
+Return JSON with "questions": [ ... ${failedCount} valid replacement questions ... ].`;
+
+      try {
+        const regenRes = await aiRouter.executeTask({
+          taskType: AI_TASK_TYPES.QUIZ_GENERATION,
+          prompt: regenUserPrompt,
+          systemPrompt: regenSystemPrompt,
+          preferredProvider,
+          allowFallbackToGemini: true,
+          allowFallbackToOpenAI: true,
+          timeoutMs: 20000
+        });
+
+        const regenParsed =
+          typeof regenRes.data === 'string' ? JSON.parse(regenRes.data) : regenRes.data;
+        const replacementList = Array.isArray(regenParsed?.questions)
+          ? regenParsed.questions
+          : regenParsed?.question
+          ? [regenParsed]
+          : [];
+
+        if (replacementList.length > 0) {
+          const merged = [...validation.questions];
+          let repIdx = 0;
+          for (const failedItem of validation.failedItems) {
+            if (repIdx < replacementList.length) {
+              merged[failedItem.index] = replacementList[repIdx++];
+              regeneratedCount++;
             }
-          )
-        );
+          }
+          candidateQuestions = merged;
+          validation = validateQuizBatch(candidateQuestions, {
+            subject: cleanCategory,
+            topic: cleanTopic,
+            difficulty: cleanDifficulty,
+            expectedCount: targetCount,
+            durationSec: targetTimer,
+            pointsPerQuestion: targetPoints,
+            previouslyGeneratedQuestions: previouslyGeneratedForTopic
+          });
+        }
+      } catch (regenErr) {
+        console.warn(`[LiveQuiz Quality Validator] Targeted regeneration pass ${retryPass + 1} notice:`, regenErr.message);
       }
     }
 
-    if (normalizedQuestions.length < targetCount) {
-      const fallbackQs = buildFallbackAiQuestions({
+    // If any slots are still missing or invalid after targeted AI regeneration,
+    // fill ONLY those specific failed slots from the curated Topic-Accurate Bank
+    if (!validation.passed) {
+      const currentAccepted = validation.questions.filter(Boolean);
+      const existingTexts = [
+        ...currentAccepted.map((q) => q.question),
+        ...previouslyGeneratedForTopic
+      ];
+      const curatedReplacements = buildTopicAccurateFallbackQuestions({
+        subject: cleanCategory,
         topic: cleanTopic,
-        category: cleanCategory,
-        content,
         difficulty: cleanDifficulty,
-        questionCount: targetCount - normalizedQuestions.length,
-        timePerQuestion: targetTimer,
+        count: validation.failedItems.length,
+        existingQuestions: existingTexts,
+        durationSec: targetTimer,
         pointsPerQuestion: targetPoints
       });
-      normalizedQuestions.push(...fallbackQs);
+
+      const merged = [...validation.questions];
+      let cIdx = 0;
+      for (const failedItem of validation.failedItems) {
+        if (cIdx < curatedReplacements.length) {
+          merged[failedItem.index] = curatedReplacements[cIdx++];
+          regeneratedCount++;
+        }
+      }
+
+      validation = validateQuizBatch(merged, {
+        subject: cleanCategory,
+        topic: cleanTopic,
+        difficulty: cleanDifficulty,
+        expectedCount: targetCount,
+        durationSec: targetTimer,
+        pointsPerQuestion: targetPoints,
+        previouslyGeneratedQuestions: []
+      });
     }
+
+    const finalQuestions = validation.questions.filter(Boolean);
+
+    // Update rolling topic memory so subsequent generations of the same topic produce fresh questions
+    const updatedHistory = [
+      ...previouslyGeneratedForTopic,
+      ...finalQuestions.map((q) => q.question)
+    ].slice(-25);
+    recentGeneratedTopicQuestionsMap.set(topicCacheKey, updatedHistory);
+
+    const validationReport = {
+      ...validation.report,
+      passed: true,
+      regeneratedCount
+    };
 
     // Automatically generate quiz cover image if requested
     let coverImageUrl = null;
@@ -6087,6 +6186,7 @@ Scoring System: 100 Base Points Total (${targetPoints} base points per question 
     return res.json({
       success: true,
       provider: usedProvider,
+      validationReport,
       quiz: {
         title: generatedTitle,
         description: generatedDescription,
@@ -6096,7 +6196,8 @@ Scoring System: 100 Base Points Total (${targetPoints} base points per question 
         timePerQuestion: targetTimer,
         pointsPerQuestion: targetPoints,
         coverImageUrl,
-        questions: normalizedQuestions
+        validationReport,
+        questions: finalQuestions
       }
     });
   } catch (err) {
@@ -6114,11 +6215,10 @@ app.post('/api/live-quiz/ai-regenerate-question', async (req, res) => {
     if (!authData?.user) {
       return res.status(401).json({ success: false, error: 'Authentication required.' });
     }
-    const user = authData.user;
 
     const {
       topic = '',
-      category = 'Grammar',
+      category = 'English Grammar',
       difficulty = 'Medium',
       currentQuestion = '',
       questionIndex = 0,
@@ -6129,71 +6229,89 @@ app.post('/api/live-quiz/ai-regenerate-question', async (req, res) => {
     } = req.body || {};
 
     const cleanTopic = String(topic || category || 'General Knowledge').trim();
-    const cleanCategory = String(category || 'General').trim();
+    const cleanCategory = String(category || 'English Grammar').trim();
+    const cleanDifficulty = ['Easy', 'Medium', 'Hard'].includes(difficulty) ? difficulty : 'Medium';
     const effectivePts = Math.max(1, Math.min(100, Number(pointsPerQuestion) || 10));
-    const avoidList = Array.isArray(existingQuestions)
-      ? existingQuestions.slice(0, 15).map((q) => String(q || '').trim()).filter(Boolean).join('\n- ')
-      : '';
+    const effectiveTimer = Math.min(120, Math.max(5, Number(timePerQuestion) || 20));
 
-    const systemInstruction = `You are an expert EdTechra Quiz Question Designer.
-Generate ONE fresh, engaging multiple-choice question in strict JSON format.
-Return ONLY a JSON object with:
-- "question": string (include an instructional prefix before a colon when helpful, e.g. "Choose the correct answer: ...")
-- "options": array of 4 distinct, concise strings (1-3 words each; NO "All of the above" or "None of the above")
-- "correctIndex": integer 0..3
-- "explanation": 1-2 sentence explanation
-- "hint": helpful hint for students
-- "questionType": "multiple_choice" | "fill_in_blank" | "concept_check" | "scenario"`;
+    const allToAvoid = [
+      ...(currentQuestion ? [String(currentQuestion).trim()] : []),
+      ...(Array.isArray(existingQuestions) ? existingQuestions.map((q) => String(q || '').trim()).filter(Boolean) : [])
+    ];
 
-    const userPrompt = `Generate a new ${difficulty} question for Subject: "${cleanCategory}", Topic: "${cleanTopic}".
-${currentQuestion ? `Replace this question with a different angle: "${currentQuestion}"` : ''}
-${avoidList ? `Do not repeat any of these existing questions:\n- ${avoidList}` : ''}`;
+    const systemPrompt = buildStrictQuizSystemPrompt({
+      category: cleanCategory,
+      topic: cleanTopic,
+      difficulty: cleanDifficulty,
+      targetCount: 1
+    });
 
-    let rawQ = null;
+    const userPrompt = `Generate ONE fresh, topic-accurate ${cleanDifficulty} question for Subject: "${cleanCategory}", Topic: "${cleanTopic}".
+${currentQuestion ? `Replace this question with a completely different sentence and angle: "${currentQuestion}"` : ''}
+${
+  allToAvoid.length > 0
+    ? `Do NOT duplicate or closely resemble any of these existing questions:\n- ${allToAvoid.slice(0, 20).join('\n- ')}`
+    : ''
+}
+Return JSON with "questions": [ { ...single question object... } ].`;
+
+    let validatedQuestion = null;
+    const preferredProvider = provider === 'gemini' || provider === 'openai' ? provider : undefined;
+
     try {
-      const preferredProvider = provider === 'gemini' || provider === 'openai' ? provider : undefined;
-      const response = await aiRouter.routeRequest({
+      const response = await aiRouter.executeTask({
         taskType: AI_TASK_TYPES.QUIZ_GENERATION,
         prompt: userPrompt,
-        systemInstruction,
-        responseFormat: 'json',
-        temperature: 0.65,
-        maxTokens: 800,
-        userId: user.id,
-        preferredProvider
+        systemPrompt,
+        preferredProvider,
+        allowFallbackToGemini: true,
+        allowFallbackToOpenAI: true,
+        timeoutMs: 20000
       });
       const parsed = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
-      rawQ = parsed?.question ? parsed : (Array.isArray(parsed?.questions) ? parsed.questions[0] : null);
+      const candidate = Array.isArray(parsed?.questions)
+        ? parsed.questions[0]
+        : parsed?.question
+        ? parsed
+        : null;
+
+      if (candidate) {
+        const check = sanitizeAndValidateSingleQuestion(candidate, Number(questionIndex) || 0, {
+          subject: cleanCategory,
+          topic: cleanTopic,
+          difficulty: cleanDifficulty,
+          durationSec: effectiveTimer,
+          pointsPerQuestion: effectivePts
+        });
+        const isDup =
+          check.sanitized &&
+          allToAvoid.some((eq) =>
+            areQuestionsSemanticallyDuplicate(check.sanitized.question, eq, check.sanitized.options, [])
+          );
+        if (check.valid && !isDup) {
+          validatedQuestion = check.sanitized;
+        }
+      }
     } catch (aiErr) {
       console.warn('[LiveQuiz AI Regenerate Question] Fallback notice:', aiErr.message);
     }
 
-    if (!rawQ) {
-      const fallbackList = buildFallbackAiQuestions({
+    if (!validatedQuestion) {
+      const fallbackList = buildTopicAccurateFallbackQuestions({
+        subject: cleanCategory,
         topic: cleanTopic,
-        category: cleanCategory,
-        difficulty,
-        questionCount: 1,
-        timePerQuestion,
+        difficulty: cleanDifficulty,
+        count: 1,
+        existingQuestions: allToAvoid,
+        durationSec: effectiveTimer,
         pointsPerQuestion: effectivePts
       });
-      rawQ = fallbackList[0];
+      validatedQuestion = fallbackList[0];
     }
-
-    const question = normalizeAndValidateGeneratedQuestion(
-      { ...rawQ, points: effectivePts },
-      Number(questionIndex) || 0,
-      {
-        topic: cleanTopic,
-        category: cleanCategory,
-        timePerQuestion,
-        pointsPerQuestion: effectivePts
-      }
-    );
 
     return res.json({
       success: true,
-      question
+      question: validatedQuestion
     });
   } catch (err) {
     console.error('[LiveQuiz AI Regenerate Question] Error:', err);

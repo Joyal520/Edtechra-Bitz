@@ -73,13 +73,13 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
       return;
     }
     const quizId = session.quiz_id || session.quiz?.id;
-    if (session.id) {
+    if (quizId) {
       liveQuizService
-        .getStudentQuestions(session.id)
+        .getStudentQuestions(quizId)
         .then((qs) => {
           if (qs && qs.length > 0) {
             setRealQuestionsCount(qs.length);
-          } else if (quizId) {
+          } else {
             liveQuizService.getQuizById(quizId).then((q) => {
               if (q?.questions?.length) {
                 setRealQuestionsCount(q.questions.length);
@@ -288,9 +288,30 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
     }
   }, [session.id]);
 
-  // 5. Connect to Supabase Realtime Channel
+  // 5. Connect to Supabase Realtime Channel & ensure student participant row exists
   useEffect(() => {
-    loadParticipants();
+    const isCurrentHost = session.teacher_id
+      ? Boolean(user?.id && session.teacher_id === user.id)
+      : Boolean(isTeacher);
+
+    if (!isCurrentHost && user?.id) {
+      const displayName =
+        profile?.full_name ||
+        (profile as any)?.name ||
+        user.user_metadata?.full_name ||
+        user.email?.split('@')[0] ||
+        'Student';
+      liveQuizService
+        .joinSession({
+          session_id: session.id,
+          display_name: displayName,
+          avatar_url: profile?.avatar_url || (profile as any)?.avatarUrl || undefined
+        })
+        .then(() => loadParticipants())
+        .catch(() => loadParticipants());
+    } else {
+      loadParticipants();
+    }
 
     const channel = liveQuizService.createRealtimeChannel(pin);
     if (!channel) return;
@@ -401,6 +422,18 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
             alert('This Live Quiz was cancelled.');
             navigate(`/classes/${session.classroom_id}`);
           }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'live_quiz_participants',
+          filter: `session_id=eq.${session.id}`
+        },
+        () => {
+          loadParticipants();
         }
       )
       .subscribe(async (status) => {
