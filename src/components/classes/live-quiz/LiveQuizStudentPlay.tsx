@@ -334,7 +334,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       deadlineMs: Number(state.deadline_ms),
       totalQuestions: state.total_questions || questions.length || 0,
       hint: q.hint || undefined,
-      points: Number(q.points || 1000)
+      points: Number(q.points && q.points < 500 ? q.points : Math.max(1, Math.round(100 / Math.max(1, state.total_questions || questions.length || 10))))
     });
 
     // Our own recorded answer (survives refresh, reconnect, late load)

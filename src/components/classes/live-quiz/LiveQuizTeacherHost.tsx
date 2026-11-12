@@ -754,7 +754,7 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
 
           <div className="flex items-center gap-3">
             <span className="px-2.5 py-1 rounded-lg bg-[#E5F2FF] text-[#10245A] font-extrabold text-xs">
-              Up to 1,000 pts (500 + Speed Bonus)
+              {Math.max(1, Math.round(100 / Math.max(1, questions.length)))} pts/Q + Speed Bonus (100 Base Pts)
             </span>
             {isQuestionTimed ? (
               <span

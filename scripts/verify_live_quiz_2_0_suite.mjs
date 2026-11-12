@@ -40,14 +40,14 @@ console.log('--- [Test 1] Direct AI Quiz Builder & Cover Image Generation ---');
   assert.ok(coverUrl, 'Cover generator must return a valid publicUrl');
   console.log(`✓ Cover generated (${coverResult.modelUsed}): ${coverUrl.slice(0, 64)}...`);
 
-  // Simulate AI Quiz generation & preview editing workflow
+  // Simulate AI Quiz generation & preview editing workflow (100-Point Quiz System: 5 Qs = 20 base pts/Q)
   const generatedQuiz = {
     title: 'Solar System Explorer',
     description: 'Interactive 5-question Medium quiz on Solar System Planets.',
     category: 'Science',
     topic: 'Solar System Planets',
     difficulty: 'Medium',
-    points_per_question: 1000,
+    points_per_question: 20,
     cover_image_url: coverUrl,
     questions: Array.from({ length: 5 }, (_, i) => ({
       id: `ai_q_${i + 1}`,
@@ -58,7 +58,7 @@ console.log('--- [Test 1] Direct AI Quiz Builder & Cover Image Generation ---');
       hint: 'Think about the inner rocky planets.',
       questionType: 'multiple_choice',
       durationSec: 20,
-      points: 1000
+      points: 20
     }))
   };
 
@@ -74,7 +74,7 @@ console.log('--- [Test 1] Direct AI Quiz Builder & Cover Image Generation ---');
     hint: 'Famous for the Great Red Spot.',
     questionType: 'multiple_choice',
     durationSec: 20,
-    points: 1000
+    points: 20
   });
   assert.strictEqual(generatedQuiz.questions.length, 6, 'Teacher can add a new question in preview');
   generatedQuiz.questions.pop();
@@ -95,7 +95,7 @@ console.log('--- [Test 2] Manual Quiz Creation ---');
     track_quiz: true,
     timer_enabled: true,
     timer_seconds: 20,
-    points_per_question: 1000,
+    points_per_question: 20,
     questions: [
       {
         id: 'm_q1',
@@ -105,7 +105,7 @@ console.log('--- [Test 2] Manual Quiz Creation ---');
         durationSec: 20,
         explanation: 'Past simple negative uses did not + base verb.',
         hint: 'Yesterday indicates past simple.',
-        points: 1000
+        points: 20
       }
     ]
   };
@@ -205,17 +205,16 @@ console.log('--- [Test 3] Live Student Answer Counter ---');
 }
 
 // ----------------------------------------------------------------------------
-// TEST 4: SPEED BONUS POINTS
+// TEST 4: 100-POINT QUIZ + SPEED BONUS POINTS
 // ----------------------------------------------------------------------------
-console.log('--- [Test 4] Speed Bonus Points Calculation & Anti-Cheat ---');
+console.log('--- [Test 4] 100-Point Quiz + Speed Bonus Points Calculation & Anti-Cheat ---');
 {
   function calculateSpeedBonusScore({
     questionStartMs,
     submitServerMs,
     questionDurationSec = 20,
-    isCorrect,
-    basePoints = 500,
-    maximumSpeedBonus = 500
+    totalQuestions = 10,
+    isCorrect
   }) {
     const durationMs = Math.max(1000, questionDurationSec * 1000);
     const deadlineMs = questionStartMs + durationMs;
@@ -234,6 +233,9 @@ console.log('--- [Test 4] Speed Bonus Points Calculation & Anti-Cheat ---');
       return { rejected: null, basePoints: 0, speedBonus: 0, totalPoints: 0, responseTimeMs };
     }
 
+    // 100 Base Points across the quiz + Speed Bonus (up to 50% of basePoints per question)
+    const basePoints = Math.max(1, Math.round(100 / Math.max(1, totalQuestions)));
+    const maximumSpeedBonus = Math.max(1, Math.round(basePoints / 2));
     const speedBonus = Math.round((maximumSpeedBonus * remainingTimeMs) / durationMs);
     const totalPoints = basePoints + speedBonus;
     return { rejected: null, basePoints, speedBonus, totalPoints, responseTimeMs };
@@ -242,93 +244,78 @@ console.log('--- [Test 4] Speed Bonus Points Calculation & Anti-Cheat ---');
   const startMs = 1700000000000;
   const durationSec = 20; // 20,000 ms
 
-  // Case 1: Immediate correct answer (0% elapsed) -> 500 + 500 = 1,000
+  // 10-question quiz: 10 base points per question (100 base points for full quiz) + up to 5 speed bonus pts/Q
+  // Case 1: Immediate correct answer (0% elapsed) -> 10 base + 5 bonus = 15 pts
   const immediate = calculateSpeedBonusScore({
     questionStartMs: startMs,
     submitServerMs: startMs,
     questionDurationSec: durationSec,
+    totalQuestions: 10,
     isCorrect: true
   });
-  assert.strictEqual(immediate.basePoints, 500);
-  assert.strictEqual(immediate.speedBonus, 500);
-  assert.strictEqual(immediate.totalPoints, 1000);
+  assert.strictEqual(immediate.basePoints, 10);
+  assert.strictEqual(immediate.speedBonus, 5);
+  assert.strictEqual(immediate.totalPoints, 15);
 
-  // Case 2: 25% elapsed (5,000 ms) -> 500 + 375 = 875
-  const elapsed25 = calculateSpeedBonusScore({
-    questionStartMs: startMs,
-    submitServerMs: startMs + 5000,
-    questionDurationSec: durationSec,
-    isCorrect: true
-  });
-  assert.strictEqual(elapsed25.basePoints, 500);
-  assert.strictEqual(elapsed25.speedBonus, 375);
-  assert.strictEqual(elapsed25.totalPoints, 875);
-
-  // Case 3: 50% elapsed (10,000 ms) -> 500 + 250 = 750
-  const elapsed50 = calculateSpeedBonusScore({
+  // Case 2: 5-question quiz (20 base pts/Q -> 100 base pts total + up to 10 speed bonus pts/Q) at 50% elapsed
+  const fiveQ50 = calculateSpeedBonusScore({
     questionStartMs: startMs,
     submitServerMs: startMs + 10000,
     questionDurationSec: durationSec,
+    totalQuestions: 5,
     isCorrect: true
   });
-  assert.strictEqual(elapsed50.basePoints, 500);
-  assert.strictEqual(elapsed50.speedBonus, 250);
-  assert.strictEqual(elapsed50.totalPoints, 750);
+  assert.strictEqual(fiveQ50.basePoints, 20);
+  assert.strictEqual(fiveQ50.speedBonus, 5);
+  assert.strictEqual(fiveQ50.totalPoints, 25);
 
-  // Case 4: 75% elapsed (15,000 ms) -> 500 + 125 = 625
-  const elapsed75 = calculateSpeedBonusScore({
-    questionStartMs: startMs,
-    submitServerMs: startMs + 15000,
-    questionDurationSec: durationSec,
-    isCorrect: true
-  });
-  assert.strictEqual(elapsed75.basePoints, 500);
-  assert.strictEqual(elapsed75.speedBonus, 125);
-  assert.strictEqual(elapsed75.totalPoints, 625);
-
-  // Case 5: Near deadline (20,000 ms) -> 500 + 0 = 500
+  // Case 3: Near deadline (20,000 ms) on 10-question quiz -> 10 base + 0 bonus = 10 pts (10 * 10 = 100 pts for quiz)
   const nearDeadline = calculateSpeedBonusScore({
     questionStartMs: startMs,
     submitServerMs: startMs + 20000,
     questionDurationSec: durationSec,
+    totalQuestions: 10,
     isCorrect: true
   });
-  assert.strictEqual(nearDeadline.basePoints, 500);
+  assert.strictEqual(nearDeadline.basePoints, 10);
   assert.strictEqual(nearDeadline.speedBonus, 0);
-  assert.strictEqual(nearDeadline.totalPoints, 500);
+  assert.strictEqual(nearDeadline.totalPoints, 10);
 
-  // Case 6: Incorrect answer (even immediate) -> 0 + 0 = 0
+  // Case 4: Incorrect answer (even immediate) -> 0 + 0 = 0
   const incorrect = calculateSpeedBonusScore({
     questionStartMs: startMs,
     submitServerMs: startMs + 1000,
     questionDurationSec: durationSec,
+    totalQuestions: 10,
     isCorrect: false
   });
   assert.strictEqual(incorrect.basePoints, 0);
   assert.strictEqual(incorrect.speedBonus, 0);
   assert.strictEqual(incorrect.totalPoints, 0);
 
-  // Case 7: Negative timestamp manipulation attempt -> clamped to 0ms elapsed (max 1,000 pts)
+  // Case 5: Negative timestamp manipulation attempt -> clamped to 0ms elapsed
   const negativeClockAttempt = calculateSpeedBonusScore({
     questionStartMs: startMs,
     submitServerMs: startMs - 9999,
     questionDurationSec: durationSec,
+    totalQuestions: 10,
     isCorrect: true
   });
   assert.strictEqual(negativeClockAttempt.responseTimeMs, 0);
-  assert.strictEqual(negativeClockAttempt.totalPoints, 1000);
+  assert.strictEqual(negativeClockAttempt.totalPoints, 15);
 
-  // Case 8: Expired submission after deadline -> rejected with LATE and 0 points
+  // Case 6: Expired submission after deadline -> rejected with LATE and 0 points
   const expiredAttempt = calculateSpeedBonusScore({
     questionStartMs: startMs,
     submitServerMs: startMs + 20500,
     questionDurationSec: durationSec,
+    totalQuestions: 10,
     isCorrect: true
   });
   assert.strictEqual(expiredAttempt.rejected, 'LATE');
   assert.strictEqual(expiredAttempt.totalPoints, 0);
 
-  console.log('✓ PASS: Test 4 (Speed Bonus Points: 1000/875/750/625/500/0, negative clamp & deadline enforcement)\n');
+  console.log('✓ PASS: Test 4 (100-Point Quiz + Speed Bonus: 100 base pts/quiz + speed bonus, negative clamp & deadline enforcement)\n');
 }
 
 // ----------------------------------------------------------------------------
@@ -407,17 +394,17 @@ console.log('--- [Test 6] Final Host Leaderboard (Podium, All Participants, Ties
   ];
 
   const answers = [
-    // Aarav: 2 correct, fast -> 1900 pts
-    { student_id: 'stu-gold', is_correct: true, points_awarded: 950, response_time_ms: 2000 },
-    { student_id: 'stu-gold', is_correct: true, points_awarded: 950, response_time_ms: 2000 },
-    // Diya: 2 correct, 1600 pts, avg 4000ms
-    { student_id: 'stu-silver-fast', is_correct: true, points_awarded: 800, response_time_ms: 4000 },
-    { student_id: 'stu-silver-fast', is_correct: true, points_awarded: 800, response_time_ms: 4000 },
-    // Rohan: 2 correct, 1600 pts (tied on score & correct_count with Diya, but slower avg 8000ms)
-    { student_id: 'stu-bronze-slow', is_correct: true, points_awarded: 800, response_time_ms: 8000 },
-    { student_id: 'stu-bronze-slow', is_correct: true, points_awarded: 800, response_time_ms: 8000 },
-    // Kabir: 1 correct -> 750 pts
-    { student_id: 'stu-fourth', is_correct: true, points_awarded: 750, response_time_ms: 10000 },
+    // Aarav: 2 correct, fast (50 base + 22 bonus = 72 pts each -> 144 pts)
+    { student_id: 'stu-gold', is_correct: true, points_awarded: 72, response_time_ms: 2000 },
+    { student_id: 'stu-gold', is_correct: true, points_awarded: 72, response_time_ms: 2000 },
+    // Diya: 2 correct, 120 pts (50 base + 10 bonus), avg 4000ms
+    { student_id: 'stu-silver-fast', is_correct: true, points_awarded: 60, response_time_ms: 4000 },
+    { student_id: 'stu-silver-fast', is_correct: true, points_awarded: 60, response_time_ms: 4000 },
+    // Rohan: 2 correct, 120 pts (tied on score & correct_count with Diya, but slower avg 8000ms)
+    { student_id: 'stu-bronze-slow', is_correct: true, points_awarded: 60, response_time_ms: 8000 },
+    { student_id: 'stu-bronze-slow', is_correct: true, points_awarded: 60, response_time_ms: 8000 },
+    // Kabir: 1 correct -> 55 pts
+    { student_id: 'stu-fourth', is_correct: true, points_awarded: 55, response_time_ms: 10000 },
     { student_id: 'stu-fourth', is_correct: false, points_awarded: 0, response_time_ms: 12000 }
     // Zara: submitted no answers -> 0 pts
   ];
@@ -482,7 +469,7 @@ console.log('--- [Test 6] Final Host Leaderboard (Podium, All Participants, Ties
   // 2. Podium: Gold (1st), Silver (2nd), Bronze (3rd)
   assert.strictEqual(firstRenderLeaderboard[0].student_id, 'stu-gold');
   assert.strictEqual(firstRenderLeaderboard[0].medal, 'Gold');
-  assert.strictEqual(firstRenderLeaderboard[0].score, 1900);
+  assert.strictEqual(firstRenderLeaderboard[0].score, 144);
 
   // 3. Tied score (1600 pts) broken deterministically by faster average response time (4000ms vs 8000ms)
   assert.strictEqual(firstRenderLeaderboard[1].student_id, 'stu-silver-fast');

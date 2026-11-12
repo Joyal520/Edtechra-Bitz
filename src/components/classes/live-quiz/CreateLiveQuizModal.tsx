@@ -70,7 +70,8 @@ const QUESTION_TYPE_OPTIONS = [
 type ModalMode = 'ai' | 'manual';
 type AiStep = 'configure' | 'preview_edit';
 
-function buildDefaultQuestions(count: number, durationSec = 20, points = 1000): LiveQuizQuestion[] {
+function buildDefaultQuestions(count: number, durationSec = 20): LiveQuizQuestion[] {
+  const perQuestionPts = Math.max(1, Math.round(100 / Math.max(1, count)));
   return Array.from({ length: count }, (_, idx) => ({
     id: `q_${Date.now()}_${idx + 1}`,
     question: '',
@@ -80,7 +81,7 @@ function buildDefaultQuestions(count: number, durationSec = 20, points = 1000): 
     explanation: '',
     hint: '',
     questionType: 'multiple_choice',
-    points
+    points: perQuestionPts
   }));
 }
 
@@ -103,7 +104,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
   const [questionCount, setQuestionCount] = useState<number>(10);
   const [difficulty, setDifficulty] = useState<LiveQuizDifficulty>('Medium');
   const [category, setCategory] = useState('Grammar');
-  const [pointsPerQuestion, setPointsPerQuestion] = useState<number>(1000);
+  const [pointsPerQuestion, setPointsPerQuestion] = useState<number>(10);
   const [aiProvider, setAiProvider] = useState<'auto' | 'openai' | 'gemini'>('auto');
   const [autoGenerateCover, setAutoGenerateCover] = useState<boolean>(true);
 
@@ -126,7 +127,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
   const [manualCategory, setManualCategory] = useState('Grammar');
   const [manualDifficulty, setManualDifficulty] = useState<LiveQuizDifficulty>('Medium');
   const [manualDescription, setManualDescription] = useState('');
-  const [manualQuestions, setManualQuestions] = useState<LiveQuizQuestion[]>(buildDefaultQuestions(5, 20, 1000));
+  const [manualQuestions, setManualQuestions] = useState<LiveQuizQuestion[]>(buildDefaultQuestions(5, 20));
 
   // Submission State
   const [isSaving, setIsSaving] = useState(false);
@@ -164,7 +165,9 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         setIsCustomTimer(initTimed && !PER_QUESTION_TIMER_PRESETS.includes(initSec as any));
         setTrackQuiz(initialQuiz.track_quiz !== false);
         setVisibility(initialQuiz.visibility || 'private');
-        setPointsPerQuestion(initialQuiz.points_per_question || initialQuiz.questions?.[0]?.points || 1000);
+        const initCount = Math.max(1, initialQuiz.questions?.length || 5);
+        const initPtsPerQ = Math.max(1, Math.round(100 / initCount));
+        setPointsPerQuestion(initPtsPerQ);
         setManualQuestions(
           initialQuiz.questions && initialQuiz.questions.length > 0
             ? initialQuiz.questions.map((q, idx) => ({
@@ -176,9 +179,9 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                 explanation: q.explanation || '',
                 hint: q.hint || '',
                 questionType: q.questionType || 'multiple_choice',
-                points: q.points || initialQuiz.points_per_question || 1000
+                points: initPtsPerQ
               }))
-            : buildDefaultQuestions(5, initTimed ? initSec : 86400, 1000)
+            : buildDefaultQuestions(5, initTimed ? initSec : 86400)
         );
       } else {
         setMode('ai');
@@ -190,7 +193,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         setQuestionCount(10);
         setDifficulty('Medium');
         setCategory('Grammar');
-        setPointsPerQuestion(1000);
+        setPointsPerQuestion(10);
         setAiProvider('auto');
         setAutoGenerateCover(true);
         setTimerEnabled(true);
@@ -205,7 +208,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         setManualCategory('Grammar');
         setManualDifficulty('Medium');
         setCoverImageUrl(null);
-        setManualQuestions(buildDefaultQuestions(5, 20, 1000));
+        setManualQuestions(buildDefaultQuestions(5, 20));
       }
       setError(null);
     }
@@ -1056,26 +1059,21 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                       </p>
                     </div>
 
-                    {/* Points Per Question & AI Provider */}
+                    {/* 100-Point Quiz Scoring & AI Provider */}
                     <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
                       <div className="flex items-center justify-between">
                         <label className="block text-xs font-black text-slate-800 uppercase tracking-wider">
-                          Points / Q
+                          Quiz Scoring
                         </label>
                         <span className="inline-flex items-center gap-0.5 text-[10px] font-black text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
                           <Zap className="w-2.5 h-2.5" />
-                          <span>500 + 500 Speed</span>
+                          <span>100 Pts + Bonus</span>
                         </span>
                       </div>
-                      <select
-                        value={pointsPerQuestion}
-                        onChange={(e) => setPointsPerQuestion(Number(e.target.value))}
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 cursor-pointer"
-                      >
-                        <option value={1000}>1,000 pts (500 base + 500 speed)</option>
-                        <option value={500}>500 pts (250 base + 250 speed)</option>
-                        <option value={2000}>2,000 pts (1000 base + 1000 speed)</option>
-                      </select>
+                      <div className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-[11px] font-bold text-slate-800">
+                        {Math.max(1, Math.round(100 / Math.max(1, questionCount)))} pts/Q + up to{' '}
+                        {Math.max(1, Math.round(Math.max(1, Math.round(100 / Math.max(1, questionCount))) / 2))} speed bonus
+                      </div>
 
                       <div className="flex items-center justify-between pt-1">
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500">
@@ -1463,7 +1461,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                                 ))}
                               </select>
                               <span className="text-[10px] font-black text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
-                                {q.points || pointsPerQuestion} pts max
+                                {Math.max(1, Math.round(100 / Math.max(1, generatedQuestions.length)))} pts + bonus
                               </span>
                             </div>
 
@@ -1919,7 +1917,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                           Question {qIndex + 1}
                         </strong>
                         <span className="text-[10px] font-black text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
-                          {q.points || pointsPerQuestion} pts max
+                          {Math.max(1, Math.round(100 / Math.max(1, manualQuestions.length)))} pts + bonus
                         </span>
                       </div>
                       {manualQuestions.length > 1 && (

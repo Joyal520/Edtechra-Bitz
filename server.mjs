@@ -1078,6 +1078,15 @@ async function verifyAuthUser(req) {
   return lookupPromise;
 }
 
+// Compatibility helper returning { user, profile, error }
+async function verifyAuthenticatedUser(req) {
+  const authData = await verifyAuthUser(req);
+  if (!authData || !authData.user) {
+    return { user: null, profile: null, error: req.authError || 'Authentication required.' };
+  }
+  return { user: authData.user, profile: authData.profile, error: null };
+}
+
 // Helper: Authoritative server-side teacher authorization check
 async function isTeacherAuthorized(authData, classroomId) {
   if (!authData || !authData.user) return false;
@@ -5821,7 +5830,7 @@ function sanitizeQuizOptionText(opt, fallbackIdx = 0) {
 
 function normalizeAndValidateGeneratedQuestion(rawQ, idx, defaults = {}) {
   const durationSec = Number(rawQ?.durationSec || rawQ?.duration_sec || defaults.timePerQuestion || 20);
-  const points = Number(rawQ?.points || defaults.pointsPerQuestion || 1000);
+  const points = Number(rawQ?.points || defaults.pointsPerQuestion || 10);
   const questionType = String(rawQ?.questionType || rawQ?.question_type || 'multiple_choice').trim() || 'multiple_choice';
 
   let questionText = String(rawQ?.question || rawQ?.question_text || '').trim();
@@ -5890,7 +5899,7 @@ function normalizeAndValidateGeneratedQuestion(rawQ, idx, defaults = {}) {
     hint,
     questionType,
     durationSec: Math.min(120, Math.max(5, durationSec)),
-    points: Math.max(100, points)
+    points: Math.max(1, Math.min(100, points))
   };
 }
 
@@ -5898,6 +5907,7 @@ function buildFallbackAiQuestions({ topic, category, content, difficulty, questi
   const cleanTopic = String(topic || category || 'General Knowledge').trim();
   const cleanCategory = String(category || 'General').trim();
   const count = Math.min(50, Math.max(1, Number(questionCount) || 10));
+  const perQuestionPts = Number(pointsPerQuestion) || Math.max(1, Math.round(100 / count));
 
   const prefixes = [
     'Select the correct answer:',
@@ -5933,19 +5943,20 @@ function buildFallbackAiQuestions({ topic, category, content, difficulty, questi
       hint: `Focus on the primary ${cleanCategory.toLowerCase()} concept connected to ${cleanTopic}.`,
       questionType: qType,
       durationSec: timePerQuestion || 20,
-      points: pointsPerQuestion || 1000
+      points: perQuestionPts
     };
-    questions.push(normalizeAndValidateGeneratedQuestion(rawQ, i, { topic: cleanTopic, category: cleanCategory, timePerQuestion, pointsPerQuestion }));
+    questions.push(normalizeAndValidateGeneratedQuestion(rawQ, i, { topic: cleanTopic, category: cleanCategory, timePerQuestion, pointsPerQuestion: perQuestionPts }));
   }
   return questions;
 }
 
 app.post('/api/live-quiz/ai-generate', async (req, res) => {
   try {
-    const { user, error: authErr } = await verifyAuthenticatedUser(req);
-    if (authErr || !user) {
-      return res.status(401).json({ success: false, error: authErr || 'Unauthorized' });
+    const authData = await verifyAuthUser(req);
+    if (!authData?.user) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
     }
+    const user = authData.user;
 
     const {
       title = '',
@@ -5955,7 +5966,6 @@ app.post('/api/live-quiz/ai-generate', async (req, res) => {
       difficulty = 'Medium',
       questionCount = 10,
       timePerQuestion = 20,
-      pointsPerQuestion = 1000,
       provider = 'auto',
       generateCover = true
     } = req.body || {};
@@ -5965,7 +5975,8 @@ app.post('/api/live-quiz/ai-generate', async (req, res) => {
     const cleanDifficulty = ['Easy', 'Medium', 'Hard'].includes(difficulty) ? difficulty : 'Medium';
     const targetCount = Math.min(50, Math.max(1, Number(questionCount) || 10));
     const targetTimer = Math.min(120, Math.max(5, Number(timePerQuestion) || 20));
-    const targetPoints = Math.max(100, Number(pointsPerQuestion) || 1000);
+    // 100-Point Quiz System: 100 base points across the quiz + speed bonus
+    const targetPoints = Math.max(1, Math.round(100 / targetCount));
 
     const systemInstruction = `You are an expert EdTechra Curriculum & Live Quiz Architect.
 Generate a high-engagement, pedagogically accurate classroom quiz in strict JSON format.
@@ -5986,7 +5997,7 @@ ${title ? `Preferred Quiz Title: ${title}` : 'Generate a catchy, academic Quiz T
 ${content ? `Reference Learning Material / Notes:\n${String(content).slice(0, 3500)}` : ''}
 Number of Questions: ${targetCount}
 Time per Question: ${targetTimer} seconds
-Points per Question: ${targetPoints} (500 base + up to 500 speed bonus)`;
+Scoring System: 100 Base Points Total (${targetPoints} base points per question + speed bonus)`;
 
     let aiResult = null;
     let usedProvider = provider === 'gemini' ? 'gemini' : 'openai';
@@ -6027,12 +6038,16 @@ Points per Question: ${targetPoints} (500 base + up to 500 speed bonus)`;
     for (let i = 0; i < targetCount; i++) {
       if (i < rawQuestions.length && rawQuestions[i]) {
         normalizedQuestions.push(
-          normalizeAndValidateGeneratedQuestion(rawQuestions[i], i, {
-            topic: cleanTopic,
-            category: cleanCategory,
-            timePerQuestion: targetTimer,
-            pointsPerQuestion: targetPoints
-          })
+          normalizeAndValidateGeneratedQuestion(
+            { ...rawQuestions[i], points: targetPoints },
+            i,
+            {
+              topic: cleanTopic,
+              category: cleanCategory,
+              timePerQuestion: targetTimer,
+              pointsPerQuestion: targetPoints
+            }
+          )
         );
       }
     }
@@ -6095,10 +6110,11 @@ Points per Question: ${targetPoints} (500 base + up to 500 speed bonus)`;
 
 app.post('/api/live-quiz/ai-regenerate-question', async (req, res) => {
   try {
-    const { user, error: authErr } = await verifyAuthenticatedUser(req);
-    if (authErr || !user) {
-      return res.status(401).json({ success: false, error: authErr || 'Unauthorized' });
+    const authData = await verifyAuthUser(req);
+    if (!authData?.user) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
     }
+    const user = authData.user;
 
     const {
       topic = '',
@@ -6108,12 +6124,13 @@ app.post('/api/live-quiz/ai-regenerate-question', async (req, res) => {
       questionIndex = 0,
       existingQuestions = [],
       timePerQuestion = 20,
-      pointsPerQuestion = 1000,
+      pointsPerQuestion = 10,
       provider = 'auto'
     } = req.body || {};
 
     const cleanTopic = String(topic || category || 'General Knowledge').trim();
     const cleanCategory = String(category || 'General').trim();
+    const effectivePts = Math.max(1, Math.min(100, Number(pointsPerQuestion) || 10));
     const avoidList = Array.isArray(existingQuestions)
       ? existingQuestions.slice(0, 15).map((q) => String(q || '').trim()).filter(Boolean).join('\n- ')
       : '';
@@ -6158,17 +6175,21 @@ ${avoidList ? `Do not repeat any of these existing questions:\n- ${avoidList}` :
         difficulty,
         questionCount: 1,
         timePerQuestion,
-        pointsPerQuestion
+        pointsPerQuestion: effectivePts
       });
       rawQ = fallbackList[0];
     }
 
-    const question = normalizeAndValidateGeneratedQuestion(rawQ, Number(questionIndex) || 0, {
-      topic: cleanTopic,
-      category: cleanCategory,
-      timePerQuestion,
-      pointsPerQuestion
-    });
+    const question = normalizeAndValidateGeneratedQuestion(
+      { ...rawQ, points: effectivePts },
+      Number(questionIndex) || 0,
+      {
+        topic: cleanTopic,
+        category: cleanCategory,
+        timePerQuestion,
+        pointsPerQuestion: effectivePts
+      }
+    );
 
     return res.json({
       success: true,
@@ -6185,10 +6206,11 @@ ${avoidList ? `Do not repeat any of these existing questions:\n- ${avoidList}` :
 
 app.post('/api/live-quiz/ai-generate-cover', async (req, res) => {
   try {
-    const { user, error: authErr } = await verifyAuthenticatedUser(req);
-    if (authErr || !user) {
-      return res.status(401).json({ success: false, error: authErr || 'Unauthorized' });
+    const authData = await verifyAuthUser(req);
+    if (!authData?.user) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
     }
+    const user = authData.user;
 
     const { title = '', topic = '', category = 'General', difficulty = 'Medium' } = req.body || {};
     const coverRes = await generateQuizCoverImage({

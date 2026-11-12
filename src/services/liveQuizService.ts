@@ -250,6 +250,7 @@ class LiveQuizService {
         ? 'Created by Teacher'
         : 'Created by EdTechra';
 
+      const defaultPtsPerQ = Math.max(1, Math.round(100 / Math.max(1, (data.questions || []).length)));
       let questionsList = (data.questions || []).sort((a: any, b: any) => a.question_index - b.question_index).map((item: any) => ({
         id: item.id,
         question: item.question_text,
@@ -259,7 +260,7 @@ class LiveQuizService {
         explanation: item.explanation,
         hint: item.hint || '',
         questionType: item.question_type || 'multiple_choice',
-        points: item.points || 1000
+        points: item.points && item.points < 500 ? item.points : defaultPtsPerQ
       }));
 
       // RLS Fallback for students: if direct query returned no questions, fetch via security definer RPC
@@ -269,6 +270,7 @@ class LiveQuizService {
             p_quiz_id: quizId
           });
           if (!rpcErr && Array.isArray(studentQuestions) && studentQuestions.length > 0) {
+            const stuDefaultPts = Math.max(1, Math.round(100 / Math.max(1, studentQuestions.length)));
             questionsList = studentQuestions.sort((a: any, b: any) => (a.question_index ?? 0) - (b.question_index ?? 0)).map((item: any) => ({
               id: item.id,
               question: item.question_text,
@@ -278,7 +280,7 @@ class LiveQuizService {
               explanation: '',
               hint: item.hint || '',
               questionType: item.question_type || 'multiple_choice',
-              points: item.points || 1000
+              points: item.points && item.points < 500 ? item.points : stuDefaultPts
             }));
           }
         } catch (rpcEx) {
@@ -322,6 +324,7 @@ class LiveQuizService {
         p_quiz_id: quizId
       });
       if (!error && Array.isArray(data) && data.length > 0) {
+        const defaultPtsPerQ = Math.max(1, Math.round(100 / Math.max(1, data.length)));
         return data.sort((a: any, b: any) => (a.question_index ?? 0) - (b.question_index ?? 0)).map((item: any) => ({
           id: item.id,
           question: item.question_text,
@@ -329,7 +332,7 @@ class LiveQuizService {
           durationSec: item.duration_sec || 20,
           hint: item.hint || '',
           questionType: item.question_type || 'multiple_choice',
-          points: item.points || 1000
+          points: item.points && item.points < 500 ? item.points : defaultPtsPerQ
         }));
       }
     } catch (err) {
@@ -604,7 +607,8 @@ class LiveQuizService {
 
       if (quizError) throw quizError;
 
-      // 2. Insert normalized questions with per-question duration (with fallback if hint/question_type not migrated yet)
+      // 2. Insert normalized questions with per-question duration (100 base points across the quiz)
+      const perQuestionPoints = Math.max(1, Math.round(100 / Math.max(1, normalizedQuestions.length)));
       const extendedQuestionRows = normalizedQuestions.map((q, idx) => ({
         quiz_id: quizData.id,
         question_index: idx,
@@ -615,7 +619,7 @@ class LiveQuizService {
         explanation: q.explanation || null,
         hint: q.hint || '',
         question_type: q.questionType || 'multiple_choice',
-        points: q.points || payload.points_per_question || 1000
+        points: perQuestionPoints
       }));
 
       let { error: questionsError } = await supabase
@@ -1810,7 +1814,7 @@ class LiveQuizService {
     const pointsAwarded = Number(rpcData.points_awarded || 0);
     const basePoints = typeof rpcData.base_points === 'number'
       ? rpcData.base_points
-      : (isCorrect ? Math.min(500, pointsAwarded) : 0);
+      : (isCorrect ? pointsAwarded : 0);
     const speedBonus = typeof rpcData.speed_bonus === 'number'
       ? rpcData.speed_bonus
       : (isCorrect ? Math.max(0, pointsAwarded - basePoints) : 0);

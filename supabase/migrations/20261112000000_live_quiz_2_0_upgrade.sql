@@ -3,7 +3,8 @@
 -- 1. Safe non-destructive schema extensions for AI Quiz Builder, Speed Bonus,
 --    and Response Time tracking.
 -- 2. Accurate real-time student participation & unique answer counting.
--- 3. Authoritative server-side Speed Bonus scoring (500 base + up to 500 speed bonus).
+-- 3. Authoritative server-side 100-Point Quiz + Speed Bonus scoring
+--    (100 base points distributed across questions + speed bonus per question).
 -- 4. Atomic, complete Final Leaderboard generation (all participants, deterministic
 --    tie-breaking, zero-point student inclusion, and classroom_points sync).
 -- ============================================================================
@@ -15,12 +16,12 @@ BEGIN;
 -- ----------------------------------------------------------------------------
 ALTER TABLE public.live_quizzes
     ADD COLUMN IF NOT EXISTS topic TEXT,
-    ADD COLUMN IF NOT EXISTS points_per_question INTEGER NOT NULL DEFAULT 1000;
+    ADD COLUMN IF NOT EXISTS points_per_question INTEGER NOT NULL DEFAULT 10;
 
 ALTER TABLE public.live_quiz_questions
     ADD COLUMN IF NOT EXISTS hint TEXT DEFAULT '',
     ADD COLUMN IF NOT EXISTS question_type TEXT NOT NULL DEFAULT 'multiple_choice',
-    ADD COLUMN IF NOT EXISTS points INTEGER NOT NULL DEFAULT 1000;
+    ADD COLUMN IF NOT EXISTS points INTEGER NOT NULL DEFAULT 10;
 
 ALTER TABLE public.live_quiz_answers
     ADD COLUMN IF NOT EXISTS question_id UUID REFERENCES public.live_quiz_questions(id) ON DELETE SET NULL,
@@ -102,7 +103,7 @@ AS $$
         q.duration_sec,
         COALESCE(q.hint, '') AS hint,
         COALESCE(q.question_type, 'multiple_choice') AS question_type,
-        COALESCE(q.points, 1000) AS points
+        COALESCE(q.points, 10) AS points
     FROM public.live_quiz_questions q
     WHERE q.quiz_id = p_quiz_id
     ORDER BY q.question_index ASC;
@@ -438,10 +439,10 @@ $$;
 GRANT EXECUTE ON FUNCTION public.lq_try_advance(UUID, INTEGER) TO authenticated;
 
 -- ----------------------------------------------------------------------------
--- 7. AUTHORITATIVE ANSWER SUBMISSION WITH SPEED BONUS SCORING (PART 4)
+-- 7. AUTHORITATIVE ANSWER SUBMISSION WITH 100-POINT QUIZ + SPEED BONUS SCORING (PART 4)
 -- Formula:
---   basePoints = 500
---   maximumSpeedBonus = 500
+--   basePoints = GREATEST(1, ROUND(100.0 / totalQuestions))  (100 base points per quiz)
+--   maximumSpeedBonus = GREATEST(1, ROUND(basePoints / 2.0))
 --   remainingTime = max(0, questionDuration - responseTime)
 --   speedBonus = round(maximumSpeedBonus * remainingTime / questionDuration)
 --   totalPoints = correctAnswer ? basePoints + speedBonus : 0
@@ -472,7 +473,9 @@ DECLARE
     v_grace_ms BIGINT := 1500; -- 1.5s network transport grace
     v_response_time_ms BIGINT := 0;
     v_remaining_ms BIGINT := 0;
+    v_total_questions INTEGER := 10;
     v_base_points INTEGER := 0;
+    v_max_bonus INTEGER := 0;
     v_speed_bonus INTEGER := 0;
     v_is_correct BOOLEAN := FALSE;
     v_points INTEGER := 0;
@@ -517,8 +520,8 @@ BEGIN
             'answer_id', v_existing.id,
             'is_correct', v_existing.is_correct,
             'points_awarded', v_existing.points_awarded,
-            'base_points', COALESCE(v_existing.base_points, CASE WHEN v_existing.is_correct THEN 500 ELSE 0 END),
-            'speed_bonus', COALESCE(v_existing.speed_bonus, GREATEST(0, v_existing.points_awarded - 500)),
+            'base_points', COALESCE(v_existing.base_points, CASE WHEN v_existing.is_correct THEN v_existing.points_awarded ELSE 0 END),
+            'speed_bonus', COALESCE(v_existing.speed_bonus, 0),
             'response_time_ms', COALESCE(v_existing.response_time_ms, 0),
             'correct_index', (
                 SELECT q.correct_index FROM public.live_quiz_questions q
@@ -589,17 +592,23 @@ BEGIN
         RAISE EXCEPTION 'Question not found for quiz % at index %', v_session.quiz_id, p_question_index;
     END IF;
 
+    -- Fetch total question count for this quiz so a full quiz plays for 100 base points
+    SELECT GREATEST(1, COUNT(*)::INTEGER) INTO v_total_questions
+    FROM public.live_quiz_questions
+    WHERE quiz_id = v_session.quiz_id;
+
     -- Prevent negative response times
     v_response_time_ms := GREATEST(0, v_now_ms - v_start_ms);
     v_remaining_ms := GREATEST(0, v_dur_ms - v_response_time_ms);
 
-    -- Grade answer and calculate Speed Bonus (Base: 500, Max Speed Bonus: 500)
+    -- Grade answer and calculate 100-Point Quiz Base + Speed Bonus
     v_is_correct := (p_selected_option_index = v_question.correct_index);
 
     IF v_is_correct THEN
-        v_base_points := 500;
-        v_speed_bonus := ROUND((500.0 * v_remaining_ms::NUMERIC) / v_dur_ms::NUMERIC)::INTEGER;
-        v_speed_bonus := GREATEST(0, LEAST(500, v_speed_bonus));
+        v_base_points := GREATEST(1, ROUND(100.0 / v_total_questions))::INTEGER;
+        v_max_bonus := GREATEST(1, ROUND(v_base_points::NUMERIC / 2.0))::INTEGER;
+        v_speed_bonus := ROUND((v_max_bonus::NUMERIC * v_remaining_ms::NUMERIC) / v_dur_ms::NUMERIC)::INTEGER;
+        v_speed_bonus := GREATEST(0, LEAST(v_max_bonus, v_speed_bonus));
         v_points := v_base_points + v_speed_bonus;
     ELSE
         v_base_points := 0;
