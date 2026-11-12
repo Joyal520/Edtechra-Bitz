@@ -50,7 +50,9 @@ export const AnnabelleCinematicHeader: React.FC<AnnabelleCinematicHeaderProps> =
 
   const isBitzShortsCourse = Boolean(
     course.id === 'e10c7ee9-0010-4000-8000-000000000010' ||
-      course.title?.toLowerCase().includes('strange mysteries')
+      course.id === 'e10c7ee9-0020-4000-8000-000000000020' ||
+      course.title?.toLowerCase().includes('strange mysteries') ||
+      course.title?.toLowerCase().includes('extraordinary mysteries')
   );
 
   const rawCoverUrl =

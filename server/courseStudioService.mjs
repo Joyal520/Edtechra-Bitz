@@ -1859,6 +1859,7 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
     //   - Perfect score bonus: 5 XP
     //   - Maximum reward (5 questions): 20 XP
     let isShortsEpisode = false;
+    let isTieredMysteryReward = false;
     try {
       const { data: epBlocks } = await supabaseClient
         .from('course_blocks')
@@ -1872,13 +1873,27 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
             b?.content?._block_type === 'learn_with_shorts' ||
             Boolean(b?.content?.is_learn_with_shorts)
         );
+        isTieredMysteryReward = epBlocks.some(
+          (b) => b?.content?.reward_mode === 'tiered_mystery'
+        );
       }
     } catch {
       // Non-critical if blocks check is unavailable in mock/test
     }
 
+    const computeTieredShortsXp = () => {
+      if (numMaxScore <= 0) return 20;
+      const pct = (numScore / numMaxScore) * 100;
+      if (pct >= 100) return 20;
+      if (pct >= 80) return 15;
+      if (pct >= 60) return 10;
+      return 5;
+    };
+
     const targetRewardPoints = isShortsEpisode
-      ? 5 + correctCount * 2 + (questionCount > 0 && correctCount === questionCount ? 5 : 0)
+      ? isTieredMysteryReward
+        ? computeTieredShortsXp()
+        : 5 + correctCount * 2 + (questionCount > 0 && correctCount === questionCount ? 5 : 0)
       : numScore;
 
     let pointsAwarded = 0;

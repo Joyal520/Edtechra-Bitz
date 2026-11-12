@@ -8071,13 +8071,15 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
       .maybeSingle();
 
     if (existingAttempt) {
-      if (validatedPointsAwarded > Number(existingAttempt.points_awarded || 0)) {
+      const prevAwarded = Number(existingAttempt.points_awarded || 0);
+      if (validatedPointsAwarded > prevAwarded || prevAwarded === 0) {
         const { data: updatedAttempt } = await serverSupabase
           .from('course_question_attempts')
           .update({
             student_answer: String(student_answer || ''),
             is_correct: effectiveIsCorrect,
-            points_awarded: validatedPointsAwarded,
+            points_awarded: Math.max(prevAwarded, validatedPointsAwarded),
+            attempt_number: Number(existingAttempt.attempt_number || 1) + 1,
             answered_at: new Date().toISOString()
           })
           .eq('id', existingAttempt.id)
@@ -8432,6 +8434,35 @@ app.get('/api/course-studio/student/video-progress', async (req, res) => {
   } catch (err) {
     console.error('Error loading video progress:', err);
     res.status(500).json({ success: false, error: err.message || 'Failed to load video progress.' });
+  }
+});
+
+// 23d-2. POST /api/course-studio/student/learning-event - Persist stage milestone events
+app.post('/api/course-studio/student/learning-event', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { course_id, classroom_id = null, episode_id = null, event_type, metadata = {} } = req.body || {};
+    if (!course_id || !event_type) {
+      return res.status(400).json({ success: false, error: 'course_id and event_type are required.' });
+    }
+
+    if (serverSupabase) {
+      await serverSupabase.from('course_learning_events').insert({
+        student_id: authData.user.id,
+        course_id,
+        classroom_id: classroom_id || null,
+        episode_id: episode_id || null,
+        event_type: String(event_type).slice(0, 64),
+        metadata: metadata && typeof metadata === 'object' ? metadata : {}
+      });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error recording learning event:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to record learning event.' });
   }
 });
 

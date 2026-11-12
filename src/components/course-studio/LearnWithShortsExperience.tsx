@@ -33,7 +33,10 @@ import {
   Video,
   Play,
   Calendar,
-  Clock
+  Clock,
+  Volume2,
+  RotateCcw,
+  Lightbulb
 } from 'lucide-react';
 import {
   CourseBlock,
@@ -872,6 +875,146 @@ export const LearnWithShortsEditor: React.FC<LearnWithShortsEditorProps> = ({
         />
       </div>
 
+      {/* Reusable Shorts-to-Course Template Sections (Optional Vocabulary, Did You Know, Watch Again & Badge) */}
+      <div className="rounded-2xl p-4 sm:p-5 border border-[#CBD5E1] bg-white space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <span className="text-xs font-extrabold uppercase tracking-wider text-[#0F172A] flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-[#0284C7]" />
+              Reusable Micro-Lesson Sections (Optional)
+            </span>
+            <p className="text-xs text-[#64748B] mt-0.5">
+              Add Key Vocabulary cards, a Did You Know fact, Watch Again instruction, and lesson badge for the 8-step interactive flow.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const curr = Array.isArray(content.vocabulary_cards) ? content.vocabulary_cards : [];
+              updateField({
+                vocabulary_cards: [
+                  ...curr,
+                  { word: '', meaning: '', example: '' }
+                ]
+              });
+            }}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#0284C7] text-white text-xs font-bold hover:bg-[#0369A1] transition-colors cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Vocabulary Word</span>
+          </button>
+        </div>
+
+        {Array.isArray(content.vocabulary_cards) && content.vocabulary_cards.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {content.vocabulary_cards.map((vc: any, vIdx: number) => (
+              <div key={vIdx} className="p-3 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={vc.word || ''}
+                    onChange={(e) => {
+                      const next = [...content.vocabulary_cards];
+                      next[vIdx] = { ...vc, word: e.target.value };
+                      updateField({ vocabulary_cards: next });
+                    }}
+                    placeholder="Word (e.g. Medieval)"
+                    className="flex-1 px-2.5 py-1.5 rounded-lg border border-[#CBD5E1] bg-white text-xs font-bold text-[#0F172A]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = content.vocabulary_cards.filter((_: any, i: number) => i !== vIdx);
+                      updateField({ vocabulary_cards: next });
+                    }}
+                    className="p-1 text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer"
+                    aria-label="Remove vocabulary word"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={vc.meaning || vc.definition || ''}
+                  onChange={(e) => {
+                    const next = [...content.vocabulary_cards];
+                    next[vIdx] = { ...vc, meaning: e.target.value, definition: e.target.value };
+                    updateField({ vocabulary_cards: next });
+                  }}
+                  placeholder="Simple English meaning"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-[#CBD5E1] bg-white text-xs text-[#0F172A]"
+                />
+                <input
+                  type="text"
+                  value={vc.example || ''}
+                  onChange={(e) => {
+                    const next = [...content.vocabulary_cards];
+                    next[vIdx] = { ...vc, example: e.target.value };
+                    updateField({ vocabulary_cards: next });
+                  }}
+                  placeholder="Simple example sentence"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-[#CBD5E1] bg-white text-xs text-[#0F172A]"
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-[#334155] mb-1">
+              Did You Know? Fact (~20–30 words)
+            </label>
+            <textarea
+              rows={2}
+              value={String(content.did_you_know ?? '')}
+              onChange={(e) => updateField({ did_you_know: e.target.value })}
+              placeholder="One interesting extra fact..."
+              className="w-full px-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#CBD5E1] text-xs text-[#0F172A] resize-y"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-[#334155] mb-1">
+              Watch Again Instruction
+            </label>
+            <textarea
+              rows={2}
+              value={String(content.watch_again_instruction ?? '')}
+              onChange={(e) => updateField({ watch_again_instruction: e.target.value })}
+              placeholder="e.g. Watch again and discover the details you missed."
+              className="w-full px-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#CBD5E1] text-xs text-[#0F172A] resize-y"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-[#334155] mb-1">
+              Lesson Achievement Badge Name
+            </label>
+            <input
+              type="text"
+              value={String(content.badge_name ?? '')}
+              onChange={(e) => updateField({ badge_name: e.target.value })}
+              placeholder="e.g. Mystery Explorer"
+              className="w-full px-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#CBD5E1] text-xs text-[#0F172A]"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-[#334155] mb-1">
+              Completion Message
+            </label>
+            <input
+              type="text"
+              value={String(content.completion_message ?? '')}
+              onChange={(e) => updateField({ completion_message: e.target.value })}
+              placeholder="Shown on the reward screen..."
+              className="w-full px-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#CBD5E1] text-xs text-[#0F172A]"
+            />
+          </div>
+        </div>
+      </div>
+
       {/* Course Setting: DAILY LESSON UNLOCK */}
       <div
         data-testid="daily-lesson-unlock-settings"
@@ -1374,6 +1517,22 @@ export const LearnWithShortsEditor: React.FC<LearnWithShortsEditorProps> = ({
 // 2. STUDENT EXPERIENCE COMPONENT: LearnWithShortsStudentPlayer
 // ============================================================================
 
+export type ShortsStage =
+  | 'intro'
+  | 'vocabulary'
+  | 'watch'
+  | 'read'
+  | 'watch_again'
+  | 'challenge'
+  | 'reward'
+  | 'course_complete';
+
+export interface ShortsVocabularyItem {
+  word: string;
+  meaning: string;
+  example: string;
+}
+
 export interface LearnWithShortsStudentPlayerProps {
   block: CourseBlock;
   courseId: string;
@@ -1394,7 +1553,7 @@ export interface LearnWithShortsStudentPlayerProps {
   dailyReleaseEnabled?: boolean;
   nextUnlockDateLabel?: string;
   nextUnlockCountdown?: string;
-  onStageChange?: (stage: 'intro' | 'watch' | 'read' | 'watch_again' | 'challenge' | 'reward') => void;
+  onStageChange?: (stage: ShortsStage) => void;
   onVideoProgressUpdate?: (state: VideoProgressState) => void;
   onVideoCompleted?: (state: VideoProgressState) => void;
 }
@@ -1442,18 +1601,113 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   const ytId = useMemo(() => extractYouTubeId(videoUrl), [videoUrl]);
   const baseVideoKey = useMemo(() => ytId || block.id || 'short_video', [ytId, block.id]);
 
-  // Cover / thumbnail image for Stage 1 (Intro) and Stage 3 (Reading Header)
-  // Uses individual lesson image where available; otherwise uses the course cover image.
+  // Structured Shorts-to-Course template fields (all optional for full backward compatibility)
+  const vocabularyCards: ShortsVocabularyItem[] = useMemo(() => {
+    const rawList = Array.isArray(content.vocabulary_cards)
+      ? content.vocabulary_cards
+      : Array.isArray(content.vocabulary)
+      ? content.vocabulary
+      : [];
+    return rawList
+      .map((item: any) => ({
+        word: String(item?.word || '').trim(),
+        meaning: String(item?.meaning || item?.definition || '').trim(),
+        example: String(item?.example || '').trim()
+      }))
+      .filter((item: ShortsVocabularyItem) => item.word.length > 0 && item.meaning.length > 0);
+  }, [content.vocabulary_cards, content.vocabulary]);
+  const hasVocabularyStage = vocabularyCards.length > 0;
+  const didYouKnowText = String(content.did_you_know ?? '').trim();
+  const watchAgainInstruction = String(content.watch_again_instruction ?? '').trim();
+  const lessonBadgeName = String(content.badge_name ?? '').trim();
+  const lessonCompletionMessage = String(content.completion_message ?? '').trim();
+  const rewardMode: 'tiered_mystery' | 'classic' =
+    content.reward_mode === 'tiered_mystery' ? 'tiered_mystery' : 'classic';
+  const isFinalLesson = Boolean(content.is_final_lesson);
+  const finalCompletionData = (content.final_completion || null) as Record<string, any> | null;
+
+  // Ordered stage sequence
+  const stageSequence: ShortsStage[] = useMemo(() => {
+    const seq: ShortsStage[] = ['intro'];
+    if (hasVocabularyStage) seq.push('vocabulary');
+    seq.push('watch');
+    if (hasReadingStage) seq.push('read');
+    seq.push('watch_again', 'challenge', 'reward');
+    if (isFinalLesson) seq.push('course_complete');
+    return seq;
+  }, [hasVocabularyStage, hasReadingStage, isFinalLesson]);
+
+  // Cover / thumbnail image for Stage 1 (Intro) and Stage 3/4 (Reading Header)
   const coverArtworkUrl = useMemo(() => {
     if (content.cover_image_url) return String(content.cover_image_url);
     if (content.image_url) return String(content.image_url);
     if (ytId) return `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg`;
     if (courseCoverUrl) return courseCoverUrl;
-    return '/images/creepy_legends_cover.png';
+    return '/images/creepy-legends-cover.jpg';
   }, [content.cover_image_url, content.image_url, ytId, courseCoverUrl]);
 
-  // 6-Stage Microlearning Flow: 'intro' -> 'watch' -> 'read' -> 'watch_again' -> 'challenge' -> 'reward'
-  const [stage, setStage] = useState<'intro' | 'watch' | 'read' | 'watch_again' | 'challenge' | 'reward'>('intro');
+  const [stage, setStage] = useState<ShortsStage>('intro');
+  const [maxUnlockedStageIdx, setMaxUnlockedStageIdx] = useState<number>(() =>
+    isLessonCompleted ? Math.max(0, stageSequence.length - 1) : 0
+  );
+  const [listenedVocabWords, setListenedVocabWords] = useState<string[]>([]);
+  const [speakingVocabWord, setSpeakingVocabWord] = useState<string | null>(null);
+  const [activeReadingWord, setActiveReadingWord] = useState<ShortsVocabularyItem | null>(null);
+  const [showWatchAgainCaption, setShowWatchAgainCaption] = useState<boolean>(false);
+  const loggedMilestonesRef = useRef<Set<string>>(new Set());
+
+  const logStageMilestone = useCallback(
+    (eventType: string, metadata: Record<string, any> = {}) => {
+      if (isPreview || !courseId || courseId === 'general' || !episodeId) return;
+      if (loggedMilestonesRef.current.has(eventType)) return;
+      loggedMilestonesRef.current.add(eventType);
+      courseStudioService.recordLearningEvent({
+        course_id: courseId,
+        classroom_id: classroomId || null,
+        episode_id: episodeId,
+        event_type: eventType,
+        metadata: {
+          title: shortTitle,
+          ...metadata
+        }
+      });
+    },
+    [isPreview, courseId, classroomId, episodeId, shortTitle]
+  );
+
+  const speakVocabWord = useCallback((wordText: string, extraText?: string) => {
+    courseAudio.playClick();
+    setListenedVocabWords((prev) => (prev.includes(wordText) ? prev : [...prev, wordText]));
+    setSpeakingVocabWord(wordText);
+    try {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const phrase = extraText ? `${wordText}. ${extraText}` : wordText;
+        const utterance = new SpeechSynthesisUtterance(phrase);
+        utterance.lang = 'en-US';
+        utterance.rate = 0.88;
+        utterance.onend = () => setSpeakingVocabWord((curr) => (curr === wordText ? null : curr));
+        utterance.onerror = () => setSpeakingVocabWord((curr) => (curr === wordText ? null : curr));
+        window.speechSynthesis.speak(utterance);
+        return;
+      }
+    } catch {
+      // Fallback clear below
+    }
+    setTimeout(() => setSpeakingVocabWord((curr) => (curr === wordText ? null : curr)), 900);
+  }, []);
+
+  // Helper to navigate to a stage & advance sequential unlock watermark
+  const navigateToStage = useCallback(
+    (nextStage: ShortsStage) => {
+      const idx = stageSequence.indexOf(nextStage);
+      if (idx >= 0) {
+        setMaxUnlockedStageIdx((prev) => Math.max(prev, idx));
+      }
+      setStage(nextStage);
+    },
+    [stageSequence]
+  );
 
   // Notify parent ONLY when `stage` actually transitions (never on ordinary scroll re-renders)
   const onStageChangeRef = useRef(onStageChange);
@@ -1464,7 +1718,10 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   onVideoCompletedRef.current = onVideoCompleted;
   useEffect(() => {
     onStageChangeRef.current?.(stage);
-  }, [stage]);
+    if (stage === 'intro') {
+      logStageMilestone('lesson_started');
+    }
+  }, [stage, logStageMilestone]);
 
   // Active video key depends on whether the student is in Stage 2 (watch) or Stage 4 (watch_again)
   const activeVideoKey = stage === 'watch_again' ? `${baseVideoKey}_watch2` : baseVideoKey;
@@ -1503,8 +1760,8 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   // Interactive Challenge state (1 question at a time)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
   const [localResponses, setLocalResponses] = useState<Record<string, StudentQuestionResponse>>({});
+  const [retriedQuestionIds, setRetriedQuestionIds] = useState<Record<string, boolean>>({});
   const [isSubmittingReward, setIsSubmittingReward] = useState<boolean>(false);
-  const [rewardClaimedOnce, setRewardClaimedOnce] = useState<boolean>(Boolean(isLessonCompleted));
   const [serverAwardedXp, setServerAwardedXp] = useState<number | null>(null);
 
   // Refs for Fullscreen container, HTML5 video, and YouTube Shorts player
@@ -1533,11 +1790,19 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
     }
   }, []);
 
-  // Combined question responses (parent + local state)
-  const mergedResponses = useMemo(
-    () => ({ ...questionResponses, ...localResponses }),
-    [questionResponses, localResponses]
-  );
+  // Combined question responses (parent + local state, excluding actively retrying question IDs)
+  const mergedResponses = useMemo(() => {
+    const combined: Record<string, StudentQuestionResponse> = {
+      ...questionResponses,
+      ...localResponses
+    };
+    Object.keys(retriedQuestionIds).forEach((qKey) => {
+      if (retriedQuestionIds[qKey]) {
+        delete combined[qKey];
+      }
+    });
+    return combined;
+  }, [questionResponses, localResponses, retriedQuestionIds]);
 
   // Filter out empty placeholder questions
   const validQuestions = useMemo(
@@ -1570,9 +1835,15 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
     lastWallTimeRef.current = 0;
     wasPlayingRef.current = false;
     setStage('intro');
+    setMaxUnlockedStageIdx(isLessonCompleted ? Math.max(0, stageSequence.length - 1) : 0);
+    setListenedVocabWords([]);
+    setActiveReadingWord(null);
+    setRetriedQuestionIds({});
+    setLocalResponses({});
+    loggedMilestonesRef.current = new Set();
     setCurrentQuestionIndex(0);
     setSeekNotice(null);
-  }, [courseId, episodeId, baseVideoKey, userId, exitNativeFullscreenIfActive]);
+  }, [courseId, episodeId, baseVideoKey, userId, isLessonCompleted, stageSequence.length, exitNativeFullscreenIfActive]);
 
   // Lock body scroll during full-screen video stages ('watch' and 'watch_again')
   useEffect(() => {
@@ -1616,7 +1887,13 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
     lastTimeRef.current = 0;
     lastWallTimeRef.current = typeof performance !== 'undefined' ? performance.now() : Date.now();
     wasPlayingRef.current = false;
-    setStage(targetStage);
+    if (targetStage === 'watch_again' && watchAgainInstruction) {
+      setShowWatchAgainCaption(true);
+      setTimeout(() => setShowWatchAgainCaption(false), 5000);
+    } else {
+      setShowWatchAgainCaption(false);
+    }
+    navigateToStage(targetStage);
     setTimeout(() => {
       try {
         const el = fullscreenOverlayRef.current as any;
@@ -2045,6 +2322,31 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
       currentProgressState.watchedPercent > 90
   );
 
+  // Handle REPLAY button inside video player
+  const handleReplayVideo = () => {
+    courseAudio.playClick();
+    if (ytPlayerRef.current && typeof ytPlayerRef.current.seekTo === 'function') {
+      try {
+        ytPlayerRef.current.seekTo(0, true);
+        ytPlayerRef.current.playVideo();
+        setIsPlaying(true);
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    const v = html5VideoRef.current;
+    if (v) {
+      v.currentTime = 0;
+      v.play()
+        .then(() => {
+          setIsPlaying(true);
+          setNeedsUserStartTap(false);
+        })
+        .catch(() => {});
+    }
+  };
+
   // Handle QUIT button after video completion (returns to lesson introduction without awarding completion rewards)
   const handleQuit = async () => {
     exitNativeFullscreenIfActive();
@@ -2062,14 +2364,21 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
     await syncProgressToServer(progressRef.current, true);
     courseAudio.playSelectSound();
 
-    if (stage === 'watch' && hasReadingStage) {
-      setStage('read');
-      return;
+    if (stage === 'watch') {
+      logStageMilestone('first_video_viewed');
+      if (hasReadingStage) {
+        navigateToStage('read');
+        return;
+      }
+    }
+
+    if (stage === 'watch_again') {
+      logStageMilestone('second_video_viewed');
     }
 
     if (validQuestions.length > 0) {
       setCurrentQuestionIndex(0);
-      setStage('challenge');
+      navigateToStage('challenge');
     } else {
       await handleFinishChallengeAndShowRewards();
     }
@@ -2078,6 +2387,12 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   // Handle individual question answer in the 1-at-a-time Interactive Game
   const handleSingleQuestionSubmit = (response: StudentQuestionResponse, question: CourseQuestion) => {
     const qKey = response.questionId || question.id;
+    setRetriedQuestionIds((prev) => {
+      if (!prev[qKey]) return prev;
+      const next = { ...prev };
+      delete next[qKey];
+      return next;
+    });
     setLocalResponses((prev) => ({
       ...prev,
       [qKey]: response
@@ -2085,6 +2400,55 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
     if (onQuestionAnswer) {
       onQuestionAnswer(response, question);
     }
+  };
+
+  // Clear a single incorrect response to retry immediately
+  const handleRetryQuestion = (questionId: string) => {
+    setRetriedQuestionIds((prev) => ({ ...prev, [questionId]: true }));
+    setLocalResponses((prev) => {
+      if (!prev[questionId]) return prev;
+      const next = { ...prev };
+      delete next[questionId];
+      return next;
+    });
+  };
+
+  // Retry all incorrect questions from Reward screen (or all questions if user wants to practice again)
+  const handleRetryIncorrectFromReward = () => {
+    courseAudio.playClick();
+    const wrongIds: string[] = [];
+    validQuestions.forEach((q, idx) => {
+      const qId = q.id || `q_fallback_${idx}`;
+      const resp = mergedResponses[qId];
+      if (!resp || resp.status !== 'correct') {
+        wrongIds.push(qId);
+      }
+    });
+    const targetIds =
+      wrongIds.length > 0
+        ? wrongIds
+        : validQuestions.map((q, idx) => q.id || `q_fallback_${idx}`);
+    if (targetIds.length === 0) return;
+
+    setRetriedQuestionIds((prev) => {
+      const next = { ...prev };
+      targetIds.forEach((id) => {
+        next[id] = true;
+      });
+      return next;
+    });
+    setLocalResponses((prev) => {
+      const next = { ...prev };
+      targetIds.forEach((id) => {
+        delete next[id];
+      });
+      return next;
+    });
+    const firstIdx = validQuestions.findIndex(
+      (q, idx) => (q.id || `q_fallback_${idx}`) === targetIds[0]
+    );
+    setCurrentQuestionIndex(firstIdx >= 0 ? firstIdx : 0);
+    navigateToStage('challenge');
   };
 
   // Finish the challenge & transition to Reward Screen with server-validated XP
@@ -2097,10 +2461,13 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
         isCompleted: true,
         watchedPercent: Math.max(91, progressRef.current.watchedPercent || 100)
       });
-      if (onCompleteLesson && !rewardClaimedOnce) {
+      logStageMilestone('quiz_completed', {
+        earned_points: earnedQuestionPoints,
+        max_points: maxQuestionPoints
+      });
+      if (onCompleteLesson) {
         const res = await onCompleteLesson();
         if (res && res.success !== false) {
-          setRewardClaimedOnce(true);
           const confirmedXp =
             typeof res.credited_lesson_points === 'number' && res.credited_lesson_points > 0
               ? res.credited_lesson_points
@@ -2112,13 +2479,14 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
           }
         }
       }
+      logStageMilestone('lesson_completed');
       courseAudio.playCompleteSound();
       triggerConfettiBurst();
     } catch {
       // Even if offline/preview, show the reward summary screen
     } finally {
       setIsSubmittingReward(false);
-      setStage('reward');
+      navigateToStage('reward');
     }
   };
 
@@ -2146,18 +2514,58 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   }, [validQuestions, mergedResponses]);
 
   // Official Learn with Shorts XP Reward Formula:
-  // Complete the lesson: 5 XP + Each correct answer: 2 XP + Perfect score bonus: 5 XP (Max 20 XP for 5 questions)
-  const lessonCompletionXp = 5;
-  const correctAnswersXp = correctAnswersCount * 2;
-  const isPerfectScore = totalQuestions > 0 && correctAnswersCount === totalQuestions;
-  const perfectBonusXp = isPerfectScore ? 5 : 0;
-  const calculatedShortsXp = lessonCompletionXp + correctAnswersXp + perfectBonusXp;
-  const totalXpEarned = serverAwardedXp !== null ? serverAwardedXp : calculatedShortsXp;
+  // Tiered Mystery mode: 10/10 -> 20 XP, 8/10 -> 15 XP, 6/10 -> 10 XP, <6/10 -> 5 XP
+  // Classic Shorts mode: 5 XP + 2 XP per correct + 5 XP perfect bonus
+  const scorePct =
+    maxQuestionPoints > 0 ? Math.round((earnedQuestionPoints / maxQuestionPoints) * 100) : 100;
+  const calculatedShortsXp =
+    rewardMode === 'tiered_mystery'
+      ? scorePct >= 100
+        ? 20
+        : scorePct >= 80
+        ? 15
+        : scorePct >= 60
+        ? 10
+        : 5
+      : 5 + correctAnswersCount * 2 + (totalQuestions > 0 && correctAnswersCount === totalQuestions ? 5 : 0);
+  const totalXpEarned =
+    serverAwardedXp !== null && serverAwardedXp >= calculatedShortsXp
+      ? serverAwardedXp
+      : calculatedShortsXp;
   const accuracyPercent =
     totalQuestions > 0 ? Math.round((correctAnswersCount / totalQuestions) * 100) : 100;
 
-  // Achievement Badge (if earned) — concise subtitle without repeating numeric score/accuracy
+  // Achievement Badge (if earned)
   const earnedBadge = useMemo(() => {
+    if (rewardMode === 'tiered_mystery') {
+      if (scorePct >= 100) {
+        return {
+          title: 'Gold Mystery Explorer Badge',
+          subtitle: lessonCompletionMessage || 'Perfect score! Every mystery clue unlocked.',
+          color: 'from-amber-400 to-orange-500'
+        };
+      }
+      if (scorePct >= 80) {
+        return {
+          title: 'Silver Mystery Explorer Badge',
+          subtitle: lessonCompletionMessage || 'Great work solving this mystery!',
+          color: 'from-slate-300 to-sky-500'
+        };
+      }
+      if (scorePct >= 60) {
+        return {
+          title: 'Bronze Mystery Explorer Badge',
+          subtitle: lessonCompletionMessage || 'Good effort! Review the passage and try again for Gold.',
+          color: 'from-amber-600 to-amber-800'
+        };
+      }
+      return {
+        title: 'Learning Explorer Badge',
+        subtitle: lessonCompletionMessage || 'Keep exploring and try incorrect questions again!',
+        color: 'from-sky-500 to-blue-600'
+      };
+    }
+
     if (totalQuestions > 0 && accuracyPercent === 100) {
       return {
         title: 'Sharp Master',
@@ -2177,7 +2585,106 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
       subtitle: 'Micro Lesson Accomplished',
       color: 'from-sky-500 to-blue-600'
     };
-  }, [totalQuestions, accuracyPercent]);
+  }, [rewardMode, scorePct, totalQuestions, accuracyPercent, lessonCompletionMessage]);
+
+  // Helper to render the compact sequential stepper bar so students can revisit earlier unlocked sections
+  const renderSectionStepper = (currentStage: ShortsStage) => {
+    const labelMap: Record<ShortsStage, string> = {
+      intro: '01 Intro',
+      vocabulary: '02 Vocab',
+      watch: '03 Watch',
+      read: '04 Read',
+      watch_again: '06 Rewatch',
+      challenge: '07 Quiz',
+      reward: '08 Reward',
+      course_complete: 'Final'
+    };
+    const steps = stageSequence.filter((s) => s !== 'course_complete');
+    return (
+      <div
+        data-testid="shorts-section-stepper"
+        className="w-full max-w-[720px] mx-auto px-3 sm:px-0 mb-3 overflow-x-auto no-scrollbar"
+      >
+        <div className="inline-flex sm:flex items-center gap-1.5 min-w-max sm:min-w-0 sm:flex-wrap py-1">
+          {steps.map((s) => {
+            const idx = stageSequence.indexOf(s);
+            const isActive = s === currentStage;
+            const isUnlocked = idx <= maxUnlockedStageIdx;
+            return (
+              <button
+                key={s}
+                type="button"
+                disabled={!isUnlocked || isActive}
+                onClick={() => {
+                  if (!isUnlocked || isActive) return;
+                  if (s === 'watch' || s === 'watch_again') {
+                    enterFullscreenVideoStage(s);
+                  } else {
+                    courseAudio.playClick();
+                    setStage(s);
+                  }
+                }}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition-all ${
+                  isActive
+                    ? 'bg-[#0284C7] text-white shadow-xs'
+                    : isUnlocked
+                    ? 'bg-sky-500/15 hover:bg-sky-500/25 text-sky-700 dark:text-sky-200 border border-sky-400/30 cursor-pointer'
+                    : 'bg-slate-200/60 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                }`}
+              >
+                {labelMap[s]}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // Highlight vocabulary words inline inside Reading paragraphs without disturbing layout or scrolling
+  const vocabRegex = useMemo(() => {
+    if (vocabularyCards.length === 0) return null;
+    const escaped = vocabularyCards
+      .map((v) => v.word.trim())
+      .filter(Boolean)
+      .sort((a, b) => b.length - a.length)
+      .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    if (escaped.length === 0) return null;
+    return new RegExp(`\\b(${escaped.join('|')})\\b`, 'gi');
+  }, [vocabularyCards]);
+
+  const renderHighlightedParagraph = (paragraphText: string) => {
+    if (!vocabRegex) return paragraphText;
+    const parts = paragraphText.split(vocabRegex);
+    return parts.map((part, pIdx) => {
+      const matchedCard = vocabularyCards.find(
+        (v) => v.word.toLowerCase() === part.toLowerCase()
+      );
+      if (!matchedCard) return <React.Fragment key={pIdx}>{part}</React.Fragment>;
+      return (
+        <span
+          key={pIdx}
+          role="button"
+          tabIndex={0}
+          onClick={() => {
+            setActiveReadingWord(matchedCard);
+            speakVocabWord(matchedCard.word);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setActiveReadingWord(matchedCard);
+              speakVocabWord(matchedCard.word);
+            }
+          }}
+          title={`${matchedCard.word}: ${matchedCard.meaning}`}
+          className="bg-amber-100/80 border-b-2 border-amber-400 text-[#0F172A] px-0.5 rounded-[3px] cursor-pointer hover:bg-amber-200/80 transition-colors"
+        >
+          {part}
+        </span>
+      );
+    });
+  };
 
   // Compute fallback daily unlock info if not passed explicitly
   const fallbackUnlockSummary = useMemo(() => getNextDailyUnlockSummary(null), []);
@@ -2185,7 +2692,7 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   const effectiveNextUnlockCountdown = nextUnlockCountdown || fallbackUnlockSummary.countdownLabel;
 
   // ==========================================================================
-  // STAGE 1: INTRODUCTION / HOOK SCREEN
+  // STAGE 1: MYSTERY INTRODUCTION / HOOK SCREEN
   // ==========================================================================
   if (stage === 'intro') {
     return (
@@ -2201,12 +2708,19 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
               alt={shortTitle}
               className="absolute inset-0 w-full h-full object-cover object-center"
               onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src = '/images/creepy_legends_cover.png';
+                (e.currentTarget as HTMLImageElement).src = '/images/creepy-legends-cover.jpg';
               }}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-[#040d1a] via-[#061529]/80 to-[#040d1a]/35" />
 
             <div className="relative z-10 space-y-4 text-center sm:text-left">
+              {hasVocabularyStage && (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500/20 border border-sky-400/35 text-sky-200 text-[11px] font-black uppercase tracking-wider">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Section 01 • Mystery Introduction</span>
+                </div>
+              )}
+
               <h2 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight leading-tight drop-shadow-md">
                 {shortTitle}
               </h2>
@@ -2218,17 +2732,137 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
               )}
 
               <div className="pt-2">
-                <button
-                  type="button"
-                  data-testid="shorts-watch-button"
-                  onClick={() => enterFullscreenVideoStage('watch')}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-8 py-4 rounded-2xl bg-gradient-to-r from-[#0284C7] to-[#0EA5E9] hover:from-[#0369A1] hover:to-[#0284C7] text-white font-black text-sm uppercase tracking-wider shadow-xl shadow-sky-500/30 active:scale-[0.99] transition-all cursor-pointer"
-                >
-                  <span>WATCH SHORT</span>
-                  <Play className="w-4 h-4 fill-current" />
-                </button>
+                {hasVocabularyStage ? (
+                  <button
+                    type="button"
+                    data-testid="shorts-vocab-start-button"
+                    onClick={() => {
+                      courseAudio.playSelectSound();
+                      navigateToStage('vocabulary');
+                    }}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-8 py-4 rounded-2xl bg-gradient-to-r from-[#0284C7] to-[#0EA5E9] hover:from-[#0369A1] hover:to-[#0284C7] text-white font-black text-sm uppercase tracking-wider shadow-xl shadow-sky-500/30 active:scale-[0.99] transition-all cursor-pointer"
+                  >
+                    <span>LEARN KEY VOCABULARY</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    data-testid="shorts-watch-button"
+                    onClick={() => enterFullscreenVideoStage('watch')}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-8 py-4 rounded-2xl bg-gradient-to-r from-[#0284C7] to-[#0EA5E9] hover:from-[#0369A1] hover:to-[#0284C7] text-white font-black text-sm uppercase tracking-wider shadow-xl shadow-sky-500/30 active:scale-[0.99] transition-all cursor-pointer"
+                  >
+                    <span>WATCH SHORT</span>
+                    <Play className="w-4 h-4 fill-current" />
+                  </button>
+                )}
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================================================
+  // STAGE 2: KEY VOCABULARY CARDS (WITH PRONUNCIATION AUDIO)
+  // ==========================================================================
+  if (stage === 'vocabulary') {
+    return (
+      <div
+        data-testid="shorts-vocabulary-stage"
+        className="w-full max-w-[720px] mx-auto px-4 sm:px-0 py-3 space-y-4 animate-in fade-in duration-300 box-border"
+      >
+        {renderSectionStepper('vocabulary')}
+
+        <div className="rounded-3xl bg-[#07162c] border border-sky-500/25 p-5 sm:p-7 shadow-xl text-white space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-400/15 border border-amber-400/35 text-amber-300 text-[11px] font-black uppercase tracking-wider">
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Section 02 • Key Vocabulary</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+                Learn These {vocabularyCards.length} Words First
+              </h2>
+              <p className="text-xs sm:text-sm text-sky-200/85">
+                Tap the speaker icon on each card to hear the English pronunciation before watching the Short.
+              </p>
+            </div>
+            <div className="px-3 py-1.5 rounded-xl bg-sky-500/15 border border-sky-400/30 text-xs font-extrabold text-sky-200">
+              {listenedVocabWords.length}/{vocabularyCards.length} Practised
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {vocabularyCards.map((card, vIdx) => {
+              const isSpeaking = speakingVocabWord === card.word;
+              const isListened = listenedVocabWords.includes(card.word);
+              return (
+                <div
+                  key={`${card.word}_${vIdx}`}
+                  data-testid={`shorts-vocab-card-${vIdx}`}
+                  className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
+                    isSpeaking
+                      ? 'bg-[#0c264a] border-amber-400/70 shadow-lg shadow-amber-500/10'
+                      : 'bg-[#0b2140]/90 border-sky-400/25'
+                  }`}
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-lg font-black text-white tracking-tight">
+                        {card.word}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => speakVocabWord(card.word, card.example)}
+                        aria-label={`Listen to pronunciation of ${card.word}`}
+                        className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 transition-all cursor-pointer ${
+                          isSpeaking
+                            ? 'bg-amber-400 text-slate-950 shadow-sm'
+                            : isListened
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40'
+                            : 'bg-sky-500/20 hover:bg-sky-500/35 text-sky-200 border border-sky-400/35'
+                        }`}
+                      >
+                        <Volume2 className="w-3.5 h-3.5" />
+                        <span>{isSpeaking ? 'Speaking...' : isListened ? 'Practised' : 'Listen'}</span>
+                      </button>
+                    </div>
+                    <p className="text-sm font-medium text-sky-100 leading-snug">
+                      {card.meaning}
+                    </p>
+                  </div>
+
+                  {card.example && (
+                    <div className="px-3 py-2 rounded-xl bg-[#061326] border border-sky-500/15 text-xs text-sky-200/90 italic">
+                      “{card.example}”
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-sky-400/20">
+            <p className="text-xs text-sky-200/80 font-medium">
+              Ready to see these words in action? Watch the short video now.
+            </p>
+            <button
+              type="button"
+              data-testid="shorts-vocab-continue-button"
+              onClick={() => {
+                logStageMilestone('vocabulary_completed', {
+                  word_count: vocabularyCards.length,
+                  listened_count: listenedVocabWords.length
+                });
+                enterFullscreenVideoStage('watch');
+              }}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-2xl bg-gradient-to-r from-[#0284C7] to-[#0EA5E9] hover:from-[#0369A1] hover:to-[#0284C7] text-white font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg shadow-sky-500/30 cursor-pointer transition-all"
+            >
+              <span>WATCH THE SHORT</span>
+              <Play className="w-4 h-4 fill-current" />
+            </button>
           </div>
         </div>
       </div>
@@ -2351,6 +2985,13 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
             </div>
           )}
 
+          {/* Watch Again Gentle Instruction Caption (brief non-blocking banner on second viewing) */}
+          {isSecondViewing && showWatchAgainCaption && watchAgainInstruction && !seekNotice && (
+            <div className="absolute top-5 inset-x-4 z-20 p-3 rounded-xl bg-black/75 border border-sky-400/30 text-sky-100 text-xs font-semibold shadow-lg backdrop-blur-md text-center pointer-events-none animate-in fade-in duration-300">
+              <span>{watchAgainInstruction}</span>
+            </div>
+          )}
+
           {/* Anti-Seek Notice Toast (only if student attempts to skip ahead) */}
           {seekNotice && (
             <div className="absolute top-6 inset-x-4 z-20 p-3 rounded-xl bg-black/80 border border-white/15 text-white text-xs font-semibold shadow-lg backdrop-blur-md flex items-center justify-center text-center">
@@ -2365,21 +3006,32 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
               onClick={(e) => e.stopPropagation()}
               className="absolute bottom-0 inset-x-0 p-5 pt-12 bg-gradient-to-t from-black/90 via-black/55 to-transparent animate-in fade-in slide-in-from-bottom-3 duration-500 ease-out"
             >
-              <div className="grid grid-cols-2 gap-3">
+              <div className="flex items-center gap-2.5">
                 <button
                   type="button"
                   data-testid="shorts-quit-button"
                   onClick={handleQuit}
-                  className="py-3.5 px-4 rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur-md text-white font-extrabold text-xs uppercase tracking-wider border border-white/25 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  className="flex-1 py-3.5 px-3 rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur-md text-white font-extrabold text-xs uppercase tracking-wider border border-white/25 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                 >
                   <span>QUIT</span>
                 </button>
 
                 <button
                   type="button"
+                  data-testid="shorts-replay-button"
+                  onClick={handleReplayVideo}
+                  aria-label="Replay Short Video"
+                  className="py-3.5 px-3.5 rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur-md text-white font-extrabold text-xs uppercase tracking-wider border border-white/25 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">REPLAY</span>
+                </button>
+
+                <button
+                  type="button"
                   data-testid="shorts-next-button"
                   onClick={handleNextAfterWatch}
-                  className="py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#0284C7] to-[#0EA5E9] hover:from-[#0369A1] hover:to-[#0284C7] text-white font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-sky-500/30 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  className="flex-1 py-3.5 px-3 rounded-xl bg-gradient-to-r from-[#0284C7] to-[#0EA5E9] hover:from-[#0369A1] hover:to-[#0284C7] text-white font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-sky-500/30 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                 >
                   <span>NEXT →</span>
                 </button>
@@ -2392,69 +3044,135 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   }
 
   // ==========================================================================
-  // STAGE 3: READING ACTIVITY — DIGITAL READING BOOK LAYOUT & 18PX TYPOGRAPHY
+  // STAGE 3/4: READING ACTIVITY & DID YOU KNOW — DIGITAL READING BOOK LAYOUT
   // ==========================================================================
   if (stage === 'read') {
     return (
-      <div
-        data-testid="shorts-reading-stage"
-        className="w-full max-w-full sm:max-w-[720px] sm:mx-auto m-0 p-0 box-border bg-white sm:rounded-3xl sm:border sm:border-sky-500/25 sm:shadow-xl sm:overflow-hidden"
-      >
-        {/* Naturally Scrolling Reading Header: Lesson Title + Background Image + Dark Overlay (non-sticky) */}
+      <div className="w-full m-0 p-0">
+        {renderSectionStepper('read')}
+
         <div
-          data-testid="shorts-reading-header"
-          style={{ position: 'relative' }}
-          className="relative w-full min-h-[180px] sm:min-h-[220px] flex items-end px-[20px] py-6 sm:px-8 sm:py-7 overflow-hidden"
+          data-testid="shorts-reading-stage"
+          className="w-full max-w-full sm:max-w-[720px] sm:mx-auto m-0 p-0 box-border bg-white sm:rounded-3xl sm:border sm:border-sky-500/25 sm:shadow-xl sm:overflow-hidden"
         >
-          <img
-            src={coverArtworkUrl}
-            alt={shortTitle}
-            className="absolute inset-0 w-full h-full object-cover object-center"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src = '/images/creepy_legends_cover.png';
-            }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#050f1e]/95 via-[#07162c]/70 to-[#050f1e]/35" />
-          <h2 className="relative z-10 w-full text-xl sm:text-2xl font-black text-white uppercase tracking-tight leading-snug drop-shadow-sm text-left">
-            {shortTitle}
-          </h2>
-        </div>
+          {/* Naturally Scrolling Reading Header: Lesson Title + Background Image + Dark Overlay (non-sticky) */}
+          <div
+            data-testid="shorts-reading-header"
+            style={{ position: 'relative' }}
+            className="relative w-full min-h-[180px] sm:min-h-[220px] flex items-end px-[20px] py-6 sm:px-8 sm:py-7 overflow-hidden"
+          >
+            <img
+              src={coverArtworkUrl}
+              alt={shortTitle}
+              className="absolute inset-0 w-full h-full object-cover object-center"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src = '/images/creepy-legends-cover.jpg';
+              }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#050f1e]/95 via-[#07162c]/70 to-[#050f1e]/35" />
+            <h2 className="relative z-10 w-full text-xl sm:text-2xl font-black text-white uppercase tracking-tight leading-snug drop-shadow-sm text-left">
+              {shortTitle}
+            </h2>
+          </div>
 
-        {/* Full-Width Digital Book Reading Body with 20px Mobile Padding & 18px Justified Typography */}
-        <div className="w-full max-w-full px-[20px] pt-6 pb-10 sm:px-8 sm:pt-8 sm:pb-10 bg-white box-border">
-          {readingPassage
-            .split(/\n\n+/)
-            .filter(Boolean)
-            .map((para, idx) => (
-              <p
-                key={idx}
-                style={{
-                  fontSize: '18px',
-                  lineHeight: 1.75,
-                  fontWeight: 400,
-                  textAlign: 'justify',
-                  textJustify: 'inter-word',
-                  color: '#0F172A',
-                  marginBottom: '20px',
-                  overflowWrap: 'break-word',
-                  wordBreak: 'normal'
-                }}
-                className="w-full max-w-none text-[18px] leading-[1.75] font-normal text-[#0F172A] last:!mb-0"
+          {/* Full-Width Digital Book Reading Body with 20px Mobile Padding & 18px Justified Typography */}
+          <div className="w-full max-w-full px-[20px] pt-6 pb-10 sm:px-8 sm:pt-8 sm:pb-10 bg-white box-border">
+            {readingPassage
+              .split(/\n\n+/)
+              .filter(Boolean)
+              .map((para, idx) => (
+                <p
+                  key={idx}
+                  style={{
+                    fontSize: '18px',
+                    lineHeight: 1.75,
+                    fontWeight: 400,
+                    textAlign: 'justify',
+                    textJustify: 'inter-word',
+                    color: '#0F172A',
+                    marginBottom: '20px',
+                    overflowWrap: 'break-word',
+                    wordBreak: 'normal'
+                  }}
+                  className="w-full max-w-none text-[18px] leading-[1.75] font-normal text-[#0F172A] last:!mb-0"
+                >
+                  {renderHighlightedParagraph(para.trim())}
+                </p>
+              ))}
+
+            {/* Quick Tap-to-Hear Vocabulary Helper Bar (only appears when student taps a highlighted word) */}
+            {activeReadingWord && (
+              <div className="mt-4 p-3.5 rounded-2xl bg-amber-50 border border-amber-300 flex items-center justify-between gap-3 animate-in fade-in duration-150">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-black text-amber-950">
+                      {activeReadingWord.word}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => speakVocabWord(activeReadingWord.word)}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-200/80 text-amber-950 text-[11px] font-bold cursor-pointer"
+                    >
+                      <Volume2 className="w-3 h-3" />
+                      <span>Hear</span>
+                    </button>
+                  </div>
+                  <p className="text-xs font-medium text-amber-900 mt-0.5">
+                    {activeReadingWord.meaning}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveReadingWord(null)}
+                  className="text-xs font-bold text-amber-700 hover:text-amber-950 px-2 py-1 cursor-pointer shrink-0"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+
+            {/* SECTION 05: DID YOU KNOW? */}
+            {didYouKnowText && (
+              <div
+                data-testid="shorts-did-you-know"
+                className="mt-7 p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-indigo-50 via-sky-50 to-violet-50 border border-indigo-200/90 shadow-2xs space-y-1.5"
               >
-                {para.trim()}
-              </p>
-            ))}
+                <div className="flex items-center gap-2 text-indigo-800">
+                  <span className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                    <Lightbulb className="w-4 h-4" />
+                  </span>
+                  <span className="text-xs font-black uppercase tracking-wider">
+                    Did You Know?
+                  </span>
+                </div>
+                <p className="text-[15px] sm:text-base font-medium text-slate-800 leading-relaxed">
+                  {didYouKnowText}
+                </p>
+              </div>
+            )}
 
-          {/* Bottom Action Button: Placed naturally after the complete reading passage */}
-          <div className="pt-6 mt-7 pb-6 sm:pb-2 border-t border-slate-200/80 flex justify-center sm:justify-end">
-            <button
-              type="button"
-              data-testid="shorts-read-next-button"
-              onClick={() => enterFullscreenVideoStage('watch_again')}
-              className="w-full sm:w-auto min-h-[52px] inline-flex items-center justify-center gap-2.5 px-8 py-4 rounded-2xl bg-gradient-to-r from-[#0284C7] to-[#0369A1] hover:from-[#0369A1] hover:to-[#075985] text-white text-sm font-black uppercase tracking-wider shadow-lg shadow-sky-500/20 active:scale-[0.99] transition-all cursor-pointer"
-            >
-              <span>I&apos;M READY – WATCH AGAIN</span>
-            </button>
+            {/* Watch Again Instruction Cue */}
+            {watchAgainInstruction && (
+              <div className="mt-5 p-3.5 rounded-2xl bg-sky-50 border border-sky-200 text-xs sm:text-sm font-semibold text-sky-900 flex items-start gap-2.5">
+                <Play className="w-4 h-4 text-[#0284C7] shrink-0 mt-0.5" />
+                <span>{watchAgainInstruction}</span>
+              </div>
+            )}
+
+            {/* Bottom Action Button: Placed naturally after the complete reading passage */}
+            <div className="pt-6 mt-7 pb-6 sm:pb-2 border-t border-slate-200/80 flex justify-center sm:justify-end">
+              <button
+                type="button"
+                data-testid="shorts-read-next-button"
+                onClick={() => {
+                  logStageMilestone('reading_completed');
+                  enterFullscreenVideoStage('watch_again');
+                }}
+                className="w-full sm:w-auto min-h-[52px] inline-flex items-center justify-center gap-2.5 px-8 py-4 rounded-2xl bg-gradient-to-r from-[#0284C7] to-[#0369A1] hover:from-[#0369A1] hover:to-[#075985] text-white text-sm font-black uppercase tracking-wider shadow-lg shadow-sky-500/20 active:scale-[0.99] transition-all cursor-pointer"
+              >
+                <span>I&apos;M READY – WATCH AGAIN</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -2462,7 +3180,7 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   }
 
   // ==========================================================================
-  // STAGE 5: INTERACTIVE QUESTIONS — CLEAN & MOBILE-FRIENDLY
+  // STAGE 7: KNOWLEDGE CHALLENGE — 1-BY-1 INTERACTIVE QUIZ WITH RETRY SUPPORT
   // ==========================================================================
   if (stage === 'challenge') {
     const activeQuestion = validQuestions[currentQuestionIndex];
@@ -2481,6 +3199,8 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
         data-testid="shorts-challenge-stage"
         className="w-full max-w-2xl mx-auto px-4 sm:px-0 space-y-4 py-3 animate-in fade-in duration-300 box-border"
       >
+        {renderSectionStepper('challenge')}
+
         {/* Minimal Question Counter & Progress Bar */}
         <div className="rounded-2xl bg-[#07162c] border border-sky-500/25 px-4 py-3.5 shadow-md">
           <div className="flex items-center justify-between gap-3 mb-2">
@@ -2488,7 +3208,7 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
               Question {currentQuestionIndex + 1} of {validQuestions.length}
             </span>
             <span className="text-xs font-extrabold text-sky-300">
-              {earnedQuestionPoints} / {maxQuestionPoints}
+              {earnedQuestionPoints} / {maxQuestionPoints} pts
             </span>
           </div>
           <div className="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
@@ -2499,13 +3219,15 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
           </div>
         </div>
 
-        {/* Active Single Question Card (Reusing ComprehensiveQuestionRenderer) */}
+        {/* Active Single Question Card (Reusing ComprehensiveQuestionRenderer with Retry support) */}
         {activeQuestion && (
           <div key={activeQuestionId} className="transition-all duration-300">
             <ComprehensiveQuestionRenderer
               question={activeQuestion}
               index={currentQuestionIndex}
               response={activeResponse}
+              allowRetryIncorrect={true}
+              onRetryQuestion={() => handleRetryQuestion(activeQuestionId)}
               onAnswerSubmit={(res) => handleSingleQuestionSubmit(res, activeQuestion)}
               isStudentView={true}
               mode="student"
@@ -2552,10 +3274,116 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
   }
 
   // ==========================================================================
-  // STAGE 6: PREMIUM CUSTOM GAMIFIED REWARD SCREEN
+  // STAGE 9 (LESSON 10 FINAL): GRAND COURSE COMPLETION PAGE
   // ==========================================================================
+  if (stage === 'course_complete') {
+    const achievements = Array.isArray(finalCompletionData?.achievements)
+      ? finalCompletionData.achievements
+      : [
+          '10 Mysteries Explored',
+          '10 Videos Watched',
+          '50+ Vocabulary Words Encountered',
+          '50 Knowledge Questions',
+          '10 Lessons Completed'
+        ];
+    return (
+      <div
+        data-testid="shorts-course-completion-page"
+        className="max-w-2xl mx-auto w-full px-4 sm:px-0 py-3 animate-in zoom-in-95 duration-300 box-border"
+      >
+        <div className="relative w-full rounded-3xl bg-gradient-to-b from-[#071936] via-[#07162c] to-[#040d1a] border border-amber-400/40 shadow-[0_24px_70px_rgba(251,191,36,0.22)] overflow-hidden text-white p-6 sm:p-9 space-y-6">
+          <div className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-80 h-80 rounded-full bg-amber-400/20 blur-3xl" />
+          <div className="pointer-events-none absolute bottom-0 right-0 w-72 h-72 rounded-full bg-sky-500/15 blur-3xl" />
+
+          <div className="relative z-10 text-center space-y-3">
+            <div className="relative mx-auto w-28 h-28 sm:w-32 sm:h-32 rounded-3xl p-1 bg-gradient-to-b from-amber-300 via-amber-400 to-sky-500 shadow-[0_0_50px_rgba(251,191,36,0.35)]">
+              <div className="w-full h-full rounded-[20px] overflow-hidden bg-[#040e1d] flex items-center justify-center">
+                <picture>
+                  <source srcSet="/images/shorts_reward_trophy.webp" type="image/webp" />
+                  <img
+                    src="/images/shorts_reward_trophy.png"
+                    alt="EdTechra Master Mystery Explorer Trophy"
+                    className="w-full h-full object-cover"
+                  />
+                </picture>
+              </div>
+            </div>
+
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-white to-sky-200 uppercase">
+              {finalCompletionData?.headline || 'YOU DID IT!'}
+            </h1>
+            <p className="text-xs sm:text-sm font-black uppercase tracking-widest text-amber-300">
+              {finalCompletionData?.subheadline || 'CONGRATULATIONS, MYSTERY EXPLORER!'}
+            </p>
+            <p className="text-sm sm:text-base text-sky-100/95 font-medium max-w-xl mx-auto leading-relaxed">
+              {finalCompletionData?.summary ||
+                'You have completed EdTechra Bitz: 10 Extraordinary Mysteries Explained. You explored strange events, discovered scientific facts, learned new English vocabulary and challenged your knowledge.'}
+            </p>
+          </div>
+
+          <div className="relative z-10 p-5 rounded-2xl bg-[#0b2140]/85 border border-sky-400/25 space-y-3">
+            <h2 className="text-xs font-black uppercase tracking-widest text-sky-300 text-center">
+              YOUR LEARNING ACHIEVEMENTS
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {achievements.map((item: string, aIdx: number) => (
+                <div
+                  key={aIdx}
+                  className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-[#061529] border border-sky-400/20 text-xs sm:text-sm font-bold text-white"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="relative z-10 p-5 rounded-2xl bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-sky-500/20 border-2 border-amber-400/50 text-center space-y-2 shadow-lg">
+            <div className="text-[11px] font-black uppercase tracking-widest text-amber-300">
+              YOUR FINAL ACHIEVEMENT
+            </div>
+            <div className="inline-flex items-center gap-2 text-lg sm:text-2xl font-black text-white uppercase tracking-tight">
+              <Trophy className="w-6 h-6 text-amber-300" />
+              <span>{finalCompletionData?.badge_title || 'EDTECHRA MASTER MYSTERY EXPLORER'}</span>
+            </div>
+            <p className="text-xs sm:text-sm text-sky-100/90 font-medium">
+              {finalCompletionData?.closing_note ||
+                'You are now a Master Mystery Explorer! Keep watching. Keep discovering. Keep learning. Your next adventure is waiting!'}
+            </p>
+          </div>
+
+          <div className="relative z-10 flex flex-col sm:flex-row items-center justify-center gap-3 pt-1">
+            <button
+              type="button"
+              onClick={() => setStage('reward')}
+              className="w-full sm:w-auto py-3.5 px-6 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/20 text-white text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+            >
+              BACK TO LESSON SUMMARY
+            </button>
+            <button
+              type="button"
+              data-testid="shorts-final-return-roadmap"
+              onClick={() => {
+                if (onReturnToCourse) onReturnToCourse();
+                else if (onQuitLesson) onQuitLesson();
+              }}
+              className="w-full sm:flex-1 py-3.5 px-6 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 text-xs sm:text-sm font-black uppercase tracking-wider shadow-lg shadow-amber-500/25 transition-all cursor-pointer"
+            >
+              RETURN TO COURSE ROADMAP
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================================================
+  // STAGE 8: PREMIUM CUSTOM GAMIFIED REWARD SCREEN
+  // ==========================================================================
+  const hasIncorrectAnswers = correctAnswersCount < totalQuestions;
   return (
     <div className="max-w-lg mx-auto w-full px-4 sm:px-0 py-3 animate-in zoom-in-95 duration-300 box-border">
+      {renderSectionStepper('reward')}
       <div
         data-testid="shorts-reward-screen"
         className="relative w-full rounded-3xl bg-gradient-to-b from-[#061830] via-[#07162c] to-[#040d1a] border border-sky-400/30 shadow-[0_24px_60px_rgba(2,132,199,0.28)] overflow-hidden text-white"
@@ -2584,6 +3412,12 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
             LESSON COMPLETED!
           </h2>
 
+          {lessonCompletionMessage && (
+            <p className="mt-2 text-xs sm:text-sm font-medium text-sky-100/90 max-w-md mx-auto">
+              {lessonCompletionMessage}
+            </p>
+          )}
+
           {dailyReleaseEnabled && (
             <div
               data-testid="shorts-daily-unlock-notice"
@@ -2605,12 +3439,12 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
           )}
         </div>
 
-        {/* Core Gamified Stats: Academic Score (X/10), Correct Answers (X/5), XP Earned (+X XP) */}
+        {/* Core Gamified Stats: Quiz Score (X/10), Correct Answers (X/5), XP Earned (+X XP) */}
         <div className="relative z-10 px-5 sm:px-6 pb-7 space-y-4">
           <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
             <div className="p-3.5 rounded-2xl bg-[#0b2140]/90 border border-sky-400/25 text-center shadow-inner">
               <span className="block text-[10px] font-extrabold uppercase tracking-wider text-sky-300">
-                Academic Score
+                Quiz Score
               </span>
               <span
                 data-testid="shorts-reward-academic-score"
@@ -2645,7 +3479,7 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
             </div>
           </div>
 
-          {/* Achievement Badge */}
+          {/* Achievement Badge(s) */}
           {earnedBadge && (
             <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-[#0b2140]/85 border border-sky-400/25">
               <div
@@ -2653,27 +3487,85 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
               >
                 <Award className="w-5 h-5" />
               </div>
-              <div className="min-w-0">
-                <div className="text-xs font-black uppercase tracking-wide text-white">
-                  {earnedBadge.title}
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-black uppercase tracking-wide text-white flex flex-wrap items-center gap-2">
+                  <span>{earnedBadge.title}</span>
+                  {lessonBadgeName && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[10px]">
+                      {lessonBadgeName}
+                    </span>
+                  )}
                 </div>
-                <div className="text-[11px] font-medium text-sky-200/85">
+                <div className="text-[11px] font-medium text-sky-200/85 mt-0.5">
                   {earnedBadge.subtitle}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Navigation Buttons: Respect DAILY LESSON UNLOCK */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-            {!dailyReleaseEnabled && hasNextShort && onNextShort && (
+          {/* Vocabulary Learned Summary (with click-to-pronounce) */}
+          {hasVocabularyStage && (
+            <div className="p-3.5 rounded-2xl bg-[#0b2140]/75 border border-sky-400/20 space-y-2">
+              <div className="text-[11px] font-black uppercase tracking-wider text-sky-300 flex items-center justify-between">
+                <span>Vocabulary Learned ({vocabularyCards.length})</span>
+                <span className="text-[10px] text-sky-200/75 font-semibold">Tap word to hear</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {vocabularyCards.map((vc, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => speakVocabWord(vc.word)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-500/15 hover:bg-sky-500/30 border border-sky-400/30 text-xs font-bold text-white transition-colors cursor-pointer"
+                  >
+                    <Volume2 className="w-3 h-3 text-sky-300" />
+                    <span>{vc.word}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Retry Option for Incorrect Questions or Review */}
+          {validQuestions.length > 0 && (
+            <button
+              type="button"
+              data-testid="shorts-retry-challenge"
+              onClick={handleRetryIncorrectFromReward}
+              className="w-full py-3 px-4 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/20 text-white text-xs font-extrabold uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-sky-300" />
+              <span>{hasIncorrectAnswers ? 'Retry Incorrect Questions' : 'Review & Retry Challenge'}</span>
+            </button>
+          )}
+
+          {/* Navigation Buttons: Respect DAILY LESSON UNLOCK & Final Lesson */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1">
+            {isFinalLesson && (
+              <button
+                type="button"
+                data-testid="shorts-open-final-completion"
+                onClick={() => {
+                  courseAudio.playCompleteSound();
+                  triggerConfettiBurst();
+                  logStageMilestone('course_completed');
+                  navigateToStage('course_complete');
+                }}
+                className="w-full sm:flex-1 py-3.5 px-5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 text-xs font-black uppercase tracking-wider shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Trophy className="w-4 h-4" />
+                <span>FINAL COURSE ACHIEVEMENT →</span>
+              </button>
+            )}
+
+            {!isFinalLesson && !dailyReleaseEnabled && hasNextShort && onNextShort && (
               <button
                 type="button"
                 data-testid="shorts-next-short"
                 onClick={onNextShort}
                 className="w-full sm:flex-1 py-3.5 px-6 rounded-2xl bg-gradient-to-r from-[#0284C7] to-[#0EA5E9] hover:from-[#0369A1] hover:to-[#0284C7] text-white text-xs font-black uppercase tracking-wider shadow-lg shadow-sky-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
               >
-                <span>NEXT SHORT →</span>
+                <span>CONTINUE TO NEXT LESSON →</span>
               </button>
             )}
 
@@ -2685,7 +3577,7 @@ export const LearnWithShortsStudentPlayer: React.FC<LearnWithShortsStudentPlayer
                 else if (onQuitLesson) onQuitLesson();
               }}
               className={`w-full ${
-                !dailyReleaseEnabled && hasNextShort && onNextShort
+                (isFinalLesson || (!dailyReleaseEnabled && hasNextShort && onNextShort))
                   ? 'sm:w-auto bg-white/10 hover:bg-white/15 text-white border border-white/15'
                   : 'bg-gradient-to-r from-[#0284C7] to-[#0EA5E9] hover:from-[#0369A1] hover:to-[#0284C7] text-white shadow-lg shadow-sky-500/25'
               } py-3.5 px-6 rounded-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer`}

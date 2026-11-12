@@ -703,10 +703,10 @@ export const CoursePreviewPage: React.FC = () => {
     watchedPercent: 100,
     totalVideos: 0
   });
-  const [shortsStage, setShortsStage] = useState<'intro' | 'watch' | 'read' | 'watch_again' | 'challenge' | 'reward'>('intro');
+  const [shortsStage, setShortsStage] = useState<'intro' | 'vocabulary' | 'watch' | 'read' | 'watch_again' | 'challenge' | 'reward' | 'course_complete'>('intro');
 
   const handleShortsStageChange = React.useCallback(
-    (newStage: 'intro' | 'watch' | 'read' | 'watch_again' | 'challenge' | 'reward') => {
+    (newStage: 'intro' | 'vocabulary' | 'watch' | 'read' | 'watch_again' | 'challenge' | 'reward' | 'course_complete') => {
       setShortsStage(prevStage => {
         if (prevStage === newStage) return prevStage;
         if (newStage !== 'intro') {
@@ -853,7 +853,9 @@ export const CoursePreviewPage: React.FC = () => {
 
   const isBitzShortsCourse = Boolean(
     course.id === 'e10c7ee9-0010-4000-8000-000000000010' ||
+      course.id === 'e10c7ee9-0020-4000-8000-000000000020' ||
       course.title?.toLowerCase().includes('strange mysteries') ||
+      course.title?.toLowerCase().includes('extraordinary mysteries') ||
       isLearnWithShortsLesson
   );
 
@@ -1763,7 +1765,7 @@ export const CoursePreviewPage: React.FC = () => {
                 courseId={course.id}
                 episodeId={selectedEpisode.id}
                 courseTitle={course.title}
-                courseCoverUrl={course.cover_image_url || (isBitzShortsCourse ? '/images/creepy_legends_cover.png' : undefined)}
+                courseCoverUrl={course.cover_image_url || (course.title?.toLowerCase().includes('extraordinary mysteries') ? '/images/extraordinary-mysteries-cover.jpg' : isBitzShortsCourse ? '/images/creepy-legends-cover.jpg' : undefined)}
                 lessonTitle={selectedEpisode.title}
                 onCompleteLesson={handleCompleteEpisode}
                 onNextLesson={

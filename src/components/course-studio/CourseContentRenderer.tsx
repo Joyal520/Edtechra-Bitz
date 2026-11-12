@@ -118,7 +118,7 @@ interface Props {
     course_start_date?: string;
     daily_release_interval_days?: number;
   }) => Promise<void> | void;
-  onShortsStageChange?: (stage: 'intro' | 'watch' | 'read' | 'watch_again' | 'challenge' | 'reward') => void;
+  onShortsStageChange?: (stage: 'intro' | 'vocabulary' | 'watch' | 'read' | 'watch_again' | 'challenge' | 'reward' | 'course_complete') => void;
 }
 
 export function getValidLessonQuestions(questions?: CourseQuestion[]): CourseQuestion[] {

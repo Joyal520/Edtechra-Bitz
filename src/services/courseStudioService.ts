@@ -773,6 +773,27 @@ export const courseStudioService = {
     return json.progress || [];
   },
 
+  async recordLearningEvent(payload: {
+    course_id: string;
+    classroom_id?: string | null;
+    episode_id?: string | null;
+    event_type: string;
+    metadata?: Record<string, any>;
+  }) {
+    try {
+      const headers = await getAuthHeader();
+      const res = await authenticatedFetch(`${API_BASE}/student/learning-event`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json();
+      return json;
+    } catch {
+      return { success: false };
+    }
+  },
+
   async evaluateEssay(payload: {
     course_id?: string;
     classroom_id?: string;

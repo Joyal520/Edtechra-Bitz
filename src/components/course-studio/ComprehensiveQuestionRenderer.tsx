@@ -119,6 +119,8 @@ interface ComprehensiveQuestionRendererProps {
   index: number;
   response?: StudentQuestionResponse;
   onAnswerSubmit: (res: StudentQuestionResponse) => void;
+  allowRetryIncorrect?: boolean;
+  onRetryQuestion?: () => void;
   isStudentView?: boolean;
   mode?: 'edit' | 'student';
   onUpdateQuestion?: (updated: CourseQuestion) => void;
@@ -135,6 +137,8 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
   index,
   response,
   onAnswerSubmit,
+  allowRetryIncorrect = false,
+  onRetryQuestion,
   isStudentView: _isStudentView = true,
   mode = 'student',
   onUpdateQuestion,
@@ -179,7 +183,15 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
   const [isInputActive, setIsInputActive] = useState<boolean>(false);
   const [selectedMatchLeft, setSelectedMatchLeft] = useState<string | null>(null);
   const [matchedPairsMap, setMatchedPairsMap] = useState<Record<string, string>>({});
+  const [draggedToken, setDraggedToken] = useState<{ token: SentenceToken; source: 'bank' | 'placed' } | null>(null);
   const shortAnswerInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!response) {
+      setFillInput('');
+      setShortAnswerInput('');
+    }
+  }, [response, qId]);
 
   // Stable tracking refs to guarantee sentence ordering state isolation across scroll and parent re-renders
   const lastSentenceQuestionKeyRef = React.useRef<string | null>(null);
@@ -1106,25 +1118,84 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                   </span>
                 )}
               </div>
-              <div className="min-h-[58px] p-3 sm:p-4 rounded-2xl bg-[var(--theme-surface-subtle)] border-2 border-dashed border-[var(--theme-accent)]/60 flex flex-wrap items-center gap-2 transition-all">
+              <div
+                onDragOver={(e) => {
+                  if (!isAnswered && draggedToken) {
+                    e.preventDefault();
+                  }
+                }}
+                onDrop={(e) => {
+                  if (isAnswered || !draggedToken) return;
+                  e.preventDefault();
+                  courseAudio.playClick();
+                  const { token, source } = draggedToken;
+                  if (source === 'bank') {
+                    setSelectedTokens((prev) => [...prev, token]);
+                    setSentenceTokens((prev) => prev.filter((t) => t.id !== token.id));
+                  } else {
+                    setSelectedTokens((prev) => [...prev.filter((t) => t.id !== token.id), token]);
+                  }
+                  setDraggedToken(null);
+                }}
+                className="min-h-[58px] p-3 sm:p-4 rounded-2xl bg-[var(--theme-surface-subtle)] border-2 border-dashed border-[var(--theme-accent)]/60 flex flex-wrap items-center gap-2 transition-all"
+              >
                 {selectedTokens.length === 0 ? (
                   <span className="text-xs sm:text-sm text-theme-muted font-medium italic select-none">
-                    Tap the words below in order to assemble the sentence...
+                    Drag or tap the words below in order to assemble the sentence...
                   </span>
                 ) : (
-                  selectedTokens.map((token) => (
-                    <LiquidChip
+                  selectedTokens.map((token, tIdx) => (
+                    <span
                       key={token.id}
-                      text={token.text}
-                      isPlaced
-                      disabled={isAnswered}
-                      onClick={() => {
-                        if (isAnswered) return;
-                        courseAudio.playClick();
-                        setSelectedTokens(prev => prev.filter(t => t.id !== token.id));
-                        setSentenceTokens(prev => [...prev, token]);
+                      draggable={!isAnswered}
+                      onDragStart={() => {
+                        if (!isAnswered) setDraggedToken({ token, source: 'placed' });
                       }}
-                    />
+                      onDragEnd={() => setDraggedToken(null)}
+                      onDragOver={(e) => {
+                        if (!isAnswered && draggedToken) e.preventDefault();
+                      }}
+                      onDrop={(e) => {
+                        if (isAnswered || !draggedToken) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        courseAudio.playClick();
+                        const { token: moving, source } = draggedToken;
+                        if (moving.id === token.id) {
+                          setDraggedToken(null);
+                          return;
+                        }
+                        if (source === 'bank') {
+                          setSentenceTokens((prev) => prev.filter((t) => t.id !== moving.id));
+                          setSelectedTokens((prev) => {
+                            const next = prev.filter((t) => t.id !== moving.id);
+                            next.splice(tIdx, 0, moving);
+                            return next;
+                          });
+                        } else {
+                          setSelectedTokens((prev) => {
+                            const without = prev.filter((t) => t.id !== moving.id);
+                            const insertAt = without.findIndex((t) => t.id === token.id);
+                            without.splice(insertAt >= 0 ? insertAt : tIdx, 0, moving);
+                            return without;
+                          });
+                        }
+                        setDraggedToken(null);
+                      }}
+                      className={!isAnswered ? 'cursor-grab active:cursor-grabbing' : ''}
+                    >
+                      <LiquidChip
+                        text={token.text}
+                        isPlaced
+                        disabled={isAnswered}
+                        onClick={() => {
+                          if (isAnswered) return;
+                          courseAudio.playClick();
+                          setSelectedTokens(prev => prev.filter(t => t.id !== token.id));
+                          setSentenceTokens(prev => [...prev, token]);
+                        }}
+                      />
+                    </span>
                   ))
                 )}
               </div>
@@ -1133,9 +1204,23 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
             {/* AREA 2: Available Word Bank */}
             <div className="space-y-1.5 pt-1">
               <span className="text-[11px] font-black text-theme-secondary uppercase tracking-wider block">
-                Available Words:
+                Available Words (Drag or Tap):
               </span>
-              <div className="min-h-[58px] p-3 sm:p-4 rounded-2xl bg-[var(--theme-surface-subtle)] border border-[var(--theme-border-subtle)] flex flex-wrap items-center gap-2 transition-all">
+              <div
+                onDragOver={(e) => {
+                  if (!isAnswered && draggedToken?.source === 'placed') e.preventDefault();
+                }}
+                onDrop={(e) => {
+                  if (isAnswered || !draggedToken || draggedToken.source !== 'placed') return;
+                  e.preventDefault();
+                  courseAudio.playClick();
+                  const { token } = draggedToken;
+                  setSelectedTokens((prev) => prev.filter((t) => t.id !== token.id));
+                  setSentenceTokens((prev) => [...prev, token]);
+                  setDraggedToken(null);
+                }}
+                className="min-h-[58px] p-3 sm:p-4 rounded-2xl bg-[var(--theme-surface-subtle)] border border-[var(--theme-border-subtle)] flex flex-wrap items-center gap-2 transition-all"
+              >
                 {sentenceTokens.length === 0 ? (
                   <div className="text-xs sm:text-sm text-[var(--theme-success-text)] font-bold flex items-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />
@@ -1143,17 +1228,26 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                   </div>
                 ) : (
                   sentenceTokens.map((token) => (
-                    <LiquidChip
+                    <span
                       key={token.id}
-                      text={token.text}
-                      disabled={isAnswered}
-                      onClick={() => {
-                        if (isAnswered) return;
-                        courseAudio.playClick();
-                        setSelectedTokens(prev => [...prev, token]);
-                        setSentenceTokens(prev => prev.filter(t => t.id !== token.id));
+                      draggable={!isAnswered}
+                      onDragStart={() => {
+                        if (!isAnswered) setDraggedToken({ token, source: 'bank' });
                       }}
-                    />
+                      onDragEnd={() => setDraggedToken(null)}
+                      className={!isAnswered ? 'cursor-grab active:cursor-grabbing' : ''}
+                    >
+                      <LiquidChip
+                        text={token.text}
+                        disabled={isAnswered}
+                        onClick={() => {
+                          if (isAnswered) return;
+                          courseAudio.playClick();
+                          setSelectedTokens(prev => [...prev, token]);
+                          setSentenceTokens(prev => prev.filter(t => t.id !== token.id));
+                        }}
+                      />
+                    </span>
                   ))
                 )}
               </div>
@@ -1791,6 +1885,23 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
             <div className="text-[11px]">
               <span className="font-bold">Areas to improve: </span>
               <span>{response.improvements.join(' • ')}</span>
+            </div>
+          )}
+
+          {allowRetryIncorrect && !isCorrect && mode === 'student' && onRetryQuestion && (
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                data-testid="retry-incorrect-question-btn"
+                onClick={() => {
+                  courseAudio.playClick();
+                  onRetryQuestion();
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold shadow-xs transition-all cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Try Again</span>
+              </button>
             </div>
           )}
         </div>
