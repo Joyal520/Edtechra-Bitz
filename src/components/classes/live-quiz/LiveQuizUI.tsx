@@ -306,6 +306,76 @@ export const QuizProgress: React.FC<QuizProgressProps> = ({
 // ----------------------------------------------------------------------------
 // 5. QuestionCard Component
 // ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// 5. Question Instruction Parser & QuestionCard Component (Part 5)
+// Automatically detects instructional text before the first colon (:) and
+// highlights it with bold typography and primary theme colour (#087CF5).
+// ----------------------------------------------------------------------------
+export function parseQuestionInstruction(questionText: string): {
+  instruction: string | null;
+  body: string;
+} {
+  if (!questionText || typeof questionText !== 'string') {
+    return { instruction: null, body: '' };
+  }
+
+  const colonIdx = questionText.indexOf(':');
+  if (colonIdx <= 0) {
+    return { instruction: null, body: questionText };
+  }
+
+  const prefix = questionText.slice(0, colonIdx).trim();
+  const remainder = questionText.slice(colonIdx + 1);
+
+  // Validate that prefix is a genuine instructional phrase on the first line
+  // (not a URL scheme like http:/https:, not a bare number/timestamp like 12:30,
+  // and has remaining question text after the colon).
+  if (
+    prefix.length < 2 ||
+    prefix.length > 100 ||
+    prefix.includes('\n') ||
+    /^https?$/i.test(prefix) ||
+    /^\d+$/.test(prefix) ||
+    remainder.trim().length === 0
+  ) {
+    return { instruction: null, body: questionText };
+  }
+
+  return {
+    instruction: `${prefix}:`,
+    body: remainder.replace(/^[ \t]+/, '')
+  };
+}
+
+export const FormattedQuestionText: React.FC<{
+  text: string;
+  className?: string;
+  instructionClassName?: string;
+  bodyClassName?: string;
+}> = ({
+  text,
+  className = '',
+  instructionClassName = 'font-extrabold text-[#087CF5]',
+  bodyClassName = 'font-normal text-[#10245A]'
+}) => {
+  const { instruction, body } = parseQuestionInstruction(text);
+
+  if (!instruction) {
+    return (
+      <span className={`whitespace-pre-line break-words font-semibold text-[#10245A] ${className}`}>
+        {body}
+      </span>
+    );
+  }
+
+  return (
+    <span className={`whitespace-pre-line break-words ${className}`}>
+      <strong className={`${instructionClassName} mr-1.5`}>{instruction}</strong>
+      <span className={bodyClassName}>{body}</span>
+    </span>
+  );
+};
+
 export interface QuestionCardProps {
   question: string;
   imageUrl?: string | null;
@@ -329,8 +399,8 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
             />
           </div>
         )}
-        <h1 className="text-[20px] sm:text-[24px] md:text-[26px] font-extrabold text-[#10245A] tracking-tight leading-[1.35] px-1">
-          {question}
+        <h1 className="text-[20px] sm:text-[24px] md:text-[26px] text-[#10245A] tracking-tight leading-[1.35] px-1">
+          <FormattedQuestionText text={question} />
         </h1>
       </div>
 
@@ -719,7 +789,7 @@ export const PodiumPlayer: React.FC<PodiumPlayerProps> = ({ player, rank }) => {
         <CrownIcon rank={rank} />
       </div>
 
-      {/* Circular Avatar + Overlapping #Rank Pill */}
+      {/* Circular Avatar + Overlapping #Rank Pill (Gold / Silver / Bronze) */}
       <div className="relative mb-2 animate-lq-avatar">
         <PlayerAvatar
           name={player.name}
@@ -731,7 +801,7 @@ export const PodiumPlayer: React.FC<PodiumPlayerProps> = ({ player, rank }) => {
         <span
           className={`absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full font-black shadow-md whitespace-nowrap ${badgeStyle}`}
         >
-          #{rank}
+          #{rank} • {rank === 1 ? 'Gold' : rank === 2 ? 'Silver' : 'Bronze'}
         </span>
       </div>
 
@@ -814,7 +884,9 @@ export const Podium: React.FC<PodiumProps> = ({ players }) => {
 };
 
 // ----------------------------------------------------------------------------
-// 10. Leaderboard & LeaderboardRow Components (STRICTLY PLAYERS #4–#10)
+// 10. Complete Leaderboard & LeaderboardRow Components (Part 6)
+// Displays every participant in descending order with Position, Student Name,
+// Avatar, Total Points, Correct Answers, and Average Response Time.
 // ----------------------------------------------------------------------------
 export interface LeaderboardRowData {
   id: string;
@@ -824,6 +896,7 @@ export interface LeaderboardRowData {
   correctCount: number;
   totalQuestions: number;
   score: number;
+  avgResponseTimeMs?: number;
 }
 
 export interface LeaderboardRowProps {
@@ -832,14 +905,30 @@ export interface LeaderboardRowProps {
 }
 
 export const LeaderboardRow: React.FC<LeaderboardRowProps> = ({ item, index }) => {
+  const rankBadge =
+    item.rank === 1
+      ? 'bg-gradient-to-r from-[#FFCC33] to-[#F59E0B] text-white'
+      : item.rank === 2
+      ? 'bg-gradient-to-r from-[#64748B] to-[#94A3B8] text-white'
+      : item.rank === 3
+      ? 'bg-gradient-to-r from-[#D97706] to-[#B45309] text-white'
+      : 'bg-[#E8F3FF] text-[#3B527E]';
+
+  const avgSec =
+    item.avgResponseTimeMs && item.avgResponseTimeMs > 0
+      ? `${(item.avgResponseTimeMs / 1000).toFixed(1)}s avg`
+      : null;
+
   return (
     <div
-      style={{ animationDelay: `${Math.min(index * 45, 300)}ms` }}
+      style={{ animationDelay: `${Math.min(index * 35, 300)}ms` }}
       className="animate-lq-row flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 rounded-[14px] bg-[#F7FBFF] hover:bg-[#EDF6FF] border border-[#E4EFFA] transition-colors"
     >
       <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-        {/* 1. Rank */}
-        <span className="w-7 text-left font-extrabold text-xs sm:text-sm text-[#3B527E] tabular-nums shrink-0">
+        {/* 1. Position / Rank */}
+        <span
+          className={`min-w-[30px] px-1.5 py-0.5 rounded-lg text-center font-extrabold text-[11px] sm:text-xs tabular-nums shrink-0 ${rankBadge}`}
+        >
           #{item.rank}
         </span>
 
@@ -851,18 +940,26 @@ export const LeaderboardRow: React.FC<LeaderboardRowProps> = ({ item, index }) =
           size="sm"
         />
 
-        {/* 3. Player Name & 4. Correct Answers */}
+        {/* 3. Student Name, 4. Correct Answers & 5. Average Response Time */}
         <div className="min-w-0">
           <div className="text-xs sm:text-sm font-extrabold text-[#10245A] truncate leading-tight">
             {item.name}
           </div>
-          <div className="text-[11px] font-medium text-[#64748B] leading-tight mt-0.5">
-            {item.correctCount} of {item.totalQuestions} correct
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#64748B] leading-tight mt-0.5 flex-wrap">
+            <span>
+              {item.correctCount} of {item.totalQuestions} correct
+            </span>
+            {avgSec && (
+              <>
+                <span className="text-[#CBD5E1]">•</span>
+                <span className="text-[#087CF5] font-semibold">{avgSec}</span>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      {/* 5. Score */}
+      {/* 6. Total Points */}
       <div className="text-right shrink-0 pl-2">
         <span className="font-extrabold text-xs sm:text-sm text-[#087CF5] tabular-nums">
           {item.score.toLocaleString()} pts
@@ -889,7 +986,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
 
   return (
     <section
-      aria-label="Leaderboard Players 4 to 10"
+      aria-label="Complete Leaderboard"
       className="w-full bg-white rounded-[24px] p-4 sm:p-5 border border-[#E2EEF9] shadow-[0_10px_30px_rgba(16,36,90,0.05)] space-y-2.5 sm:space-y-3"
     >
       {/* Header */}
@@ -897,18 +994,18 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
         <div className="flex items-center gap-2">
           <Users className="w-4 h-4 sm:w-5 sm:h-5 text-[#087CF5]" />
           <h2 className="text-sm sm:text-base font-extrabold text-[#10245A] tracking-tight">
-            Leaderboard (Players 4–10)
+            Complete Leaderboard
           </h2>
         </div>
         <span className="text-xs sm:text-sm font-bold text-[#4A608A]">
-          {displayCount} {displayCount === 1 ? 'Player' : 'Players'}
+          {displayCount} {displayCount === 1 ? 'Participant' : 'Participants'}
         </span>
       </div>
 
-      {/* Rows (#4–#10) */}
-      <div className="space-y-1.5 sm:space-y-2">
+      {/* All Participants in Descending Order */}
+      <div className="space-y-1.5 sm:space-y-2 max-h-[360px] overflow-y-auto pr-0.5">
         {players.map((item, idx) => (
-          <LeaderboardRow key={item.id || item.rank} item={item} index={idx} />
+          <LeaderboardRow key={item.id || `${item.rank}_${idx}`} item={item} index={idx} />
         ))}
       </div>
     </section>

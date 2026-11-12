@@ -130,7 +130,7 @@ import { gradeTaskSubmission, TASK_CATEGORIES } from './server/hybridGradingServ
 import { generateEvaluationReportPdf } from './server/pdfReportService.mjs';
 import { getR2Config } from './server/r2Config.mjs';
 import { moderatePostContent } from './server/moderationService.mjs';
-import { generateArticleCoverImage, buildArticleImagePrompt } from './server/geminiImageService.mjs';
+import { generateArticleCoverImage, buildArticleImagePrompt, generateQuizCoverImage } from './server/geminiImageService.mjs';
 import {
   loadVocabularyCache,
   saveVocabularyCache,
@@ -340,6 +340,68 @@ export function computeLiveQuizTimeline(session, questions, nowMs = Date.now()) 
   }
 
   const REVEAL_DURATION_MS = 3500;
+
+  // If the current question has an explicit server-controlled question_start_ms
+  // (e.g. set when the teacher or RPC advanced to this question), anchor the
+  // timeline to that exact question_start_ms so speed bonus and timers stay synchronized.
+  const currentIdx = Number.isInteger(session.current_question_index) ? session.current_question_index : 0;
+  if (session.question_start_ms && currentIdx >= 0 && currentIdx < sortedQuestions.length) {
+    const q = sortedQuestions[currentIdx];
+    const durSec = q.duration_sec || q.durationSec || session.question_duration_sec || 20;
+    const durMs = durSec * 1000;
+    const qStartMs = Number(session.question_start_ms);
+    const qEndMs = qStartMs + durMs;
+    const revealEndMs = qEndMs + REVEAL_DURATION_MS;
+
+    if (nowMs < qEndMs) {
+      return {
+        status: 'in_progress',
+        current_question_index: currentIdx,
+        question_start_ms: qStartMs,
+        question_duration_sec: durSec,
+        question_time_left_sec: Math.max(0, Math.ceil((qEndMs - nowMs) / 1000)),
+        correct_answer_index: null,
+        active_question: q
+      };
+    } else if (nowMs < revealEndMs) {
+      const correctIdx = typeof q.correct_index === 'number'
+        ? q.correct_index
+        : (typeof q.correctIndex === 'number' ? q.correctIndex : 0);
+      return {
+        status: 'reveal',
+        current_question_index: currentIdx,
+        question_start_ms: qStartMs,
+        question_duration_sec: durSec,
+        reveal_time_left_ms: Math.max(0, revealEndMs - nowMs),
+        correct_answer_index: correctIdx,
+        active_question: q
+      };
+    } else {
+      const nextIdx = currentIdx + 1;
+      if (nextIdx < sortedQuestions.length) {
+        const nextQ = sortedQuestions[nextIdx];
+        const nextDurSec = nextQ.duration_sec || nextQ.durationSec || session.question_duration_sec || 20;
+        return {
+          status: 'in_progress',
+          current_question_index: nextIdx,
+          question_start_ms: nowMs,
+          question_duration_sec: nextDurSec,
+          question_time_left_sec: nextDurSec,
+          correct_answer_index: null,
+          active_question: nextQ
+        };
+      }
+      return {
+        status: 'finished',
+        current_question_index: sortedQuestions.length,
+        question_start_ms: null,
+        question_duration_sec: 20,
+        correct_answer_index: null,
+        ended_at: new Date(nowMs).toISOString()
+      };
+    }
+  }
+
   let cumulativeMs = 0;
 
   for (let i = 0; i < sortedQuestions.length; i++) {
@@ -393,7 +455,8 @@ export function computeLiveQuizTimeline(session, questions, nowMs = Date.now()) 
 
 /**
  * Server-authoritative finalization: computes stats, calculates rankings,
- * writes live_quiz_results, and awards classroom points independently of host browser.
+ * writes live_quiz_results atomically in one batch for ALL participants,
+ * and awards classroom points independently of host browser.
  */
 async function finalizeLiveQuizSessionOnServer(supabaseClient, session, questions) {
   if (!supabaseClient || !session?.id) return [];
@@ -427,61 +490,167 @@ async function finalizeLiveQuizSessionOnServer(supabaseClient, session, question
     }
 
     const [participantsRes, answersRes] = await Promise.all([
-      partsQuery.order('score', { ascending: false }),
+      partsQuery,
       ansQuery
     ]);
 
-    const participants = participantsRes.data || [];
+    const rawParticipants = participantsRes.data || [];
     const answers = answersRes.data || [];
 
+    // Aggregate answers per unique student (sum points, count correct/wrong, compute avg response time)
     const answersByStudent = {};
     for (const a of answers) {
       if (!answersByStudent[a.student_id]) {
-        answersByStudent[a.student_id] = { correct: 0, wrong: 0 };
+        answersByStudent[a.student_id] = {
+          correct: 0,
+          wrong: 0,
+          sumPoints: 0,
+          responseTimes: []
+        };
       }
+      const st = answersByStudent[a.student_id];
       if (a.is_correct) {
-        answersByStudent[a.student_id].correct += 1;
+        st.correct += 1;
       } else {
-        answersByStudent[a.student_id].wrong += 1;
+        st.wrong += 1;
+      }
+      st.sumPoints += Number(a.points_awarded || 0);
+      const rt = Number(a.response_time_ms || 0);
+      if (rt > 0) {
+        st.responseTimes.push(rt);
       }
     }
 
-    const finalResults = [];
-    for (let i = 0; i < participants.length; i++) {
-      const p = participants[i];
-      const rank = i + 1;
-      const stats = answersByStudent[p.student_id] || { correct: 0, wrong: 0 };
-      const accuracy = totalQuestions > 0 ? Math.round((stats.correct / totalQuestions) * 100) : 0;
+    // Ensure any student who submitted answers is included even if participant row was missing
+    const participantMap = new Map();
+    for (const p of rawParticipants) {
+      if (session.teacher_id && p.student_id === session.teacher_id) continue;
+      participantMap.set(p.student_id, p);
+    }
+    for (const studentId of Object.keys(answersByStudent)) {
+      if (session.teacher_id && studentId === session.teacher_id) continue;
+      if (!participantMap.has(studentId)) {
+        participantMap.set(studentId, {
+          session_id: session.id,
+          student_id: studentId,
+          display_name: 'Student',
+          score: answersByStudent[studentId].sumPoints,
+          joined_at: new Date().toISOString()
+        });
+      }
+    }
 
-      const { data: resRow } = await supabaseClient
+    // Build enriched list and sort deterministically:
+    // 1. authoritativeScore DESC
+    // 2. correctCount DESC
+    // 3. avgResponseTimeMs ASC (non-zero faster wins; 0 sorted after positive times)
+    // 4. joined_at ASC
+    // 5. student_id ASC
+    const enrichedParticipants = Array.from(participantMap.values()).map((p) => {
+      const stats = answersByStudent[p.student_id] || { correct: 0, wrong: 0, sumPoints: 0, responseTimes: [] };
+      const authoritativeScore = Math.max(Number(p.score || 0), stats.sumPoints);
+      const avgResponseTimeMs = stats.responseTimes.length > 0
+        ? Math.round(stats.responseTimes.reduce((acc, v) => acc + v, 0) / stats.responseTimes.length)
+        : 0;
+      return {
+        ...p,
+        authoritativeScore,
+        correctCount: stats.correct,
+        wrongCount: Math.max(0, totalQuestions - stats.correct),
+        avgResponseTimeMs
+      };
+    });
+
+    enrichedParticipants.sort((a, b) => {
+      if (b.authoritativeScore !== a.authoritativeScore) return b.authoritativeScore - a.authoritativeScore;
+      if (b.correctCount !== a.correctCount) return b.correctCount - a.correctCount;
+      const aRt = a.avgResponseTimeMs > 0 ? a.avgResponseTimeMs : 999999999;
+      const bRt = b.avgResponseTimeMs > 0 ? b.avgResponseTimeMs : 999999999;
+      if (aRt !== bRt) return aRt - bRt;
+      const aJoined = a.joined_at ? new Date(a.joined_at).getTime() : 0;
+      const bJoined = b.joined_at ? new Date(b.joined_at).getTime() : 0;
+      if (aJoined !== bJoined) return aJoined - bJoined;
+      return String(a.student_id).localeCompare(String(b.student_id));
+    });
+
+    const trackQuiz = session.quiz?.track_quiz !== false;
+    const upsertPayloads = enrichedParticipants.map((p, idx) => {
+      const rank = idx + 1;
+      const accuracy = totalQuestions > 0 ? Math.round((p.correctCount / totalQuestions) * 100) : 0;
+      return {
+        session_id: session.id,
+        classroom_id: session.classroom_id,
+        teacher_id: session.teacher_id,
+        student_id: p.student_id,
+        quiz_id: session.quiz_id,
+        score: p.authoritativeScore,
+        points_awarded: p.authoritativeScore,
+        correct_count: p.correctCount,
+        wrong_count: p.wrongCount,
+        total_questions: totalQuestions,
+        accuracy_percentage: accuracy,
+        avg_response_time_ms: p.avgResponseTimeMs,
+        final_rank: rank
+      };
+    });
+
+    let finalResults = [];
+    if (upsertPayloads.length > 0) {
+      // Try batch upsert with avg_response_time_ms; fallback without column if migration not yet applied
+      let { data: upsertedRows, error: upsertErr } = await supabaseClient
         .from('live_quiz_results')
-        .upsert(
-          {
-            session_id: session.id,
-            classroom_id: session.classroom_id,
-            teacher_id: session.teacher_id,
-            student_id: p.student_id,
-            quiz_id: session.quiz_id,
-            score: p.score || 0,
-            points_awarded: p.score || 0,
-            correct_count: stats.correct,
-            wrong_count: Math.max(0, totalQuestions - stats.correct),
-            total_questions: totalQuestions,
-            accuracy_percentage: accuracy,
-            final_rank: rank
-          },
-          { onConflict: 'session_id,student_id' }
-        )
+        .upsert(upsertPayloads, { onConflict: 'session_id,student_id' })
         .select(`
           *,
           student:profiles!student_id (id, full_name, avatar_url, email)
-        `)
-        .maybeSingle();
+        `);
 
-      if (resRow) finalResults.push(resRow);
+      if (upsertErr) {
+        const legacyPayloads = upsertPayloads.map(({ avg_response_time_ms, ...rest }) => rest);
+        const retryRes = await supabaseClient
+          .from('live_quiz_results')
+          .upsert(legacyPayloads, { onConflict: 'session_id,student_id' })
+          .select(`
+            *,
+            student:profiles!student_id (id, full_name, avatar_url, email)
+          `);
+        upsertedRows = retryRes.data;
+      }
 
-      // Award classroom points if score > 0
-      if ((p.score || 0) > 0 && session.classroom_id) {
+      if (Array.isArray(upsertedRows)) {
+        finalResults = upsertedRows
+          .map((row) => {
+            const p = participantMap.get(row.student_id);
+            const enriched = enrichedParticipants.find((ep) => ep.student_id === row.student_id);
+            return {
+              ...row,
+              avg_response_time_ms: row.avg_response_time_ms ?? enriched?.avgResponseTimeMs ?? 0,
+              student: row.student || {
+                id: row.student_id,
+                full_name: p?.display_name || 'Student',
+                avatar_url: p?.avatar_url || null
+              }
+            };
+          })
+          .sort((a, b) => (a.final_rank || 999) - (b.final_rank || 999));
+      }
+    }
+
+    // Update participant ranks and award classroom points idempotently
+    for (let i = 0; i < enrichedParticipants.length; i++) {
+      const p = enrichedParticipants[i];
+      const rank = i + 1;
+      const resRow = finalResults.find((r) => r.student_id === p.student_id);
+
+      try {
+        await supabaseClient
+          .from('live_quiz_participants')
+          .update({ score: p.authoritativeScore, final_rank: rank })
+          .eq('session_id', session.id)
+          .eq('student_id', p.student_id);
+      } catch {}
+
+      if (trackQuiz && p.authoritativeScore > 0 && session.classroom_id) {
         try {
           const { data: existingPt } = await supabaseClient
             .from('classroom_points')
@@ -496,7 +665,7 @@ async function finalizeLiveQuizSessionOnServer(supabaseClient, session, question
             await supabaseClient.from('classroom_points').insert({
               classroom_id: session.classroom_id,
               student_id: p.student_id,
-              points: p.score,
+              points: p.authoritativeScore,
               reason: `Live Quiz: ${session.quiz?.title || 'Game'} (Rank #${rank})`,
               source_type: 'live_quiz',
               source_id: resRow?.id || session.id,
@@ -504,10 +673,11 @@ async function finalizeLiveQuizSessionOnServer(supabaseClient, session, question
             });
           }
         } catch (e) {
-          // ignore classroom points failure
+          // ignore classroom points duplicate
         }
       }
     }
+
     return finalResults;
   } catch (err) {
     console.warn('[LiveQuiz Server] finalizeLiveQuizSessionOnServer notice:', err.message);
@@ -5553,114 +5723,27 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/complete', asy
       session = data;
     }
 
-    // 1. Idempotently calculate results and award classroom points if not already finalized
+    // 1. Authoritatively calculate results for ALL participants and award classroom points
+    let finalizedResults = [];
     try {
-      const { data: existingResults } = await serverSupabase
-        .from('live_quiz_results')
-        .select('id')
-        .eq('session_id', sessionId)
-        .limit(1);
+      const { data: fullSession } = await serverSupabase
+        .from('live_quiz_sessions')
+        .select('*, quiz:live_quizzes(*, questions:live_quiz_questions(*))')
+        .eq('id', sessionId)
+        .maybeSingle();
 
-      if (!existingResults || existingResults.length === 0) {
-        const { data: fullSession } = await serverSupabase
-          .from('live_quiz_sessions')
-          .select('*, quiz:live_quizzes(*, questions:live_quiz_questions(*))')
-          .eq('id', sessionId)
-          .maybeSingle();
-
-          let partsQuery = serverSupabase
-            .from('live_quiz_participants')
+      if (fullSession) {
+        let questions = fullSession?.quiz?.questions || [];
+        if ((!questions || questions.length === 0) && fullSession.quiz_id) {
+          const { data: qRows } = await serverSupabase
+            .from('live_quiz_questions')
             .select('*')
-            .eq('session_id', sessionId);
-          let ansQuery = serverSupabase
-            .from('live_quiz_answers')
-            .select('*')
-            .eq('session_id', sessionId);
-
-          if (fullSession.teacher_id) {
-            partsQuery = partsQuery.neq('student_id', fullSession.teacher_id);
-            ansQuery = ansQuery.neq('student_id', fullSession.teacher_id);
-
-            // Clean up any historical host records
-            try {
-              await serverSupabase.from('live_quiz_results').delete().eq('session_id', sessionId).eq('student_id', fullSession.teacher_id);
-              await serverSupabase.from('live_quiz_participants').delete().eq('session_id', sessionId).eq('student_id', fullSession.teacher_id);
-              await serverSupabase.from('live_quiz_answers').delete().eq('session_id', sessionId).eq('student_id', fullSession.teacher_id);
-              if (fullSession.classroom_id) {
-                await serverSupabase.from('classroom_points').delete().eq('classroom_id', fullSession.classroom_id).eq('student_id', fullSession.teacher_id).eq('source_type', 'live_quiz');
-              }
-            } catch (cErr) {}
-          }
-
-          const [partsRes, ansRes] = await Promise.all([
-            partsQuery.order('score', { ascending: false }),
-            ansQuery
-          ]);
-
-          const participants = partsRes.data || [];
-          const answers = ansRes.data || [];
-          const totalQuestions = fullSession?.quiz?.questions?.length || fullSession?.total_questions || (answers.length > 0 ? new Set(answers.map(a => a.question_id)).size : 1);
-
-          const answersByStudent = {};
-          answers.forEach((a) => {
-            if (!answersByStudent[a.student_id]) {
-              answersByStudent[a.student_id] = { correct: 0, wrong: 0 };
-            }
-            if (a.is_correct) {
-              answersByStudent[a.student_id].correct += 1;
-            } else {
-              answersByStudent[a.student_id].wrong += 1;
-            }
-          });
-
-          for (let i = 0; i < participants.length; i++) {
-            const p = participants[i];
-            const rank = i + 1;
-            const studentStats = answersByStudent[p.student_id] || { correct: 0, wrong: 0 };
-            const accuracy = Math.round((studentStats.correct / totalQuestions) * 100);
-
-            const { data: resRow } = await serverSupabase
-              .from('live_quiz_results')
-              .upsert(
-                {
-                  session_id: sessionId,
-                  classroom_id: fullSession.classroom_id,
-                  teacher_id: fullSession.teacher_id,
-                  student_id: p.student_id,
-                  quiz_id: fullSession.quiz_id,
-                  score: p.score,
-                  points_awarded: p.score,
-                  correct_count: studentStats.correct,
-                  wrong_count: Math.max(0, totalQuestions - studentStats.correct),
-                  total_questions: totalQuestions,
-                  accuracy_percentage: accuracy,
-                  final_rank: rank
-                },
-                { onConflict: 'session_id,student_id' }
-              )
-              .select()
-              .single();
-
-            if (p.score > 0 && fullSession.classroom_id) {
-              try {
-                await serverSupabase
-                  .from('classroom_points')
-                  .insert({
-                    classroom_id: fullSession.classroom_id,
-                    student_id: p.student_id,
-                    points: p.score,
-                    reason: `Live Quiz (Rank #${rank})`,
-                    source_type: 'live_quiz',
-                    source_id: resRow?.id || null,
-                    awarded_by: fullSession.teacher_id,
-                    created_at: new Date().toISOString()
-                  });
-              } catch (ptsErr) {
-                // Ignore conflict duplicates
-              }
-            }
-          }
+            .eq('quiz_id', fullSession.quiz_id)
+            .order('question_index', { ascending: true });
+          questions = qRows || [];
         }
+        finalizedResults = await finalizeLiveQuizSessionOnServer(serverSupabase, fullSession, questions);
+      }
     } catch (calcErr) {
       console.warn('[LiveQuiz complete endpoint] Error computing stats:', calcErr);
     }
@@ -5669,14 +5752,10 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/complete', asy
       .from('live_quiz_sessions')
       .update({
         status: 'finished',
-        ended_at: new Date().toISOString()
+        ended_at: new Date().toISOString(),
+        question_start_ms: null
       })
       .eq('id', sessionId);
-
-    if (session?.pin) {
-      await broadcastQuizEvent(serverSupabase, session.pin, 'quiz_finished', { sessionId });
-      liveQuizServerChannels.delete(session.pin);
-    }
 
     const { data: finalResultsRows } = await serverSupabase
       .from('live_quiz_results')
@@ -5684,10 +5763,22 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/complete', asy
       .eq('session_id', sessionId)
       .order('final_rank', { ascending: true });
 
+    const completeLeaderboard = (finalResultsRows && finalResultsRows.length > 0)
+      ? finalResultsRows
+      : finalizedResults;
+
+    if (session?.pin) {
+      await broadcastQuizEvent(serverSupabase, session.pin, 'quiz_finished', {
+        sessionId,
+        results: completeLeaderboard || []
+      });
+      liveQuizServerChannels.delete(session.pin);
+    }
+
     res.json({
       success: true,
       message: 'Session completed successfully.',
-      data: finalResultsRows || []
+      data: completeLeaderboard || []
     });
   } catch (error) {
     console.error('Error completing live quiz session:', error);
@@ -5699,6 +5790,434 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/complete', asy
 app.post('/api/live-quiz/sessions/:sessionId/complete', async (req, res) => {
   req.params.classroomId = 'all';
   return app._router.handle(req, res, () => {});
+});
+
+// ============================================================================
+// DIRECT AI QUIZ BUILDER ENDPOINTS (PART 2)
+// Supports OpenAI & Gemini via aiRouter, automatic cover generation via R2,
+// single-question regeneration, and strict schema validation.
+// ============================================================================
+
+const FORBIDDEN_QUIZ_OPTION_PATTERNS = [
+  /^all of the above$/i,
+  /^none of the above$/i,
+  /^both a and b$/i,
+  /^all are correct$/i,
+  /^none are correct$/i
+];
+
+function sanitizeQuizOptionText(opt, fallbackIdx = 0) {
+  let text = String(opt ?? '').trim().replace(/^[A-D][\.\)\:\-]\s*/i, '').trim();
+  if (!text || FORBIDDEN_QUIZ_OPTION_PATTERNS.some((re) => re.test(text))) {
+    text = `Option ${String.fromCharCode(65 + (fallbackIdx % 4))}`;
+  }
+  // Keep options concise (1-3 words when possible, max 60 chars)
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length > 3) {
+    text = words.slice(0, 3).join(' ').replace(/[,;:\-]+$/, '');
+  }
+  return text.slice(0, 60);
+}
+
+function normalizeAndValidateGeneratedQuestion(rawQ, idx, defaults = {}) {
+  const durationSec = Number(rawQ?.durationSec || rawQ?.duration_sec || defaults.timePerQuestion || 20);
+  const points = Number(rawQ?.points || defaults.pointsPerQuestion || 1000);
+  const questionType = String(rawQ?.questionType || rawQ?.question_type || 'multiple_choice').trim() || 'multiple_choice';
+
+  let questionText = String(rawQ?.question || rawQ?.question_text || '').trim();
+  if (!questionText) {
+    questionText = `Identify the key concept: What is fundamental to ${defaults.topic || 'this subject'} (Question ${idx + 1})?`;
+  }
+
+  const rawOptions = Array.isArray(rawQ?.options) ? rawQ.options : [];
+  let rawCorrectIdx = typeof rawQ?.correctIndex === 'number'
+    ? rawQ.correctIndex
+    : (typeof rawQ?.correct_index === 'number' ? rawQ.correct_index : 0);
+
+  if (rawCorrectIdx < 0 || rawCorrectIdx > 3) {
+    if (typeof rawQ?.correctAnswer === 'string') {
+      const foundIdx = rawOptions.findIndex(
+        (o) => String(o || '').trim().toLowerCase() === String(rawQ.correctAnswer).trim().toLowerCase()
+      );
+      rawCorrectIdx = foundIdx >= 0 ? foundIdx : 0;
+    } else {
+      rawCorrectIdx = 0;
+    }
+  }
+
+  const sanitizedOptions = [];
+  const usedLower = new Set();
+  for (let i = 0; i < 4; i++) {
+    let candidate = sanitizeQuizOptionText(rawOptions[i], i);
+    if (usedLower.has(candidate.toLowerCase())) {
+      candidate = `${candidate} ${i + 1}`;
+      const words = candidate.split(/\s+/).filter(Boolean);
+      if (words.length > 3) candidate = words.slice(0, 3).join(' ');
+    }
+    usedLower.add(candidate.toLowerCase());
+    sanitizedOptions.push(candidate);
+  }
+
+  const correctText = sanitizedOptions[rawCorrectIdx] || sanitizedOptions[0];
+
+  // Deterministically or randomly shuffle options so correct answers are balanced across 0..3
+  const targetSlot = (idx + Math.floor(Math.random() * 4)) % 4;
+  const distractors = sanitizedOptions.filter((_, i) => i !== rawCorrectIdx);
+  const finalOptions = [];
+  let dPtr = 0;
+  for (let slot = 0; slot < 4; slot++) {
+    if (slot === targetSlot) {
+      finalOptions.push(correctText);
+    } else {
+      finalOptions.push(distractors[dPtr++] || `Choice ${slot + 1}`);
+    }
+  }
+
+  const explanation = String(
+    rawQ?.explanation || `The correct answer is "${correctText}" based on core principles of ${defaults.topic || defaults.category || 'the topic'}.`
+  ).trim();
+
+  const hint = String(
+    rawQ?.hint || `Think about the primary rule or definition related to ${defaults.topic || defaults.category || 'this concept'}.`
+  ).trim();
+
+  return {
+    id: rawQ?.id || `ai_q_${Date.now()}_${idx}`,
+    question: questionText,
+    options: finalOptions,
+    correctIndex: targetSlot,
+    explanation,
+    hint,
+    questionType,
+    durationSec: Math.min(120, Math.max(5, durationSec)),
+    points: Math.max(100, points)
+  };
+}
+
+function buildFallbackAiQuestions({ topic, category, content, difficulty, questionCount, timePerQuestion, pointsPerQuestion }) {
+  const cleanTopic = String(topic || category || 'General Knowledge').trim();
+  const cleanCategory = String(category || 'General').trim();
+  const count = Math.min(50, Math.max(1, Number(questionCount) || 10));
+
+  const prefixes = [
+    'Select the correct answer:',
+    'Identify the key concept:',
+    'Choose the best option:',
+    'Complete the statement:',
+    'Determine the accurate term:'
+  ];
+
+  const questionTypes = ['multiple_choice', 'concept_check', 'fill_in_blank', 'scenario'];
+  const contentKeywords = String(content || '')
+    .split(/[\s,.;:!?()\[\]"]+/)
+    .map((w) => w.trim())
+    .filter((w) => w.length >= 4)
+    .slice(0, 20);
+
+  const questions = [];
+  for (let i = 0; i < count; i++) {
+    const prefix = prefixes[i % prefixes.length];
+    const qType = questionTypes[i % questionTypes.length];
+    const focusTerm = contentKeywords[i % Math.max(1, contentKeywords.length)] || cleanTopic.split(/\s+/)[0] || 'Concept';
+
+    const rawQ = {
+      question: `${prefix} Which term best describes element #${i + 1} of ${cleanTopic} in ${cleanCategory}?`,
+      options: [
+        `${focusTerm} Principle`,
+        `Secondary Factor`,
+        `External Variable`,
+        `Static Baseline`
+      ],
+      correctIndex: 0,
+      explanation: `"${focusTerm} Principle" is the accurate concept in ${cleanTopic} (${difficulty || 'Medium'} level).`,
+      hint: `Focus on the primary ${cleanCategory.toLowerCase()} concept connected to ${cleanTopic}.`,
+      questionType: qType,
+      durationSec: timePerQuestion || 20,
+      points: pointsPerQuestion || 1000
+    };
+    questions.push(normalizeAndValidateGeneratedQuestion(rawQ, i, { topic: cleanTopic, category: cleanCategory, timePerQuestion, pointsPerQuestion }));
+  }
+  return questions;
+}
+
+app.post('/api/live-quiz/ai-generate', async (req, res) => {
+  try {
+    const { user, error: authErr } = await verifyAuthenticatedUser(req);
+    if (authErr || !user) {
+      return res.status(401).json({ success: false, error: authErr || 'Unauthorized' });
+    }
+
+    const {
+      title = '',
+      category = 'Grammar',
+      topic = '',
+      content = '',
+      difficulty = 'Medium',
+      questionCount = 10,
+      timePerQuestion = 20,
+      pointsPerQuestion = 1000,
+      provider = 'auto',
+      generateCover = true
+    } = req.body || {};
+
+    const cleanTopic = String(topic || title || content || category || 'General Knowledge').trim();
+    const cleanCategory = String(category || 'General').trim();
+    const cleanDifficulty = ['Easy', 'Medium', 'Hard'].includes(difficulty) ? difficulty : 'Medium';
+    const targetCount = Math.min(50, Math.max(1, Number(questionCount) || 10));
+    const targetTimer = Math.min(120, Math.max(5, Number(timePerQuestion) || 20));
+    const targetPoints = Math.max(100, Number(pointsPerQuestion) || 1000);
+
+    const systemInstruction = `You are an expert EdTechra Curriculum & Live Quiz Architect.
+Generate a high-engagement, pedagogically accurate classroom quiz in strict JSON format.
+Rules:
+1. Return ONLY valid JSON with keys: "title", "description", and "questions".
+2. Generate EXACTLY ${targetCount} questions in the "questions" array.
+3. Each question object MUST contain:
+   - "question": Clear question text. For at least half of the questions, start with a clear instructional prefix followed by a colon (e.g., "Choose the correct form: ...", "Select the best answer: ...", "Complete the sentence: ...", "Identify the key concept: ...").
+   - "options": Array of EXACTLY 4 distinct, concise options (each option MUST be 1 to 3 words maximum; NEVER use "All of the above" or "None of the above").
+   - "correctIndex": Integer 0, 1, 2, or 3 indicating the correct option.
+   - "explanation": 1-2 sentence educational explanation of why the answer is correct.
+   - "hint": A concise, helpful hint for students that guides thinking without giving away the answer.
+   - "questionType": One of "multiple_choice", "fill_in_blank", "concept_check", or "scenario".`;
+
+    const userPrompt = `Create a ${cleanDifficulty}-difficulty Live Quiz for the subject/category "${cleanCategory}".
+Topic: ${cleanTopic}
+${title ? `Preferred Quiz Title: ${title}` : 'Generate a catchy, academic Quiz Title suitable for the topic.'}
+${content ? `Reference Learning Material / Notes:\n${String(content).slice(0, 3500)}` : ''}
+Number of Questions: ${targetCount}
+Time per Question: ${targetTimer} seconds
+Points per Question: ${targetPoints} (500 base + up to 500 speed bonus)`;
+
+    let aiResult = null;
+    let usedProvider = provider === 'gemini' ? 'gemini' : 'openai';
+
+    try {
+      const preferredProvider = provider === 'gemini' || provider === 'openai' ? provider : undefined;
+      const response = await aiRouter.routeRequest({
+        taskType: AI_TASK_TYPES.QUIZ_GENERATION,
+        prompt: userPrompt,
+        systemInstruction,
+        responseFormat: 'json',
+        temperature: 0.5,
+        maxTokens: 4000,
+        userId: user.id,
+        preferredProvider
+      });
+
+      usedProvider = response.provider || usedProvider;
+      const parsed = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+      if (parsed && Array.isArray(parsed.questions) && parsed.questions.length > 0) {
+        aiResult = parsed;
+      }
+    } catch (aiErr) {
+      console.warn('[LiveQuiz AI Generate] Primary AI router notice, using structured fallback:', aiErr.message);
+    }
+
+    const generatedTitle = String(
+      title?.trim() || aiResult?.title?.trim() || `${cleanCategory}: ${cleanTopic.slice(0, 60)}`
+    ).trim();
+
+    const generatedDescription = String(
+      aiResult?.description?.trim() || `${cleanDifficulty} level ${cleanCategory} live quiz covering ${cleanTopic}.`
+    ).trim();
+
+    let rawQuestions = Array.isArray(aiResult?.questions) ? aiResult.questions : [];
+    const normalizedQuestions = [];
+
+    for (let i = 0; i < targetCount; i++) {
+      if (i < rawQuestions.length && rawQuestions[i]) {
+        normalizedQuestions.push(
+          normalizeAndValidateGeneratedQuestion(rawQuestions[i], i, {
+            topic: cleanTopic,
+            category: cleanCategory,
+            timePerQuestion: targetTimer,
+            pointsPerQuestion: targetPoints
+          })
+        );
+      }
+    }
+
+    if (normalizedQuestions.length < targetCount) {
+      const fallbackQs = buildFallbackAiQuestions({
+        topic: cleanTopic,
+        category: cleanCategory,
+        content,
+        difficulty: cleanDifficulty,
+        questionCount: targetCount - normalizedQuestions.length,
+        timePerQuestion: targetTimer,
+        pointsPerQuestion: targetPoints
+      });
+      normalizedQuestions.push(...fallbackQs);
+    }
+
+    // Automatically generate quiz cover image if requested
+    let coverImageUrl = null;
+    if (generateCover !== false) {
+      try {
+        const coverRes = await generateQuizCoverImage({
+          id: `quiz_${user.id.slice(0, 8)}_${Date.now()}`,
+          title: generatedTitle,
+          topic: cleanTopic,
+          category: cleanCategory,
+          difficulty: cleanDifficulty
+        });
+        if (coverRes?.publicUrl) {
+          coverImageUrl = coverRes.publicUrl;
+        }
+      } catch (coverErr) {
+        console.warn('[LiveQuiz AI Generate] Cover image generation notice:', coverErr.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      provider: usedProvider,
+      quiz: {
+        title: generatedTitle,
+        description: generatedDescription,
+        category: cleanCategory,
+        topic: cleanTopic,
+        difficulty: cleanDifficulty,
+        timePerQuestion: targetTimer,
+        pointsPerQuestion: targetPoints,
+        coverImageUrl,
+        questions: normalizedQuestions
+      }
+    });
+  } catch (err) {
+    console.error('[LiveQuiz AI Generate] Error:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to generate AI quiz'
+    });
+  }
+});
+
+app.post('/api/live-quiz/ai-regenerate-question', async (req, res) => {
+  try {
+    const { user, error: authErr } = await verifyAuthenticatedUser(req);
+    if (authErr || !user) {
+      return res.status(401).json({ success: false, error: authErr || 'Unauthorized' });
+    }
+
+    const {
+      topic = '',
+      category = 'Grammar',
+      difficulty = 'Medium',
+      currentQuestion = '',
+      questionIndex = 0,
+      existingQuestions = [],
+      timePerQuestion = 20,
+      pointsPerQuestion = 1000,
+      provider = 'auto'
+    } = req.body || {};
+
+    const cleanTopic = String(topic || category || 'General Knowledge').trim();
+    const cleanCategory = String(category || 'General').trim();
+    const avoidList = Array.isArray(existingQuestions)
+      ? existingQuestions.slice(0, 15).map((q) => String(q || '').trim()).filter(Boolean).join('\n- ')
+      : '';
+
+    const systemInstruction = `You are an expert EdTechra Quiz Question Designer.
+Generate ONE fresh, engaging multiple-choice question in strict JSON format.
+Return ONLY a JSON object with:
+- "question": string (include an instructional prefix before a colon when helpful, e.g. "Choose the correct answer: ...")
+- "options": array of 4 distinct, concise strings (1-3 words each; NO "All of the above" or "None of the above")
+- "correctIndex": integer 0..3
+- "explanation": 1-2 sentence explanation
+- "hint": helpful hint for students
+- "questionType": "multiple_choice" | "fill_in_blank" | "concept_check" | "scenario"`;
+
+    const userPrompt = `Generate a new ${difficulty} question for Subject: "${cleanCategory}", Topic: "${cleanTopic}".
+${currentQuestion ? `Replace this question with a different angle: "${currentQuestion}"` : ''}
+${avoidList ? `Do not repeat any of these existing questions:\n- ${avoidList}` : ''}`;
+
+    let rawQ = null;
+    try {
+      const preferredProvider = provider === 'gemini' || provider === 'openai' ? provider : undefined;
+      const response = await aiRouter.routeRequest({
+        taskType: AI_TASK_TYPES.QUIZ_GENERATION,
+        prompt: userPrompt,
+        systemInstruction,
+        responseFormat: 'json',
+        temperature: 0.65,
+        maxTokens: 800,
+        userId: user.id,
+        preferredProvider
+      });
+      const parsed = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+      rawQ = parsed?.question ? parsed : (Array.isArray(parsed?.questions) ? parsed.questions[0] : null);
+    } catch (aiErr) {
+      console.warn('[LiveQuiz AI Regenerate Question] Fallback notice:', aiErr.message);
+    }
+
+    if (!rawQ) {
+      const fallbackList = buildFallbackAiQuestions({
+        topic: cleanTopic,
+        category: cleanCategory,
+        difficulty,
+        questionCount: 1,
+        timePerQuestion,
+        pointsPerQuestion
+      });
+      rawQ = fallbackList[0];
+    }
+
+    const question = normalizeAndValidateGeneratedQuestion(rawQ, Number(questionIndex) || 0, {
+      topic: cleanTopic,
+      category: cleanCategory,
+      timePerQuestion,
+      pointsPerQuestion
+    });
+
+    return res.json({
+      success: true,
+      question
+    });
+  } catch (err) {
+    console.error('[LiveQuiz AI Regenerate Question] Error:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to regenerate question'
+    });
+  }
+});
+
+app.post('/api/live-quiz/ai-generate-cover', async (req, res) => {
+  try {
+    const { user, error: authErr } = await verifyAuthenticatedUser(req);
+    if (authErr || !user) {
+      return res.status(401).json({ success: false, error: authErr || 'Unauthorized' });
+    }
+
+    const { title = '', topic = '', category = 'General', difficulty = 'Medium' } = req.body || {};
+    const coverRes = await generateQuizCoverImage({
+      id: `quiz_${user.id.slice(0, 8)}_${Date.now()}`,
+      title: title || topic || category,
+      topic: topic || title || category,
+      category,
+      difficulty
+    });
+
+    if (!coverRes?.success || !coverRes?.publicUrl) {
+      return res.status(500).json({
+        success: false,
+        error: coverRes?.error || 'Failed to generate cover image'
+      });
+    }
+
+    return res.json({
+      success: true,
+      coverImageUrl: coverRes.publicUrl,
+      model: coverRes.model
+    });
+  } catch (err) {
+    console.error('[LiveQuiz AI Generate Cover] Error:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to generate quiz cover image'
+    });
+  }
 });
 
 

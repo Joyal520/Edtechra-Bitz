@@ -27,11 +27,14 @@ export const LiveQuizHostPage: React.FC = () => {
       if (s) {
         setSession(s);
         if (s.status === 'finished') {
-          setIsFinished(true);
-          const res = await liveQuizService.getResults(s.id);
+          const res = await liveQuizService.finishQuiz(s.id);
           if (res.data && res.data.length > 0) {
             setFinalResults(res.data);
+          } else {
+            const fallback = await liveQuizService.getResults(s.id);
+            if (fallback.data) setFinalResults(fallback.data);
           }
+          setIsFinished(true);
         }
       }
     } catch (err) {
@@ -41,8 +44,11 @@ export const LiveQuizHostPage: React.FC = () => {
     }
   };
 
-  const handleFinish = async () => {
+  const handleFinish = async (preloadedResults?: LiveQuizResult[]) => {
     if (!sessionId) return;
+    if (Array.isArray(preloadedResults) && preloadedResults.length > 0) {
+      setFinalResults(preloadedResults);
+    }
     try {
       const res = await liveQuizService.finishQuiz(sessionId);
       if (res.data && res.data.length > 0) {
@@ -54,7 +60,7 @@ export const LiveQuizHostPage: React.FC = () => {
             setFinalResults(fallback.data);
             break;
           }
-          await new Promise((r) => setTimeout(r, 400));
+          await new Promise((r) => setTimeout(r, 350));
         }
       }
     } catch (err) {

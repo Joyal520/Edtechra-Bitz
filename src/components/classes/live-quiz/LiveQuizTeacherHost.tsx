@@ -18,14 +18,15 @@ import {
   Sparkles,
   Clock
 } from 'lucide-react';
-import { LiveQuizSession, LiveQuizQuestion } from '@/types/liveQuiz';
+import { LiveQuizSession, LiveQuizQuestion, LiveQuizResult } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
 import { supabase } from '@/lib/supabase';
 import { quizAudioService } from '@/services/quizAudioService';
+import { FormattedQuestionText } from './LiveQuizUI';
 
 interface LiveQuizTeacherHostProps {
   session: LiveQuizSession;
-  onFinish: () => void;
+  onFinish: (results?: LiveQuizResult[]) => void;
 }
 
 const OPTION_STYLES = [
@@ -91,14 +92,71 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
   const isChannelSubscribedRef = useRef(false);
   const pendingBroadcastRef = useRef<any>(null);
 
-  // Deduplication: track student IDs who submitted for current question
-  const answeredStudentIdsRef = useRef<Set<string>>(new Set());
+  // Deduplication: map unique student_id -> selected_option_index for the current question
+  // Ensures a student changing/resubmitting an answer updates their choice without inflating answeredCount
+  const answeredStudentMapRef = useRef<Map<string, number>>(new Map());
+  const currentQIndexRef = useRef<number>(currentQIndex);
+  const phaseRef = useRef<'question' | 'reveal'>(phase);
+
+  useEffect(() => {
+    currentQIndexRef.current = currentQIndex;
+  }, [currentQIndex]);
+
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   const activeQuestion = questions[currentQIndex];
   const durationSec = session.quiz?.timer_enabled === false
     ? 86400
     : (session.quiz?.timer_seconds || activeQuestion?.durationSec || 20);
   const isQuestionTimed = session.quiz?.timer_enabled !== false && durationSec < 3600;
+
+  // Recompute answeredCount and option distribution from the deduplicated Map<student_id, option_index>
+  const applyAnsweredMapState = useCallback(() => {
+    const dist: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0 };
+    answeredStudentMapRef.current.forEach((optIdx) => {
+      if (optIdx >= 0 && optIdx <= 3) {
+        dist[optIdx] = (dist[optIdx] || 0) + 1;
+      }
+    });
+    const uniqueCount = answeredStudentMapRef.current.size;
+    setAnsweredCount(uniqueCount);
+    setAnswerDistribution(dist);
+  }, []);
+
+  // Authoritative database sync for student participation and current question answers
+  const syncParticipationFromDatabase = useCallback(
+    async (targetQIndex?: number) => {
+      const qIdx = typeof targetQIndex === 'number' ? targetQIndex : currentQIndexRef.current;
+      try {
+        const snapshot = await liveQuizService.getQuestionAnswerSnapshot(
+          session.id,
+          qIdx,
+          session.teacher_id
+        );
+
+        // Ignore stale response if question index changed while request was in flight
+        if (qIdx !== currentQIndexRef.current) return;
+
+        if (snapshot.joinedCount > 0) {
+          setRegisteredCount(snapshot.joinedCount);
+          setTotalStudents((prev) => Math.max(prev, snapshot.joinedCount));
+        }
+
+        // Merge authoritative DB answers into the unique student map for this question
+        Object.entries(snapshot.studentOptionMap).forEach(([studentId, optIdx]) => {
+          if (studentId && studentId !== session.teacher_id) {
+            answeredStudentMapRef.current.set(studentId, Number(optIdx));
+          }
+        });
+        applyAnsweredMapState();
+      } catch (err) {
+        console.warn('[TeacherHost] syncParticipationFromDatabase notice:', err);
+      }
+    },
+    [session.id, session.teacher_id, applyAnsweredMapState]
+  );
 
   // Background music lifecycle: start on mount when quiz is active, stop on unmount
   useEffect(() => {
@@ -120,18 +178,10 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     }
   }, []);
 
-  // 1. Establish single Realtime channel and presence listener + load participants
+  // 1. Establish single Realtime channel, presence listener, and postgres_changes on
+  //    live_quiz_answers, live_quiz_participants, and live_quiz_sessions
   useEffect(() => {
-    // Initial fetch of participants from DB to seed student count accurately
-    liveQuizService
-      .getParticipants(session.id)
-      .then((parts) => {
-        if (parts && parts.length > 0) {
-          setRegisteredCount(parts.length);
-          setTotalStudents((prev) => Math.max(prev, parts.length));
-        }
-      })
-      .catch(() => {});
+    syncParticipationFromDatabase(currentQIndexRef.current);
 
     const channel = liveQuizService.createRealtimeChannel(session.pin);
     if (!channel) return;
@@ -140,40 +190,79 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     channel
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
-        let studentCount = 0;
+        const uniquePresenceStudents = new Set<string>();
         Object.values(state).forEach((presences: any) => {
-          // Strictly count students only (exclude teacher / host)
-          studentCount += presences.filter(
-            (p: any) => p.role !== 'teacher' && p.student_id !== session.teacher_id
-          ).length;
+          presences.forEach((p: any) => {
+            if (p.role !== 'teacher' && p.student_id && p.student_id !== session.teacher_id) {
+              uniquePresenceStudents.add(String(p.student_id));
+            }
+          });
         });
-        setTotalStudents((prev) => Math.max(prev, studentCount));
+        if (uniquePresenceStudents.size > 0) {
+          setTotalStudents((prev) => Math.max(prev, uniquePresenceStudents.size));
+        }
       })
       .on('broadcast', { event: 'student_answered' }, (payload: any) => {
-        const studentId = payload.payload?.student_id || `anon_${Date.now()}_${Math.random()}`;
-        const optIndex = payload.payload?.selected_option_index;
+        const data = payload?.payload || {};
+        const studentId = data.student_id;
+        const optIndex = Number(data.selected_option_index);
+        const qIndex = typeof data.question_index === 'number' ? data.question_index : data.qIndex;
 
-        if (answeredStudentIdsRef.current.has(studentId)) {
-          return; // Ignore duplicate broadcast from same student
-        }
-        answeredStudentIdsRef.current.add(studentId);
+        // Stop counting answers for completed/expired questions or mismatched question index
+        if (phaseRef.current !== 'question') return;
+        if (typeof qIndex === 'number' && qIndex !== currentQIndexRef.current) return;
+        if (!studentId || studentId === session.teacher_id) return;
 
-        const newAnsweredCount = answeredStudentIdsRef.current.size;
-        setAnsweredCount(newAnsweredCount);
-
-        if (typeof optIndex === 'number') {
-          setAnswerDistribution((prev) => ({
-            ...prev,
-            [optIndex]: (prev[optIndex] || 0) + 1
-          }));
+        // Deduplicated update: changing an answer updates the student's choice without increasing total count
+        if (optIndex >= 0 && optIndex <= 3) {
+          answeredStudentMapRef.current.set(String(studentId), optIndex);
+          applyAnsweredMapState();
         }
       })
       .on('broadcast', { event: 'question_started' }, (payload: any) => {
         const nextIdx = payload?.payload?.qIndex;
-        if (typeof nextIdx === 'number' && nextIdx !== currentQIndex) {
+        if (typeof nextIdx === 'number' && nextIdx !== currentQIndexRef.current) {
           setCurrentQIndex(nextIdx);
         }
       })
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'live_quiz_answers',
+          filter: `session_id=eq.${session.id}`
+        },
+        (payload: any) => {
+          const row = payload.new as any;
+          if (!row) return;
+          const studentId = row.student_id;
+          const qIdx = Number(row.question_index);
+          const optIdx = Number(row.selected_option_index);
+
+          // Only count answers for the current active question
+          if (qIdx !== currentQIndexRef.current) return;
+          if (!studentId || studentId === session.teacher_id) return;
+
+          if (optIdx >= 0 && optIdx <= 3) {
+            answeredStudentMapRef.current.set(String(studentId), optIdx);
+            applyAnsweredMapState();
+            setTotalStudents((prev) => Math.max(prev, answeredStudentMapRef.current.size));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'live_quiz_participants',
+          filter: `session_id=eq.${session.id}`
+        },
+        () => {
+          syncParticipationFromDatabase(currentQIndexRef.current);
+        }
+      )
       .on(
         'postgres_changes',
         {
@@ -187,20 +276,20 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
           if (!updated) return;
 
           if (updated.status === 'finished') {
-            onFinish();
+            handleFinishQuiz();
             return;
           }
 
           if (
             typeof updated.current_question_index === 'number' &&
-            updated.current_question_index !== currentQIndex
+            updated.current_question_index !== currentQIndexRef.current
           ) {
             setCurrentQIndex(updated.current_question_index);
           }
         }
       )
       .on('broadcast', { event: 'quiz_finished' }, () => {
-        onFinish();
+        handleFinishQuiz();
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
@@ -209,30 +298,54 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
             channel.send(pendingBroadcastRef.current);
             pendingBroadcastRef.current = null;
           }
+          // Recover accurate counts immediately upon Realtime connection / reconnection
+          syncParticipationFromDatabase(currentQIndexRef.current);
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
           isChannelSubscribedRef.current = false;
         }
       });
 
+    // Reconnection & visibility recovery listeners (Part 3 requirements 6 & 7)
+    const handleReconnectSync = () => {
+      if (document.visibilityState === 'visible') {
+        syncParticipationFromDatabase(currentQIndexRef.current);
+      }
+    };
+    window.addEventListener('online', handleReconnectSync);
+    document.addEventListener('visibilitychange', handleReconnectSync);
+
+    // Periodic 2s database sync while question is active to guarantee zero drift
+    const pollInterval = setInterval(() => {
+      if (phaseRef.current === 'question') {
+        syncParticipationFromDatabase(currentQIndexRef.current);
+      }
+    }, 2000);
+
     return () => {
       isChannelSubscribedRef.current = false;
+      window.removeEventListener('online', handleReconnectSync);
+      document.removeEventListener('visibilitychange', handleReconnectSync);
+      clearInterval(pollInterval);
       channel.unsubscribe();
       channelRef.current = null;
     };
-  }, [session.id, session.pin]);
+  }, [session.id, session.pin, session.teacher_id, applyAnsweredMapState, syncParticipationFromDatabase]);
 
-  // 2. Initialize or advance question: Update DB first, then broadcast
+  // 2. Initialize or advance question: Reset counter & sync DB for the new question
   useEffect(() => {
     if (!activeQuestion) return;
 
     isAdvancingRef.current = false;
-    answeredStudentIdsRef.current.clear();
+    answeredStudentMapRef.current.clear();
     const startMs = Date.now();
     setQuestionStartMs(startMs);
     setTimeLeft(durationSec);
     setPhase('question');
     setAnsweredCount(0);
     setAnswerDistribution({ 0: 0, 1: 0, 2: 0, 3: 0 });
+
+    // Sync any already-submitted answers or joined students for this question index
+    syncParticipationFromDatabase(currentQIndex);
 
     // Play start fanfare on Q0, or transition chime on subsequent questions
     if (currentQIndex === 0) {
@@ -270,10 +383,12 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
       .catch(() => {
         safeBroadcast(broadcastPayload);
       });
-  }, [currentQIndex, session.id, activeQuestion, durationSec, questions.length, safeBroadcast]);
+  }, [currentQIndex, session.id, activeQuestion, durationSec, questions.length, safeBroadcast, syncParticipationFromDatabase]);
 
-  // Active players count considers presence (connected students), registered participants, and answers received
-  const activePlayers = Math.max(1, totalStudents > 0 ? totalStudents : registeredCount);
+  // Students Joined count considers registered participants, presence, and unique students who answered
+  const studentsJoinedCount = Math.max(registeredCount, totalStudents, answeredCount);
+  const activePlayers = Math.max(1, studentsJoinedCount);
+  const notAnsweredCount = Math.max(0, studentsJoinedCount - answeredCount);
 
   // 3. Synchronized countdown timer with authoritative fallback
   useEffect(() => {
@@ -457,7 +572,7 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
         }
       });
 
-      onFinish();
+      onFinish(res.data || []);
     } catch (err) {
       console.error('Failed to finalize quiz:', err);
       onFinish();
@@ -481,7 +596,7 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
   }
 
   const answeredPercentage =
-    activePlayers > 0 ? Math.round((answeredCount / activePlayers) * 100) : 0;
+    studentsJoinedCount > 0 ? Math.min(100, Math.round((answeredCount / studentsJoinedCount) * 100)) : 0;
   const progressPct = Math.min(
     100,
     Math.max(5, Math.round(((currentQIndex + 1) / Math.max(1, questions.length)) * 100))
@@ -521,7 +636,7 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
           {/* Active Students Pill */}
           <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 sm:py-2 rounded-full bg-[#EAF7FF] border border-[#BCE3FF] text-xs font-extrabold text-[#10245A]">
             <Users className="w-3.5 h-3.5 text-[#087CF5]" />
-            <span>{activePlayers} Players</span>
+            <span>Students Joined: {studentsJoinedCount}</span>
             <span className="w-2 h-2 rounded-full bg-[#18B981] animate-pulse" />
           </div>
 
@@ -639,7 +754,7 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
 
           <div className="flex items-center gap-3">
             <span className="px-2.5 py-1 rounded-lg bg-[#E5F2FF] text-[#10245A] font-extrabold text-xs">
-              {questions.length > 0 ? Math.round(100 / questions.length) : 10} pts
+              Up to 1,000 pts (500 + Speed Bonus)
             </span>
             {isQuestionTimed ? (
               <span
@@ -658,6 +773,34 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
             )}
           </div>
         </div>
+
+        {/* Real-Time Participation Statistics Bar (Part 3) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+          <div className="px-3 py-2 rounded-xl bg-[#F5FBFF] border border-[#DCEBFA] flex items-center justify-between">
+            <span className="text-[11px] font-bold text-[#64748B]">Students Joined</span>
+            <span className="text-xs sm:text-sm font-black text-[#10245A] tabular-nums">
+              {studentsJoinedCount}
+            </span>
+          </div>
+          <div className="px-3 py-2 rounded-xl bg-[#ECFDF5] border border-[#A7F3D0] flex items-center justify-between">
+            <span className="text-[11px] font-bold text-[#065F46]">Answered</span>
+            <span className="text-xs sm:text-sm font-black text-[#059669] tabular-nums">
+              {answeredCount}
+            </span>
+          </div>
+          <div className="px-3 py-2 rounded-xl bg-[#FFFBEB] border border-[#FDE68A] flex items-center justify-between">
+            <span className="text-[11px] font-bold text-[#92400E]">Not Answered</span>
+            <span className="text-xs sm:text-sm font-black text-[#D97706] tabular-nums">
+              {notAnsweredCount}
+            </span>
+          </div>
+          <div className="px-3 py-2 rounded-xl bg-[#EAF7FF] border border-[#BCE3FF] flex items-center justify-between">
+            <span className="text-[11px] font-bold text-[#087CF5]">Answering %</span>
+            <span className="text-xs sm:text-sm font-black text-[#087CF5] tabular-nums">
+              {answeredPercentage}%
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* ========================================================================= */}
@@ -665,8 +808,8 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
       {/* ========================================================================= */}
       <div className="bg-[#F8FCFF] rounded-[24px] p-5 sm:p-7 border border-[#DCEBFA] space-y-6">
         <div className="text-center space-y-2">
-          <h1 className="text-xl sm:text-3xl font-extrabold text-[#10245A] tracking-tight leading-snug max-w-3xl mx-auto">
-            {activeQuestion.question}
+          <h1 className="text-xl sm:text-3xl text-[#10245A] tracking-tight leading-snug max-w-3xl mx-auto">
+            <FormattedQuestionText text={activeQuestion.question} />
           </h1>
 
           {phase === 'reveal' && activeQuestion.explanation && (
@@ -753,7 +896,7 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
           <div className="space-y-1">
             <div className="flex items-center justify-between gap-3 text-[11px]">
               <span className="font-extrabold text-[#10245A]">
-                {answeredCount} / {activePlayers} Answered
+                {answeredCount} / {studentsJoinedCount} Answered
               </span>
               <span className="text-[#087CF5] font-mono font-black">{answeredPercentage}%</span>
             </div>

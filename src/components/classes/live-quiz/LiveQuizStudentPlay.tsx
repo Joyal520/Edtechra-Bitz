@@ -7,7 +7,10 @@ import {
   AlertCircle,
   LogOut,
   Hash,
-  Trophy
+  Trophy,
+  Zap,
+  Lightbulb,
+  Edit3
 } from 'lucide-react';
 import { LiveQuizSession, LiveQuizServerState } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
@@ -132,16 +135,25 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     /** Server-clock deadline (ms). Display-only countdown. */
     deadlineMs: number;
     totalQuestions: number;
+    hint?: string;
+    points?: number;
   } | null>(null);
 
   const [, setSelectedIndex] = useState<number | null>(null);
   const [selectedDisplayIndex, setSelectedDisplayIndex] = useState<number | null>(null);
   const [isLocked, setIsLocked] = useState(false);
+  const [isChangingAnswer, setIsChangingAnswer] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [revealData, setRevealData] = useState<{ correctIndex: number; explanation?: string } | null>(null);
   // Server-graded result for the current question (single source of truth for feedback)
-  const [answerResult, setAnswerResult] = useState<{ isCorrect: boolean; points: number } | null>(null);
+  const [answerResult, setAnswerResult] = useState<{
+    isCorrect: boolean;
+    points: number;
+    basePoints?: number;
+    speedBonus?: number;
+    responseTimeMs?: number;
+  } | null>(null);
 
   const [pointsEarned, setPointsEarned] = useState(0);
   const [totalScore, setTotalScore] = useState(0);
@@ -165,6 +177,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   const syncSeqRef = useRef(0);
   const appliedSeqRef = useRef(0);
   const expirySyncedForRef = useRef<number | null>(null);
+  const channelRef = useRef<any>(null);
   const onQuizFinishedRef = useRef(onQuizFinished);
   useEffect(() => {
     onQuizFinishedRef.current = onQuizFinished;
@@ -301,6 +314,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       setSelectedIndex(null);
       setSelectedDisplayIndex(null);
       setIsLocked(false);
+      setIsChangingAnswer(false);
       setRevealData(null);
       setAnswerResult(null);
       setPointsEarned(0);
@@ -318,7 +332,9 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       permutation: perm,
       durationSec,
       deadlineMs: Number(state.deadline_ms),
-      totalQuestions: state.total_questions || questions.length || 0
+      totalQuestions: state.total_questions || questions.length || 0,
+      hint: q.hint || undefined,
+      points: Number(q.points || 1000)
     });
 
     // Our own recorded answer (survives refresh, reconnect, late load)
@@ -327,7 +343,13 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       setSelectedIndex(canonical);
       setSelectedDisplayIndex(perm.indexOf(canonical));
       setIsLocked(true);
-      setAnswerResult({ isCorrect: Boolean(state.my_answer.is_correct), points: Number(state.my_answer.points_awarded || 0) });
+      setAnswerResult({
+        isCorrect: Boolean(state.my_answer.is_correct),
+        points: Number(state.my_answer.points_awarded || 0),
+        basePoints: state.my_answer.base_points !== undefined ? Number(state.my_answer.base_points) : undefined,
+        speedBonus: state.my_answer.speed_bonus !== undefined ? Number(state.my_answer.speed_bonus) : undefined,
+        responseTimeMs: state.my_answer.response_time_ms !== undefined ? Number(state.my_answer.response_time_ms) : undefined
+      });
       setPointsEarned(Number(state.my_answer.points_awarded || 0));
     }
 
@@ -335,6 +357,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     if (state.phase === 'reveal' && typeof state.correct_index === 'number') {
       setRevealData({ correctIndex: state.correct_index, explanation: q.explanation });
       setIsLocked(true);
+      setIsChangingAnswer(false);
     }
   }, [handleFinished, session.quiz?.timer_seconds]);
 
@@ -400,6 +423,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   // ---- realtime: ONE channel; postgres_changes (primary) + broadcast (fast-lane) ----
   useEffect(() => {
     const channel = liveQuizService.createRealtimeChannel(session.pin);
+    channelRef.current = channel;
     if (!channel) return;
 
     channel
@@ -429,14 +453,22 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
+          if (user?.id) {
+            channel.track({
+              student_id: user.id,
+              role: 'student',
+              online_at: new Date().toISOString()
+            }).catch(() => {});
+          }
           syncWithDatabase();
         }
       });
 
     return () => {
+      channelRef.current = null;
       liveQuizService.removeRealtimeChannel(channel);
     };
-  }, [session.pin, session.id, syncWithDatabase, handleFinished]);
+  }, [session.pin, session.id, user?.id, syncWithDatabase, handleFinished]);
 
   // ---- safety refetch (also the presence heartbeat): visibility, focus, 5s ----
   useEffect(() => {
@@ -539,14 +571,22 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
 
   // ---- answer selection & submission --------------------------------------------------
   const handlePickOption = (displayIndex: number) => {
-    if (isLocked || isSubmitting || revealData) return;
+    if ((isLocked && !isChangingAnswer) || isSubmitting || revealData) return;
     quizAudioService.playClick();
     quizAudioService.unlockAudio();
     setSelectedDisplayIndex(displayIndex);
   };
 
+  const handleEnableChangeAnswer = () => {
+    if (revealData || isSubmitting || (isQuestionTimed && questionTimeLeft <= 1)) return;
+    quizAudioService.playClick();
+    setIsChangingAnswer(true);
+    setIsLocked(false);
+    setSubmitError(null);
+  };
+
   const handleSubmitAnswer = async () => {
-    if (submittingRef.current || isLocked || revealData || !questionData || selectedDisplayIndex === null) return;
+    if (submittingRef.current || (isLocked && !isChangingAnswer) || revealData || !questionData || selectedDisplayIndex === null) return;
 
     quizAudioService.playClick();
     quizAudioService.unlockAudio();
@@ -554,25 +594,48 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     const displayIndex = selectedDisplayIndex;
     const canonicalIndex = questionData.permutation?.[displayIndex] ?? displayIndex;
     const submittedForIndex = questionData.qIndex;
+    const allowChangeFlag = isChangingAnswer || Boolean(answerResult);
 
     submittingRef.current = true;
     setIsSubmitting(true);
     setSubmitError(null);
     setSelectedIndex(canonicalIndex);
     setIsLocked(true);
+    setIsChangingAnswer(false);
 
     try {
       const res = await liveQuizService.submitAnswer({
         session_id: session.id,
         question_index: submittedForIndex,
-        selected_option_index: canonicalIndex
+        selected_option_index: canonicalIndex,
+        allow_change: allowChangeFlag
       });
 
       if (!mountedRef.current) return;
 
       if (res.data) {
+        // Fast-lane broadcast to teacher host so the live counter updates within milliseconds
+        if (channelRef.current && user?.id) {
+          channelRef.current.send({
+            type: 'broadcast',
+            event: 'student_answered',
+            payload: {
+              student_id: user.id,
+              question_index: submittedForIndex,
+              selected_option_index: canonicalIndex,
+              changed: allowChangeFlag
+            }
+          }).catch(() => {});
+        }
+
         if (activeQIndexRef.current === submittedForIndex) {
-          setAnswerResult({ isCorrect: res.data.is_correct, points: res.data.points_awarded });
+          setAnswerResult({
+            isCorrect: res.data.is_correct,
+            points: res.data.points_awarded,
+            basePoints: res.data.base_points,
+            speedBonus: res.data.speed_bonus,
+            responseTimeMs: res.data.response_time_ms
+          });
           setPointsEarned(res.data.points_awarded);
         }
         if (typeof res.data.current_score === 'number') {
@@ -722,6 +785,14 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
           question={questionData.question}
           imageUrl={(questionData as any)?.image_url}
         >
+          {/* Hint Pill (if present) */}
+          {questionData.hint && !revealData && (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FEF3C7] border border-[#FDE68A] text-[#92400E] text-[11px] font-bold">
+              <Lightbulb className="w-3.5 h-3.5 text-[#F59E0B] shrink-0" />
+              <span>Hint: {questionData.hint}</span>
+            </div>
+          )}
+
           {/* Reveal / Feedback Banner */}
           {(revealData || answerResult) && (
             <div
@@ -733,11 +804,17 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
                   : 'bg-[#EEF5FC] border border-[#DCEBFA] text-[#10245A]'
               }`}
             >
-              <div className="flex items-center justify-center gap-2">
+              <div className="flex items-center justify-center gap-2 flex-wrap">
                 {isSelectedCorrect ? (
                   <>
                     <CheckCircle2 className="w-4 h-4 text-[#18B981] shrink-0" />
-                    <span>Correct! +{pointsEarned} points</span>
+                    <span>Correct! +{pointsEarned.toLocaleString()} points</span>
+                    {typeof answerResult?.speedBonus === 'number' && answerResult.speedBonus > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#18B981]/15 text-[#047857] text-[10px] font-black">
+                        <Zap className="w-3 h-3 text-[#F59E0B]" />
+                        <span>+{answerResult.speedBonus} Speed Bonus</span>
+                      </span>
+                    )}
                   </>
                 ) : isSelectedIncorrect ? (
                   <>
@@ -778,7 +855,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
                   index={displayIdx}
                   text={opt}
                   selected={isSelected}
-                  disabled={isLocked || isSubmitting || isRevealed}
+                  disabled={(isLocked && !isChangingAnswer) || isSubmitting || isRevealed}
                   isRevealed={isRevealed}
                   isCorrectOption={isThisOptionCorrect}
                   isIncorrectSelection={isThisOptionIncorrectSelection}
@@ -800,10 +877,21 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
               onClick={handleSubmitAnswer}
               disabled={selectedDisplayIndex === null}
               isLoading={isSubmitting}
-              isLocked={isLocked}
+              isLocked={isLocked && !isChangingAnswer}
               isReveal={Boolean(revealData)}
-              label="Submit Answer"
+              label={isChangingAnswer ? 'Update Answer' : 'Submit Answer'}
             />
+
+            {isLocked && !isChangingAnswer && !revealData && (!isQuestionTimed || questionTimeLeft > 2) && (
+              <button
+                type="button"
+                onClick={handleEnableChangeAnswer}
+                className="w-full py-2 rounded-full text-xs font-extrabold text-[#087CF5] hover:bg-[#EAF7FF] transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Change Answer</span>
+              </button>
+            )}
           </div>
         </QuestionCard>
       </div>

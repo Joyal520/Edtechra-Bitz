@@ -13,6 +13,9 @@ export interface LiveQuizQuestion {
   correctIndex?: number; // Omitted in student payloads and student RPC queries
   durationSec?: number;
   explanation?: string;
+  hint?: string;
+  questionType?: string;
+  points?: number;
 }
 
 export type LiveQuizStudentQuestion = Omit<LiveQuizQuestion, 'correctIndex'>;
@@ -23,6 +26,7 @@ export interface LiveQuiz {
   title: string;
   description?: string;
   category: string;
+  topic?: string | null;
   difficulty: LiveQuizDifficulty;
   accent_color?: string;
   cover_image?: string | null;
@@ -32,6 +36,7 @@ export interface LiveQuiz {
   visibility?: 'private' | 'common';
   timer_enabled?: boolean;
   timer_seconds?: number | null;
+  points_per_question?: number;
   track_quiz?: boolean;
   is_archived?: boolean;
   created_by?: string | null;
@@ -59,11 +64,20 @@ export interface LiveQuizServerState {
   question_duration_sec: number;
   deadline_ms: number;
   total_questions: number;
+  total_participants?: number;
   eligible_count: number;
   answered_count: number;
+  answer_distribution?: Record<string, number>;
   /** Only present once the deadline has passed (reveal phase). */
   correct_index?: number | null;
-  my_answer?: { selected_option_index: number; is_correct: boolean; points_awarded: number } | null;
+  my_answer?: {
+    selected_option_index: number;
+    is_correct: boolean;
+    points_awarded: number;
+    base_points?: number;
+    speed_bonus?: number;
+    response_time_ms?: number;
+  } | null;
   /** Local estimate of (server clock - client clock), for DISPLAY only. */
   client_offset_ms?: number;
 }
@@ -120,6 +134,9 @@ export interface LiveQuizAnswer {
   selected_option_index: number;
   is_correct: boolean;
   points_awarded: number;
+  base_points?: number;
+  speed_bonus?: number;
+  response_time_ms?: number;
   client_submit_ms: number;
   submitted_at: string;
 }
@@ -137,6 +154,7 @@ export interface LiveQuizResult {
   wrong_count: number;
   total_questions: number;
   accuracy_percentage: number;
+  avg_response_time_ms?: number;
   final_rank?: number | null;
   created_at: string;
 
