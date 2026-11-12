@@ -5926,6 +5926,10 @@ Additional Option Rules:
 }
 
 app.post('/api/live-quiz/ai-generate', async (req, res) => {
+  const requestStartMs = Date.now();
+  const SERVERLESS_BUDGET_MS = 42000;
+  const getRemainingBudgetMs = () => Math.max(0, SERVERLESS_BUDGET_MS - (Date.now() - requestStartMs));
+
   try {
     const authData = await verifyAuthUser(req);
     if (!authData?.user) {
@@ -5990,14 +5994,15 @@ Base Points per Question: ${targetPoints} (100 Base Points Total + Speed Bonus)$
     const preferredProvider = provider === 'gemini' || provider === 'openai' ? provider : undefined;
 
     try {
+      const primaryTimeoutMs = Math.min(targetCount > 12 ? 26000 : 20000, Math.max(10000, getRemainingBudgetMs() - 8000));
       const response = await aiRouter.executeTask({
         taskType: AI_TASK_TYPES.QUIZ_GENERATION,
         prompt: userPrompt,
         systemPrompt,
         preferredProvider,
-        allowFallbackToGemini: true,
-        allowFallbackToOpenAI: true,
-        timeoutMs: targetCount > 12 ? 35000 : 25000
+        allowFallbackToGemini: getRemainingBudgetMs() > 18000,
+        allowFallbackToOpenAI: getRemainingBudgetMs() > 18000,
+        timeoutMs: primaryTimeoutMs
       });
 
       usedProvider = response.provider || usedProvider;
@@ -6035,8 +6040,13 @@ Base Points per Question: ${targetPoints} (100 Base Points Total + Speed Bonus)$
     });
 
     // If any questions failed validation (off-topic, duplicate, bad options, wrong difficulty),
-    // regenerate ONLY the failed questions (up to 2 targeted passes) rather than the entire quiz!
+    // regenerate ONLY the failed questions (up to 2 targeted passes) within the serverless time budget!
     for (let retryPass = 0; retryPass < 2 && !validation.passed; retryPass++) {
+      const remainingMs = getRemainingBudgetMs();
+      if (remainingMs < 9000) {
+        console.warn(`[LiveQuiz Quality Validator] Skipping AI retry pass ${retryPass + 1} (${remainingMs}ms remaining in serverless budget); using curated topic-accurate bank.`);
+        break;
+      }
       const failedCount = validation.failedItems.length;
       if (failedCount === 0) break;
 
@@ -6068,14 +6078,15 @@ ${[...acceptedQuestionsList, ...previouslyGeneratedForTopic.slice(-8)].map((q, i
 Return JSON with "questions": [ ... ${failedCount} valid replacement questions ... ].`;
 
       try {
+        const regenTimeoutMs = Math.min(12000, Math.max(5000, getRemainingBudgetMs() - 2500));
         const regenRes = await aiRouter.executeTask({
           taskType: AI_TASK_TYPES.QUIZ_GENERATION,
           prompt: regenUserPrompt,
           systemPrompt: regenSystemPrompt,
           preferredProvider,
-          allowFallbackToGemini: true,
-          allowFallbackToOpenAI: true,
-          timeoutMs: 20000
+          allowFallbackToGemini: false,
+          allowFallbackToOpenAI: false,
+          timeoutMs: regenTimeoutMs
         });
 
         const regenParsed =
@@ -6164,9 +6175,10 @@ Return JSON with "questions": [ ... ${failedCount} valid replacement questions .
       regeneratedCount
     };
 
-    // Automatically generate quiz cover image if requested
+    // Automatically generate quiz cover image only if requested AND sufficient serverless budget remains.
+    // Frontend calls /api/live-quiz/ai-generate-cover in parallel so question generation never times out.
     let coverImageUrl = null;
-    if (generateCover !== false) {
+    if (generateCover === true && getRemainingBudgetMs() > 15000) {
       try {
         const coverRes = await generateQuizCoverImage({
           id: `quiz_${user.id.slice(0, 8)}_${Date.now()}`,

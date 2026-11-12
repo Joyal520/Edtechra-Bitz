@@ -306,6 +306,32 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
 
     try {
       const perQSec = timerEnabled ? timerSeconds : 86400;
+      const shouldAutoCover = autoGenerateCover && !coverImageUrl;
+
+      // Run cover image generation in parallel in its own serverless invocation so
+      // /api/live-quiz/ai-generate never hits a 504 gateway timeout.
+      if (shouldAutoCover) {
+        setIsGeneratingCover(true);
+        void liveQuizService
+          .generateAiCoverImage({
+            title: aiQuizTitle.trim() || `${topic.trim() || category} Quiz`,
+            topic: topic.trim() || aiQuizTitle.trim() || category,
+            category,
+            difficulty
+          })
+          .then((coverRes) => {
+            if (coverRes.coverImageUrl) {
+              setCoverImageUrl((prev) => prev || coverRes.coverImageUrl || null);
+            }
+          })
+          .catch((coverErr) => {
+            console.warn('[LiveQuiz] Background cover image generation failed:', coverErr);
+          })
+          .finally(() => {
+            setIsGeneratingCover(false);
+          });
+      }
+
       const res = await liveQuizService.generateAiQuiz({
         title: aiQuizTitle.trim() || undefined,
         category,
@@ -316,7 +342,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         timePerQuestion: perQSec,
         pointsPerQuestion,
         provider: aiProvider,
-        generateCover: autoGenerateCover && !coverImageUrl
+        generateCover: false
       });
 
       if (res.error || !res.data) {

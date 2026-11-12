@@ -85,7 +85,8 @@ class AIRouter {
           prompt: effectivePrompt,
           systemPrompt,
           schema,
-          taskType
+          taskType,
+          timeoutMs
         });
 
         finalProvider = 'openai';
@@ -167,7 +168,8 @@ class AIRouter {
               prompt: effectivePrompt,
               systemPrompt,
               schema,
-              taskType
+              taskType,
+              timeoutMs
             });
             fallbackUsed = true;
             finalProvider = 'openai';
