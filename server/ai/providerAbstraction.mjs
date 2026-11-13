@@ -291,12 +291,12 @@ export class OpenAIProvider extends AIProvider {
     ];
 
     let responseFormat = { type: 'json_object' };
-    if (schema && typeof schema === 'object') {
+    if (schema && typeof schema === 'object' && schema.additionalProperties === false) {
       responseFormat = {
         type: 'json_schema',
         json_schema: {
           name: 'structured_response',
-          strict: false,
+          strict: true,
           schema
         }
       };
@@ -328,6 +328,22 @@ export class OpenAIProvider extends AIProvider {
         }
 
         const parsed = JSON.parse(rawContent);
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          !Array.isArray(parsed) &&
+          parsed.type === 'object' &&
+          parsed.properties &&
+          !schema?.properties?.properties
+        ) {
+          throw new Error('OpenAI returned a JSON schema echo instead of structured data.');
+        }
+        if (Array.isArray(schema?.required)) {
+          const missing = schema.required.filter((k) => parsed?.[k] === undefined);
+          if (missing.length > 0) {
+            throw new Error(`OpenAI response missing required fields: ${missing.join(', ')}`);
+          }
+        }
         const usage = completion.usage || {};
         const inputTokens = usage.prompt_tokens || 0;
         const outputTokens = usage.completion_tokens || 0;
