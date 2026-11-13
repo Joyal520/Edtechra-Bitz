@@ -246,14 +246,16 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
         new Date(a.due_date).getTime() - nowMs < 86400000 * 2 &&
         new Date(a.due_date).getTime() > nowMs;
 
-      let statusBadge = isDueSoon ? 'Due Soon' : 'Available';
+      const isGameLibrary = Boolean(a.settings?.is_game_library);
+      const gameName = String(a.settings?.game_name || 'Game');
+      let statusBadge = isGameLibrary ? gameName : isDueSoon ? 'Due Soon' : 'Available';
       let description =
         a.instructions || 'Complete the assignment and submit your work before the deadline.';
       let scoreText: string | null = null;
-      let actionLabel = isTeacher ? 'Review Work' : 'Start Task';
+      let actionLabel = isTeacher ? 'Review Work' : isGameLibrary ? 'Play Game' : 'Start Task';
 
       if (isTeacher) {
-        statusBadge = 'Active';
+        statusBadge = isGameLibrary ? gameName : 'Active';
         scoreText = `${a.submission_count ?? 0} Submissions`;
         actionLabel = 'Review Work';
       }

@@ -24,8 +24,12 @@ import {
   Trophy,
   Flame,
   Pencil,
-  Camera
+  Camera,
+  Gamepad2
 } from 'lucide-react';
+import { GameLibraryModal } from '@/components/classes/games/GameLibraryModal';
+import { GamePlayerModal } from '@/components/classes/games/GamePlayerModal';
+import type { GameConfig, GameId } from '@/types/gameLibrary';
 import {
   Classroom,
   ClassroomMember,
@@ -162,6 +166,18 @@ export const ClassroomDetailPage: React.FC = () => {
 
   // AI Challenge Competition State
   const [challengeListModalOpen, setChallengeListModalOpen] = useState(false);
+
+  // Game Library Phase 1 State
+  const [gameLibraryModalOpen, setGameLibraryModalOpen] = useState(false);
+  const [activeGamePlay, setActiveGamePlay] = useState<{
+    gameId: GameId;
+    title: string;
+    config: GameConfig;
+    assignmentId?: string;
+    maxPoints: number;
+    isPreview: boolean;
+    alreadyCompletedScore?: number | null;
+  } | null>(null);
 
   // Quick Assignment Creation Inline State
   const [showQuickCreateTask, setShowQuickCreateTask] = useState(false);
@@ -1525,6 +1541,18 @@ export const ClassroomDetailPage: React.FC = () => {
               if (isTeacher) {
                 setActiveReviewAssignment(task);
                 setTaskWorkspaceOpen(true);
+              } else if (task.settings?.is_game_library && task.settings?.game_id && task.settings?.game_config) {
+                setActiveGamePlay({
+                  gameId: task.settings.game_id as GameId,
+                  title: task.title,
+                  config: task.settings.game_config as GameConfig,
+                  assignmentId: task.id,
+                  maxPoints: task.points || 100,
+                  isPreview: false,
+                  alreadyCompletedScore: task.my_submission
+                    ? (task.my_submission.final_score ?? task.my_submission.points_awarded ?? 0)
+                    : null
+                });
               } else {
                 setActiveSubmitAssignment(task);
               }
@@ -1571,7 +1599,7 @@ export const ClassroomDetailPage: React.FC = () => {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5">
             
             {/* Card 1: Tasks / My Tasks (Blue identity) */}
             <div className="bg-gradient-to-b from-sky-50/80 via-white to-blue-50/40 rounded-2xl sm:rounded-[26px] p-5 border border-sky-200/80 shadow-[0_4px_16px_-2px_rgba(2,111,195,0.06)] hover:shadow-[0_12px_28px_-4px_rgba(2,111,195,0.16)] hover:-translate-y-1 transition-all duration-200 flex flex-col justify-between space-y-4 group relative overflow-hidden">
@@ -1760,6 +1788,30 @@ export const ClassroomDetailPage: React.FC = () => {
                 className="btn-liquid-amber w-full py-2.5 px-4 text-xs font-bold"
               >
                 {isTeacher ? 'Challenge Dashboard' : 'Open Challenges'}
+              </button>
+            </div>
+
+            {/* Card 5: Game Library */}
+            <div className="glass-card p-6 flex flex-col justify-between gap-4 hover:-translate-y-0.5 transition-transform">
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-600 text-white flex items-center justify-center shadow-sm">
+                  <Gamepad2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">Game Library</h3>
+                  <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                    {isTeacher
+                      ? 'Create custom educational HTML games and assign them to your classroom.'
+                      : 'Play teacher-created classroom games and earn leaderboard points.'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGameLibraryModalOpen(true)}
+                className="btn-liquid-blue w-full py-2.5 px-4 text-xs font-bold"
+              >
+                {isTeacher ? 'Open Game Library' : 'Play Games'}
               </button>
             </div>
 
@@ -2101,7 +2153,23 @@ export const ClassroomDetailPage: React.FC = () => {
                   isTeacher={isTeacher}
                   onCreateAssignment={() => setShowQuickCreateTask(true)}
                   onOpenSubmissions={(a) => setActiveReviewAssignment(a)}
-                  onSubmitWork={(a) => setActiveSubmitAssignment(a)}
+                  onSubmitWork={(a) => {
+                    if (a.settings?.is_game_library && a.settings?.game_id && a.settings?.game_config) {
+                      setActiveGamePlay({
+                        gameId: a.settings.game_id as GameId,
+                        title: a.title,
+                        config: a.settings.game_config as GameConfig,
+                        assignmentId: a.id,
+                        maxPoints: a.points || 100,
+                        isPreview: false,
+                        alreadyCompletedScore: a.my_submission
+                          ? (a.my_submission.final_score ?? a.my_submission.points_awarded ?? 0)
+                          : null
+                      });
+                    } else {
+                      setActiveSubmitAssignment(a);
+                    }
+                  }}
                   onDeleteAssignment={handleDeleteAssignment}
                 />
               </div>
@@ -2684,6 +2752,77 @@ export const ClassroomDetailPage: React.FC = () => {
             }
             setToastMessage('Course assignments updated');
             setTimeout(() => setToastMessage(null), 3500);
+          }}
+        />
+      )}
+
+      {/* Game Library Modal (Teacher create/assign, Student play list) */}
+      {classroom && (
+        <GameLibraryModal
+          isOpen={gameLibraryModalOpen}
+          onClose={() => setGameLibraryModalOpen(false)}
+          classroomId={classroom.id}
+          classroomName={classroom.title}
+          isTeacher={isTeacher}
+          assignments={assignments}
+          onPlayAssignment={(a) => {
+            if (!a.settings?.game_id || !a.settings?.game_config) return;
+            setGameLibraryModalOpen(false);
+            setActiveGamePlay({
+              gameId: a.settings.game_id as GameId,
+              title: a.title,
+              config: a.settings.game_config as GameConfig,
+              assignmentId: a.id,
+              maxPoints: a.points || 100,
+              isPreview: false,
+              alreadyCompletedScore: a.my_submission
+                ? (a.my_submission.final_score ?? a.my_submission.points_awarded ?? 0)
+                : null
+            });
+          }}
+          onPreviewGame={(gameId, title, config) => {
+            setActiveGamePlay({
+              gameId,
+              title,
+              config,
+              maxPoints: 100,
+              isPreview: true
+            });
+          }}
+          onPublished={(targetCid) => {
+            setToastMessage('Game assigned and announced to classroom!');
+            setTimeout(() => setToastMessage(null), 4000);
+            if (targetCid === classroom.id) {
+              loadAllClassroomData(true);
+            }
+          }}
+        />
+      )}
+
+      {/* Game Player Modal (Runs preserved HTML5 game in iframe) */}
+      {classroom && activeGamePlay && (
+        <GamePlayerModal
+          isOpen={Boolean(activeGamePlay)}
+          onClose={() => setActiveGamePlay(null)}
+          gameId={activeGamePlay.gameId}
+          title={activeGamePlay.title}
+          config={activeGamePlay.config}
+          classroomId={classroom.id}
+          assignmentId={activeGamePlay.assignmentId}
+          maxPoints={activeGamePlay.maxPoints}
+          isPreview={activeGamePlay.isPreview}
+          alreadyCompletedScore={activeGamePlay.alreadyCompletedScore}
+          onSubmitted={(result) => {
+            if (result.success) {
+              setToastMessage(
+                result.alreadySubmitted
+                  ? 'Game completed (score already recorded).'
+                  : `+${result.pointsAwarded} points added to leaderboard!`
+              );
+              setTimeout(() => setToastMessage(null), 4000);
+              loadAllClassroomData(true);
+              refreshLeaderboard();
+            }
           }}
         />
       )}

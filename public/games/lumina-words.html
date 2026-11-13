@@ -1,0 +1,1618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lumina Words — Word Swipe Puzzle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #0b0e1c;
+            --bg-mid: #141933;
+            --glass-bg: rgba(255, 255, 255, 0.06);
+            --glass-border: rgba(255, 255, 255, 0.14);
+            --gold-primary: #fbbf24;
+            --gold-glow: rgba(251, 191, 36, 0.45);
+            --emerald-primary: #10b981;
+            --emerald-glow: rgba(16, 185, 129, 0.45);
+            --indigo-accent: #6366f1;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Outfit', sans-serif;
+            background: radial-gradient(circle at 50% 15%, #1e254d 0%, #0e1226 55%, #070913 100%);
+            color: #f8fafc;
+        }
+
+        /* Subtle animated ambient orbs */
+        .ambient-orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.45;
+            animation: floatOrb 14s ease-in-out infinite alternate;
+        }
+        .orb-1 {
+            width: 320px;
+            height: 320px;
+            background: #4f46e5;
+            top: -80px;
+            left: -60px;
+        }
+        .orb-2 {
+            width: 280px;
+            height: 280px;
+            background: #d97706;
+            bottom: -60px;
+            right: -60px;
+            animation-delay: -5s;
+        }
+        .orb-3 {
+            width: 220px;
+            height: 220px;
+            background: #059669;
+            top: 40%;
+            left: 55%;
+            opacity: 0.25;
+            animation-delay: -9s;
+        }
+
+        @keyframes floatOrb {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(25px, -25px) scale(1.1); }
+        }
+
+        /* Glass panels */
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+        }
+
+        .glass-pill {
+            background: rgba(15, 20, 42, 0.65);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+        }
+
+        /* Crossword / Word Slot Grid */
+        .board-cell {
+            position: relative;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            text-transform: uppercase;
+            transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .board-cell.hidden-slot {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1.5px solid rgba(255, 255, 255, 0.16);
+            box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35);
+            color: transparent;
+        }
+
+        .board-cell.hinted-slot {
+            background: rgba(251, 191, 36, 0.2);
+            border: 1.5px solid rgba(251, 191, 36, 0.65);
+            color: #fde68a;
+            text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+            animation: popIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .board-cell.revealed-slot {
+            background: linear-gradient(145deg, #10b981, #059669);
+            border: 1.5px solid #6ee7b7;
+            color: #ffffff;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+            animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .board-cell.flash-duplicate {
+            animation: pulseEmerald 0.55s ease;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.45) rotate(-8deg); opacity: 0.4; }
+            70% { transform: scale(1.12) rotate(2deg); }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+
+        @keyframes pulseEmerald {
+            0%, 100% { transform: scale(1); filter: brightness(1); }
+            50% { transform: scale(1.15); filter: brightness(1.45); }
+        }
+
+        /* Current Swiped Word Preview Pill */
+        #word-preview-container {
+            min-height: 44px;
+            transition: transform 0.2s ease, opacity 0.2s ease;
+        }
+
+        #word-preview {
+            letter-spacing: 0.14em;
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .shake-invalid {
+            animation: shakeHorizontal 0.42s cubic-bezier(.36,.07,.19,.97) both;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.85), rgba(185, 28, 28, 0.9)) !important;
+            border-color: #fca5a5 !important;
+        }
+
+        .pop-valid {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.9), rgba(5, 150, 105, 0.95)) !important;
+            border-color: #6ee7b7 !important;
+            transform: scale(1.12);
+        }
+
+        .pop-bonus {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.9), rgba(217, 119, 6, 0.95)) !important;
+            border-color: #fde68a !important;
+            transform: scale(1.1);
+        }
+
+        @keyframes shakeHorizontal {
+            10%, 90% { transform: translate3d(-3px, 0, 0); }
+            20%, 80% { transform: translate3d(5px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-7px, 0, 0); }
+            40%, 60% { transform: translate3d(7px, 0, 0); }
+        }
+
+        /* Letter Wheel */
+        #wheel-wrapper {
+            position: relative;
+            touch-action: none;
+        }
+
+        .wheel-ring {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.11), rgba(15, 23, 42, 0.72) 75%);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55), inset 0 2px 12px rgba(255, 255, 255, 0.08);
+        }
+
+        .letter-node {
+            position: absolute;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            color: #f8fafc;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1.5px solid rgba(255, 255, 255, 0.16);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+                        left 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+                        top 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+                        background 0.18s ease,
+                        box-shadow 0.18s ease;
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        .letter-node.selected {
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            color: #1e1b4b;
+            border-color: #fef3c7;
+            transform: translate(-50%, -50%) scale(1.18);
+            box-shadow: 0 0 22px rgba(251, 191, 36, 0.8), 0 4px 12px rgba(0, 0, 0, 0.4);
+            z-index: 15;
+        }
+
+        .letter-node:not(.selected) {
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        /* Flying Letter Animation */
+        .flying-letter {
+            position: fixed;
+            z-index: 60;
+            pointer-events: none;
+            font-weight: 900;
+            color: #fef08a;
+            text-shadow: 0 0 12px rgba(251, 191, 36, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.48s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.48s ease;
+        }
+
+        /* Custom Scrollbar for Modals */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+        }
+
+        /* Action button tactile press */
+        .btn-tactile {
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.2s ease;
+        }
+        .btn-tactile:active {
+            transform: scale(0.92);
+        }
+
+        /* Toast feedback */
+        @keyframes floatUpFade {
+            0% { opacity: 0; transform: translate(-50%, 10px) scale(0.9); }
+            15% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+            80% { opacity: 1; transform: translate(-50%, -14px) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -26px) scale(0.95); }
+        }
+        .toast-badge {
+            animation: floatUpFade 1.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-between h-full w-full relative">
+
+    <!-- Ambient Background Glow Orbs -->
+    <div class="ambient-orb orb-1"></div>
+    <div class="ambient-orb orb-2"></div>
+    <div class="ambient-orb orb-3"></div>
+
+    <!-- Particle Celebration Canvas -->
+    <canvas id="fx-canvas" class="fixed inset-0 pointer-events-none z-50"></canvas>
+
+    <!-- Main App Container -->
+    <div class="relative z-10 flex flex-col justify-between w-full max-w-lg h-full px-3 py-2 sm:px-5 sm:py-4 mx-auto">
+
+        <!-- TOP HUD BAR -->
+        <header class="flex items-center justify-between gap-2 pt-1">
+            <!-- Level Selector Button -->
+            <button id="btn-levels" class="glass-pill btn-tactile flex items-center gap-2 px-3 py-2 rounded-2xl text-sm font-bold text-slate-100 hover:border-indigo-400/50">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span id="hud-level-label">Level 1</span>
+                <svg id="hud-level-chevron" class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+
+            <!-- Streak / Combo Pill -->
+            <div id="combo-badge" class="hidden glass-pill px-3 py-1.5 rounded-2xl items-center gap-1.5 border-amber-400/40 bg-amber-500/15">
+                <span class="text-amber-300 text-xs font-extrabold tracking-wider uppercase">Streak</span>
+                <span id="combo-count" class="text-amber-400 text-sm font-black">2x</span>
+            </div>
+
+            <!-- Right Controls: Clues (if custom) + Coins + Audio Mute -->
+            <div class="flex items-center gap-2">
+                <button id="btn-clues" class="hidden glass-pill btn-tactile px-3 py-1.5 rounded-2xl text-xs font-extrabold text-amber-200 border-amber-400/40 hover:bg-amber-500/15">
+                    💡 Clues
+                </button>
+                <!-- Coins Counter -->
+                <div id="coin-pill" class="glass-pill flex items-center gap-1.5 px-3 py-1.5 rounded-2xl border-amber-400/30">
+                    <span class="flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-300 text-slate-950 font-black text-xs shadow">✦</span>
+                    <span id="hud-coins" class="font-extrabold text-sm text-amber-300">120</span>
+                </div>
+
+                <!-- Sound Toggle -->
+                <button id="btn-mute" aria-label="Toggle Sound" class="glass-pill btn-tactile p-2 rounded-2xl text-slate-200 hover:text-amber-300">
+                    <svg id="icon-sound-on" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5zM15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14"/>
+                    </svg>
+                    <svg id="icon-sound-off" class="w-5 h-5 hidden text-rose-400" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5zM23 9l-6 6M17 9l6 6"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- CROSSWORD / TARGET WORD BOARD AREA -->
+        <main class="flex-1 flex flex-col items-center justify-center my-1 min-h-0 relative">
+            <div id="board-container" class="glass-panel w-full h-full max-h-[42vh] rounded-3xl p-3 sm:p-4 flex items-center justify-center overflow-hidden relative">
+                <div id="crossword-grid" class="grid gap-1.5 sm:gap-2 place-items-center transition-all duration-300">
+                    <!-- Dynamic grid cells injected via JS -->
+                </div>
+            </div>
+
+            <!-- Floating Feedback Toast Anchor -->
+            <div id="toast-anchor" class="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 z-30"></div>
+        </main>
+
+        <!-- ACTIVE SWIPE WORD PREVIEW PILL -->
+        <div id="word-preview-container" class="flex items-center justify-center my-1">
+            <div id="word-preview" class="opacity-0 scale-90 px-5 py-1.5 rounded-full glass-pill border-amber-400/50 bg-indigo-950/85 text-amber-300 font-black text-xl sm:text-2xl shadow-lg">
+                WORD
+            </div>
+        </div>
+
+        <!-- BOTTOM CONTROLS & LETTER WHEEL SECTION -->
+        <section class="flex items-center justify-between w-full pb-2 sm:pb-3 pt-1 gap-2">
+
+            <!-- Left Column: Shuffle & Bonus Words -->
+            <div class="flex flex-col items-center justify-between h-44 sm:h-52 py-1">
+                <!-- Shuffle Wheel Button -->
+                <button id="btn-shuffle" title="Shuffle Letters" class="glass-pill btn-tactile w-12 h-12 sm:w-13 sm:h-13 rounded-2xl flex items-center justify-center text-slate-200 hover:text-amber-300 hover:border-amber-400/40">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
+                    </svg>
+                </button>
+
+                <!-- Bonus Words Chest Button -->
+                <button id="btn-bonus" title="Bonus Words" class="glass-pill btn-tactile relative w-12 h-12 sm:w-13 sm:h-13 rounded-2xl flex flex-col items-center justify-center text-amber-300 hover:border-amber-400/50">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                    </svg>
+                    <span id="bonus-count-badge" class="text-[10px] font-extrabold text-emerald-300 leading-none mt-0.5">0</span>
+                </button>
+            </div>
+
+            <!-- Center: Circular Interactive Letter Wheel -->
+            <div id="wheel-wrapper" class="relative w-52 h-52 sm:w-60 sm:h-60 flex-shrink-0">
+                <div class="wheel-ring"></div>
+                <!-- Dynamic Glowing SVG Trail -->
+                <svg id="wheel-svg" class="absolute inset-0 w-full h-full pointer-events-none z-5" viewBox="0 0 240 240">
+                    <defs>
+                        <filter id="glow-line" x="-30%" y="-30%" width="160%" height="160%">
+                            <feGaussianBlur stdDeviation="4" result="blur"/>
+                            <feMerge>
+                                <feMergeNode in="blur"/>
+                                <feMergeNode in="SourceGraphic"/>
+                            </feMerge>
+                        </filter>
+                    </defs>
+                    <polyline id="swipe-trail-glow" fill="none" stroke="#fbbf24" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" opacity="0.45" filter="url(#glow-line)" points=""/>
+                    <polyline id="swipe-trail" fill="none" stroke="#fef08a" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" points=""/>
+                </svg>
+                <!-- Letter Nodes Container -->
+                <div id="letter-nodes-container" class="absolute inset-0"></div>
+            </div>
+
+            <!-- Right Column: Hint Button & Endless Mode -->
+            <div class="flex flex-col items-center justify-between h-44 sm:h-52 py-1">
+                <!-- Hint Button (Reveals 1 Letter) -->
+                <button id="btn-hint" title="Reveal Letter Hint (25 Coins)" class="glass-pill btn-tactile relative w-12 h-12 sm:w-13 sm:h-13 rounded-2xl flex flex-col items-center justify-center text-amber-300 hover:border-amber-400/50">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                    </svg>
+                    <span class="text-[10px] font-extrabold text-amber-200 leading-none mt-0.5">25✦</span>
+                </button>
+
+                <!-- Endless / Quick Random Level Button -->
+                <button id="btn-endless" title="Endless Random Puzzle" class="glass-pill btn-tactile w-12 h-12 sm:w-13 sm:h-13 rounded-2xl flex flex-col items-center justify-center text-indigo-300 hover:text-white hover:border-indigo-400/50">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.585 0-4.585 8 0 8 5.606 0 7.644-8 12.74-8z"/>
+                    </svg>
+                    <span class="text-[9px] font-bold uppercase tracking-wider mt-0.5">Mix</span>
+                </button>
+            </div>
+        </section>
+    </div>
+
+    <!-- LEVEL COMPLETE MODAL -->
+    <div id="modal-complete" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-950/75 backdrop-blur-md p-4">
+        <div class="glass-panel w-full max-w-sm rounded-3xl p-6 text-center border-amber-400/40 shadow-2xl transform transition-all">
+            <div class="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center text-slate-950 text-3xl font-black shadow-lg shadow-amber-500/30">
+                ★
+            </div>
+            <h2 id="complete-title" class="text-2xl sm:text-3xl font-black text-white tracking-tight">Level Cleared!</h2>
+            <p id="complete-subtitle" class="text-slate-300 text-sm mt-1">Splendid vocabulary mastery</p>
+
+            <div class="grid grid-cols-2 gap-3 my-5">
+                <div class="bg-white/5 border border-white/10 rounded-2xl p-3">
+                    <div class="text-xs text-slate-400 uppercase font-bold">Reward</div>
+                    <div id="complete-reward" class="text-xl font-black text-amber-300 mt-0.5">+30 ✦</div>
+                </div>
+                <div class="bg-white/5 border border-white/10 rounded-2xl p-3">
+                    <div class="text-xs text-slate-400 uppercase font-bold">Bonus Words</div>
+                    <div id="complete-bonus" class="text-xl font-black text-emerald-400 mt-0.5">0</div>
+                </div>
+            </div>
+
+            <button id="btn-next-level" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-lg shadow-lg shadow-emerald-500/30 btn-tactile">
+                Next Level →
+            </button>
+        </div>
+    </div>
+
+    <!-- LEVEL SELECTOR MODAL -->
+    <div id="modal-levels" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-950/75 backdrop-blur-md p-4">
+        <div class="glass-panel w-full max-w-md rounded-3xl p-5 sm:p-6 max-h-[82vh] flex flex-col border-white/20">
+            <div class="flex items-center justify-between pb-3 border-b border-white/10">
+                <div>
+                    <h3 class="text-xl font-black text-white">Select Chapter</h3>
+                    <p class="text-xs text-slate-400">12 handcrafted levels + Endless mode</p>
+                </div>
+                <button id="close-levels" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200">✕</button>
+            </div>
+            <div id="levels-grid" class="grid grid-cols-3 gap-2.5 overflow-y-auto py-4 pr-1">
+                <!-- Populated dynamically -->
+            </div>
+            <button id="modal-btn-endless" class="mt-2 w-full py-3 rounded-2xl bg-indigo-600/80 hover:bg-indigo-500 border border-indigo-400/40 font-extrabold text-sm text-white btn-tactile">
+                ∞ Launch Endless Procedural Puzzle
+            </button>
+        </div>
+    </div>
+
+    <!-- BONUS WORDS MODAL -->
+    <div id="modal-bonus" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-950/75 backdrop-blur-md p-4">
+        <div class="glass-panel w-full max-w-sm rounded-3xl p-5 sm:p-6 max-h-[75vh] flex flex-col border-amber-400/30">
+            <div class="flex items-center justify-between pb-3 border-b border-white/10">
+                <div>
+                    <h3 class="text-xl font-black text-amber-300">Bonus Words</h3>
+                    <p class="text-xs text-slate-300">Valid words not on the crossword earn <span class="text-amber-300 font-bold">+5 ✦</span> each!</p>
+                </div>
+                <button id="close-bonus" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200">✕</button>
+            </div>
+            <div id="bonus-words-list" class="flex flex-wrap gap-2 overflow-y-auto py-4 min-h-[120px] content-start">
+                <!-- Bonus words chips -->
+            </div>
+        </div>
+    </div>
+
+    <!-- WORD CLUES MODAL (For Teacher-Created Puzzles) -->
+    <div id="modal-clues" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-950/75 backdrop-blur-md p-4">
+        <div class="glass-panel w-full max-w-sm rounded-3xl p-5 sm:p-6 max-h-[75vh] flex flex-col border-amber-400/30">
+            <div class="flex items-center justify-between pb-3 border-b border-white/10">
+                <div>
+                    <h3 class="text-xl font-black text-amber-300">Word Clues</h3>
+                    <p class="text-xs text-slate-300">Swipe the letters on the wheel to solve each word.</p>
+                </div>
+                <button id="close-clues" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200">✕</button>
+            </div>
+            <div id="clues-list" class="space-y-2 overflow-y-auto py-4"></div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * LUMINA WORDS — Complete Single-File Word Swiping Game
+         */
+        const CURATED_LEVELS = [
+            {
+                id: 1,
+                title: "First Spark",
+                letters: ["S", "T", "A", "R"],
+                words: [
+                    { word: "STAR", row: 1, col: 0, dir: "H" },
+                    { word: "ART",  row: 1, col: 2, dir: "V" },
+                    { word: "RAT",  row: 3, col: 0, dir: "H" },
+                    { word: "SAT",  row: 0, col: 0, dir: "V" }
+                ],
+                bonus: ["TAR", "TSAR", "ARTS", "RATS"]
+            },
+            {
+                id: 2,
+                title: "Ocean Breeze",
+                letters: ["W", "A", "V", "E"],
+                words: [
+                    { word: "WAVE", row: 1, col: 0, dir: "H" },
+                    { word: "VOW",  row: 0, col: 2, dir: "V" },
+                    { word: "AWE",  row: 1, col: 1, dir: "V" },
+                    { word: "AVE",  row: 3, col: 1, dir: "H" }
+                ],
+                bonus: ["WAE", "EAVE"]
+            },
+            {
+                id: 3,
+                title: "Solar Flare",
+                letters: ["S", "H", "I", "N", "E"],
+                words: [
+                    { word: "SHINE", row: 2, col: 0, dir: "H" },
+                    { word: "SIN",   row: 0, col: 0, dir: "V" },
+                    { word: "HEN",   row: 2, col: 1, dir: "V" },
+                    { word: "HIS",   row: 0, col: 2, dir: "V" },
+                    { word: "SHE",   row: 4, col: 0, dir: "H" }
+                ],
+                bonus: ["HENS", "SHIN", "NINE", "INS", "HISN"]
+            },
+            {
+                id: 4,
+                title: "Emerald Grove",
+                letters: ["P", "L", "A", "N", "T"],
+                words: [
+                    { word: "PLANT", row: 2, col: 0, dir: "H" },
+                    { word: "PAN",   row: 2, col: 0, dir: "V" },
+                    { word: "ANT",   row: 2, col: 2, dir: "V" },
+                    { word: "TAN",   row: 4, col: 2, dir: "H" },
+                    { word: "LAP",   row: 0, col: 1, dir: "V" },
+                    { word: "NAP",   row: 0, col: 3, dir: "V" }
+                ],
+                bonus: ["PLAN", "PANT", "PLAT", "APT", "PAL", "PAT", "TAP", "ALT"]
+            },
+            {
+                id: 5,
+                title: "Amber Dawn",
+                letters: ["G", "L", "O", "W", "S"],
+                words: [
+                    { word: "GLOWS", row: 2, col: 0, dir: "H" },
+                    { word: "GLOW",  row: 0, col: 2, dir: "V" },
+                    { word: "SLOW",  row: 2, col: 4, dir: "V" },
+                    { word: "OWL",   row: 1, col: 1, dir: "V" },
+                    { word: "LOW",   row: 5, col: 2, dir: "H" }
+                ],
+                bonus: ["LOGS", "LOG", "SOW", "WOG", "WOGS", "OWLS"]
+            },
+            {
+                id: 6,
+                title: "Velvet Night",
+                letters: ["D", "R", "E", "A", "M"],
+                words: [
+                    { word: "DREAM", row: 2, col: 0, dir: "H" },
+                    { word: "READ",  row: 0, col: 1, dir: "V" },
+                    { word: "MADE",  row: 2, col: 4, dir: "V" },
+                    { word: "DEAR",  row: 2, col: 0, dir: "V" },
+                    { word: "EAR",   row: 4, col: 2, dir: "H" },
+                    { word: "ARM",   row: 0, col: 3, dir: "V" }
+                ],
+                bonus: ["DARE", "DAME", "DRAM", "MARE", "REAM", "MAD", "DAM", "RED", "ERA", "RAM"]
+            },
+            {
+                id: 7,
+                title: "Crystal Peak",
+                letters: ["S", "T", "O", "N", "E", "S"],
+                words: [
+                    { word: "STONES", row: 2, col: 0, dir: "H" },
+                    { word: "STONE",  row: 0, col: 0, dir: "V" },
+                    { word: "NOTES",  row: 2, col: 3, dir: "V" },
+                    { word: "TONE",   row: 0, col: 4, dir: "V" },
+                    { word: "SENT",   row: 4, col: 0, dir: "H" },
+                    { word: "SON",    row: 6, col: 2, dir: "H" }
+                ],
+                bonus: ["ONSET", "TONES", "NEST", "NETS", "NOSE", "ONES", "SETS", "TOSS", "NOT", "ONE", "SET", "TEN", "TOE", "TON"]
+            },
+            {
+                id: 8,
+                title: "Golden Compass",
+                letters: ["T", "R", "A", "V", "E", "L"],
+                words: [
+                    { word: "TRAVEL", row: 2, col: 0, dir: "H" },
+                    { word: "ALERT",  row: 0, col: 2, dir: "V" },
+                    { word: "LATER",  row: 2, col: 5, dir: "V" },
+                    { word: "RATE",   row: 2, col: 1, dir: "V" },
+                    { word: "VALE",   row: 4, col: 2, dir: "H" },
+                    { word: "TEAR",   row: 0, col: 4, dir: "V" }
+                ],
+                bonus: ["ALTER", "RAVEL", "EARL", "LATE", "REAL", "TALE", "TEAL", "VEAL", "ART", "ATE", "EAR", "EAT", "ERA", "LET", "RAT", "TAR", "TEA", "VET"]
+            },
+            {
+                id: 9,
+                title: "Astral Voyage",
+                letters: ["P", "L", "A", "N", "E", "T"],
+                words: [
+                    { word: "PLANET", row: 2, col: 0, dir: "H" },
+                    { word: "PLATE",  row: 2, col: 0, dir: "V" },
+                    { word: "LEANT",  row: 0, col: 1, dir: "V" },
+                    { word: "PETAL",  row: 4, col: 0, dir: "H" },
+                    { word: "NEAT",   row: 2, col: 3, dir: "V" },
+                    { word: "TAPE",   row: 2, col: 5, dir: "V" }
+                ],
+                bonus: ["PANEL", "PENAL", "PLANE", "PLANT", "ELAN", "LANE", "LATE", "LEAN", "LEAP", "PALE", "PANE", "PANT", "PEAT", "PELT", "PLAN", "PLEA", "TALE", "TEAL", "ANT", "APE", "APT", "ATE", "EAT", "LAP", "LET", "NAP", "NET", "PAN", "PAT", "PEA", "PEN", "PET", "TAN", "TAP", "TEA", "TEN"]
+            },
+            {
+                id: 10,
+                title: "Sapphire Mist",
+                letters: ["S", "I", "L", "V", "E", "R"],
+                words: [
+                    { word: "SILVER", row: 2, col: 0, dir: "H" },
+                    { word: "LIVER",  row: 0, col: 2, dir: "V" },
+                    { word: "RILES",  row: 2, col: 5, dir: "V" },
+                    { word: "VEIL",   row: 2, col: 3, dir: "V" },
+                    { word: "RISE",   row: 4, col: 1, dir: "H" },
+                    { word: "LIVE",   row: 6, col: 2, dir: "H" }
+                ],
+                bonus: ["LIVERS", "SLIVER", "EVIL", "ISLE", "LEIS", "LIES", "LIRE", "REVS", "RILE", "VILE", "VISE", "IRE", "LEI", "LIE", "REV", "SIR", "VIE"]
+            },
+            {
+                id: 11,
+                title: "Celestial Harp",
+                letters: ["H", "A", "R", "M", "O", "N", "Y"],
+                words: [
+                    { word: "HARMONY", row: 3, col: 0, dir: "H" },
+                    { word: "MANOR",   row: 1, col: 3, dir: "V" },
+                    { word: "MAYOR",   row: 3, col: 6, dir: "V" },
+                    { word: "HORN",    row: 3, col: 0, dir: "V" },
+                    { word: "ARMY",    row: 3, col: 1, dir: "V" },
+                    { word: "ROAM",    row: 5, col: 3, dir: "H" },
+                    { word: "NORM",    row: 1, col: 5, dir: "V" }
+                ],
+                bonus: ["ROMAN", "HOARY", "MORAY", "RAYON", "HARM", "MANY", "MOAN", "MYNA", "OMAN", "ROAN", "YARN", "ANY", "ARM", "HAM", "HAY", "MAN", "MAR", "MAY", "NAY", "NOR", "OAR", "RAM", "RAN", "RAY", "YAM", "YON"]
+            },
+            {
+                id: 12,
+                title: "Grand Zenith",
+                letters: ["C", "H", "A", "M", "P", "I", "O", "N"],
+                words: [
+                    { word: "CHAMPION", row: 3, col: 0, dir: "H" },
+                    { word: "CHAIN",    row: 3, col: 0, dir: "V" },
+                    { word: "PIANO",    row: 1, col: 4, dir: "V" },
+                    { word: "MANIC",    row: 3, col: 3, dir: "V" },
+                    { word: "CHIN",     row: 7, col: 0, dir: "H" },
+                    { word: "CAMP",     row: 0, col: 2, dir: "V" },
+                    { word: "COIN",     row: 5, col: 3, dir: "H" }
+                ],
+                bonus: ["CAMPO", "CHIMP", "CHINA", "CHOMP", "MACHO", "MANIC", "MOCHA", "PANIC", "AMINO", "CAMP", "CHAP", "CHIN", "CHIP", "CHOP", "CLAN", "COIN", "COMA", "COMP", "ICON", "INCH", "MAIN", "MICA", "MIND", "MOAN", "PAIN", "PICA", "AIM", "CAM", "CAN", "CAP", "COP", "HAM", "HIM", "HIP", "HOP", "IMP", "ION", "MAN", "MAP", "MOP", "NAP", "NIP", "PAN", "PIN"]
+            }
+        ];
+
+        const ENDLESS_POOLS = [
+            {
+                title: "Endless: Prism",
+                letters: ["P", "R", "I", "S", "M"],
+                words: [
+                    { word: "PRISM", row: 2, col: 0, dir: "H" },
+                    { word: "RIMS",  row: 2, col: 1, dir: "V" },
+                    { word: "IMPS",  row: 0, col: 2, dir: "V" },
+                    { word: "SIP",   row: 4, col: 1, dir: "H" }
+                ],
+                bonus: ["RIPS", "IMP", "RIM", "RIP", "SIR"]
+            },
+            {
+                title: "Endless: Sparkle",
+                letters: ["S", "P", "A", "R", "K", "S"],
+                words: [
+                    { word: "SPARKS", row: 2, col: 0, dir: "H" },
+                    { word: "SPARK",  row: 0, col: 0, dir: "V" },
+                    { word: "PARKS",  row: 2, col: 1, dir: "V" },
+                    { word: "ASK",    row: 4, col: 0, dir: "H" },
+                    { word: "ARK",    row: 0, col: 3, dir: "V" }
+                ],
+                bonus: ["PARK", "SPAR", "RASP", "PAR", "RAP", "SAP", "SPA"]
+            },
+            {
+                title: "Endless: Nebula",
+                letters: ["N", "E", "B", "U", "L", "A"],
+                words: [
+                    { word: "NEBULA", row: 2, col: 0, dir: "H" },
+                    { word: "ABLE",   row: 0, col: 2, dir: "V" },
+                    { word: "LEAN",   row: 2, col: 4, dir: "V" },
+                    { word: "BEAN",   row: 2, col: 2, dir: "V" },
+                    { word: "LANE",   row: 4, col: 1, dir: "H" }
+                ],
+                bonus: ["BALE", "BLUE", "ELAN", "LUNE", "NUB", "BAN", "BEN", "BUN", "LAB", "LEA", "NAB"]
+            },
+            {
+                title: "Endless: Orchid",
+                letters: ["O", "R", "C", "H", "I", "D"],
+                words: [
+                    { word: "ORCHID", row: 2, col: 0, dir: "H" },
+                    { word: "CHORD",  row: 0, col: 2, dir: "V" },
+                    { word: "RICH",   row: 2, col: 1, dir: "V" },
+                    { word: "ROD",    row: 4, col: 2, dir: "H" },
+                    { word: "HID",    row: 0, col: 4, dir: "V" }
+                ],
+                bonus: ["CHOIR", "ICHOR", "CORD", "DOIR", "COD", "HID", "RID", "ROC"]
+            },
+            {
+                title: "Endless: Mirage",
+                letters: ["M", "I", "R", "A", "G", "E"],
+                words: [
+                    { word: "MIRAGE", row: 2, col: 0, dir: "H" },
+                    { word: "IMAGE",  row: 0, col: 1, dir: "V" },
+                    { word: "GRIME",  row: 2, col: 4, dir: "V" },
+                    { word: "RAGE",   row: 2, col: 2, dir: "V" },
+                    { word: "GEAR",   row: 4, col: 1, dir: "H" }
+                ],
+                bonus: ["GAME", "GERM", "GRIM", "MAGE", "MARE", "REAM", "RIME", "AGE", "AIM", "AIR", "ARE", "ARM", "EAR", "ERA", "GEM", "IRE", "RAG", "RAM", "RIG", "RIM"]
+            }
+        ];
+
+        class SoundEngine {
+            constructor() { this.ctx = null; this.muted = false; }
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) this.ctx = new AudioCtx();
+                }
+                if (this.ctx && this.ctx.state === "suspended") this.ctx.resume();
+            }
+            playPop(stepIndex = 0) {
+                if (this.muted) return; this.init(); if (!this.ctx) return;
+                const now = this.ctx.currentTime, osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+                const scale = [330, 392, 440, 523.25, 587.33, 659.25, 783.99, 880];
+                const freq = scale[stepIndex % scale.length];
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(freq, now);
+                osc.frequency.exponentialRampToValueAtTime(freq * 1.18, now + 0.09);
+                gain.gain.setValueAtTime(0.16, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+                osc.connect(gain); gain.connect(this.ctx.destination);
+                osc.start(now); osc.stop(now + 0.13);
+            }
+            playSuccess(combo = 1) {
+                if (this.muted) return; this.init(); if (!this.ctx) return;
+                const now = this.ctx.currentTime, baseShift = Math.min(combo - 1, 5) * 35;
+                [523.25 + baseShift, 659.25 + baseShift, 783.99 + baseShift, 1046.5 + baseShift].forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+                    osc.type = "triangle"; osc.frequency.setValueAtTime(freq, now + idx * 0.065);
+                    gain.gain.setValueAtTime(0.001, now + idx * 0.065);
+                    gain.gain.linearRampToValueAtTime(0.18, now + idx * 0.065 + 0.02);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.065 + 0.35);
+                    osc.connect(gain); gain.connect(this.ctx.destination);
+                    osc.start(now + idx * 0.065); osc.stop(now + idx * 0.065 + 0.36);
+                });
+            }
+            playBonus() {
+                if (this.muted) return; this.init(); if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                [587.33, 880].forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+                    osc.type = "sine"; osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+                    gain.gain.setValueAtTime(0.15, now + idx * 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.25);
+                    osc.connect(gain); gain.connect(this.ctx.destination);
+                    osc.start(now + idx * 0.08); osc.stop(now + idx * 0.08 + 0.26);
+                });
+            }
+            playInvalid() {
+                if (this.muted) return; this.init(); if (!this.ctx) return;
+                const now = this.ctx.currentTime, osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+                osc.type = "sawtooth"; osc.frequency.setValueAtTime(155, now);
+                osc.frequency.linearRampToValueAtTime(105, now + 0.2);
+                gain.gain.setValueAtTime(0.12, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+                osc.connect(gain); gain.connect(this.ctx.destination);
+                osc.start(now); osc.stop(now + 0.23);
+            }
+            playFanfare() {
+                if (this.muted) return; this.init(); if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+                    osc.type = "triangle"; osc.frequency.setValueAtTime(freq, now + i * 0.09);
+                    gain.gain.setValueAtTime(0.16, now + i * 0.09);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.09 + 0.65);
+                    osc.connect(gain); gain.connect(this.ctx.destination);
+                    osc.start(now + i * 0.09); osc.stop(now + i * 0.09 + 0.68);
+                });
+            }
+        }
+        const sound = new SoundEngine();
+
+        class ParticleEngine {
+            constructor(canvas) {
+                this.canvas = canvas; this.ctx = canvas.getContext("2d"); this.particles = [];
+                this.resize(); window.addEventListener("resize", () => this.resize()); this.loop();
+            }
+            resize() { this.canvas.width = window.innerWidth; this.canvas.height = window.innerHeight; }
+            burst(x, y, colors = ["#fbbf24", "#10b981", "#818cf8", "#fef08a"], count = 26) {
+                for (let i = 0; i < count; i++) {
+                    const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
+                    const speed = 2.5 + Math.random() * 5.5;
+                    this.particles.push({
+                        x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 1.5,
+                        size: 3 + Math.random() * 4.5, color: colors[Math.floor(Math.random() * colors.length)],
+                        alpha: 1, decay: 0.018 + Math.random() * 0.015, gravity: 0.12
+                    });
+                }
+            }
+            loop() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const p = this.particles[i];
+                    p.x += p.vx; p.y += p.vy; p.vy += p.gravity; p.alpha -= p.decay;
+                    if (p.alpha <= 0) { this.particles.splice(i, 1); continue; }
+                    this.ctx.save(); this.ctx.globalAlpha = p.alpha; this.ctx.fillStyle = p.color;
+                    this.ctx.beginPath(); this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); this.ctx.fill(); this.ctx.restore();
+                }
+                requestAnimationFrame(() => this.loop());
+            }
+        }
+
+        const STORAGE_KEY = "lumina_words_save_v1";
+        const edtechraBridge = { active: false, maxPoints: 100, reported: false, startTime: 0, hintsUsed: 0 };
+
+        const state = {
+            coins: 120,
+            unlockedLevel: 1,
+            currentLevelIndex: 0,
+            isEndless: false,
+            isCustom: false,
+            endlessCount: 1,
+            activeLevelData: null,
+            foundWords: new Set(),
+            foundBonusWords: new Set(),
+            revealedHintCells: new Set(),
+            combo: 0,
+            wheelOrder: [],
+            selectedNodes: [],
+            isDragging: false,
+            pointerPos: null,
+            cellMap: new Map(),
+            gridRows: 0,
+            gridCols: 0
+        };
+
+        function saveProgress() {
+            if (edtechraBridge.active) return;
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                    coins: state.coins, unlockedLevel: state.unlockedLevel,
+                    currentLevelIndex: state.currentLevelIndex, muted: sound.muted
+                }));
+            } catch (e) {}
+        }
+
+        function loadProgress() {
+            if (edtechraBridge.active) return;
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return;
+                const data = JSON.parse(raw);
+                if (typeof data.coins === "number") state.coins = data.coins;
+                if (typeof data.unlockedLevel === "number") state.unlockedLevel = Math.max(1, Math.min(data.unlockedLevel, CURATED_LEVELS.length));
+                if (typeof data.currentLevelIndex === "number") state.currentLevelIndex = Math.max(0, Math.min(data.currentLevelIndex, CURATED_LEVELS.length - 1));
+                if (typeof data.muted === "boolean") { sound.muted = data.muted; updateMuteIcon(); }
+            } catch (e) {}
+        }
+
+        const dom = {
+            hudLevelLabel: document.getElementById("hud-level-label"),
+            hudCoins: document.getElementById("hud-coins"),
+            comboBadge: document.getElementById("combo-badge"),
+            comboCount: document.getElementById("combo-count"),
+            boardContainer: document.getElementById("board-container"),
+            crosswordGrid: document.getElementById("crossword-grid"),
+            wordPreview: document.getElementById("word-preview"),
+            wheelWrapper: document.getElementById("wheel-wrapper"),
+            wheelSvg: document.getElementById("wheel-svg"),
+            swipeTrail: document.getElementById("swipe-trail"),
+            swipeTrailGlow: document.getElementById("swipe-trail-glow"),
+            nodesContainer: document.getElementById("letter-nodes-container"),
+            bonusCountBadge: document.getElementById("bonus-count-badge"),
+            toastAnchor: document.getElementById("toast-anchor"),
+            modalComplete: document.getElementById("modal-complete"),
+            completeTitle: document.getElementById("complete-title"),
+            completeSubtitle: document.getElementById("complete-subtitle"),
+            completeReward: document.getElementById("complete-reward"),
+            completeBonus: document.getElementById("complete-bonus"),
+            modalLevels: document.getElementById("modal-levels"),
+            levelsGrid: document.getElementById("levels-grid"),
+            modalBonus: document.getElementById("modal-bonus"),
+            bonusWordsList: document.getElementById("bonus-words-list"),
+            btnClues: document.getElementById("btn-clues"),
+            modalClues: document.getElementById("modal-clues"),
+            cluesList: document.getElementById("clues-list")
+        };
+
+        const fx = new ParticleEngine(document.getElementById("fx-canvas"));
+
+        /* ---------- CUSTOM TEACHER PUZZLE GENERATOR ---------- */
+        function generateCustomLuminaLevel(title, rawItems) {
+            const cleaned = [];
+            const seen = new Set();
+            rawItems.forEach(item => {
+                const rawW = (typeof item === "string" ? item : item.word || "").replace(/[^A-Za-z]/g, "").toUpperCase();
+                const clue = (typeof item === "string" ? "" : item.clue || "").trim();
+                if (rawW.length >= 2 && rawW.length <= 12 && !seen.has(rawW)) {
+                    seen.add(rawW);
+                    cleaned.push({ word: rawW, clue });
+                }
+            });
+
+            if (cleaned.length === 0) return null;
+
+            // Compute minimal letter multiset so every word can be formed on the wheel
+            const maxFreq = {};
+            cleaned.forEach(({ word }) => {
+                const freq = {};
+                for (const ch of word) freq[ch] = (freq[ch] || 0) + 1;
+                Object.keys(freq).forEach(ch => {
+                    maxFreq[ch] = Math.max(maxFreq[ch] || 0, freq[ch]);
+                });
+            });
+            const letters = [];
+            Object.keys(maxFreq).forEach(ch => {
+                for (let i = 0; i < maxFreq[ch]; i++) letters.push(ch);
+            });
+
+            // Sort longest first for crossword placement
+            const sorted = [...cleaned].sort((a, b) => b.word.length - a.word.length);
+            const grid = new Map(); // "r,c" -> char
+            const placed = [];
+
+            function canPlace(word, r, c, dir) {
+                let intersections = 0;
+                for (let i = 0; i < word.length; i++) {
+                    const rr = dir === "V" ? r + i : r;
+                    const cc = dir === "H" ? c + i : c;
+                    const existing = grid.get(`${rr},${cc}`);
+                    if (existing !== undefined) {
+                        if (existing !== word[i]) return -1;
+                        intersections++;
+                    } else {
+                        // Avoid parallel touching neighbors unless intersecting
+                        if (dir === "H") {
+                            if (grid.has(`${rr - 1},${cc}`) || grid.has(`${rr + 1},${cc}`)) return -1;
+                        } else {
+                            if (grid.has(`${rr},${cc - 1}`) || grid.has(`${rr},${cc + 1}`)) return -1;
+                        }
+                    }
+                }
+                // Check before start and after end
+                const br = dir === "V" ? r - 1 : r, bc = dir === "H" ? c - 1 : c;
+                const ar = dir === "V" ? r + word.length : r, ac = dir === "H" ? c + word.length : c;
+                if (grid.has(`${br},${bc}`) || grid.has(`${ar},${ac}`)) return -1;
+                return intersections;
+            }
+
+            function commit(entry, r, c, dir) {
+                for (let i = 0; i < entry.word.length; i++) {
+                    const rr = dir === "V" ? r + i : r;
+                    const cc = dir === "H" ? c + i : c;
+                    grid.set(`${rr},${cc}`, entry.word[i]);
+                }
+                placed.push({ word: entry.word, clue: entry.clue, row: r, col: c, dir });
+            }
+
+            // Place first word horizontally at (0,0)
+            commit(sorted[0], 0, 0, "H");
+
+            for (let idx = 1; idx < sorted.length; idx++) {
+                const entry = sorted[idx];
+                let best = null;
+                for (const p of placed) {
+                    const tryDir = p.dir === "H" ? "V" : "H";
+                    for (let i = 0; i < p.word.length; i++) {
+                        const pr = p.dir === "V" ? p.row + i : p.row;
+                        const pc = p.dir === "H" ? p.col + i : p.col;
+                        for (let j = 0; j < entry.word.length; j++) {
+                            if (entry.word[j] !== p.word[i]) continue;
+                            const sr = tryDir === "V" ? pr - j : pr;
+                            const sc = tryDir === "H" ? pc - j : pc;
+                            const score = canPlace(entry.word, sr, sc, tryDir);
+                            if (score > 0 && (!best || score > best.score)) {
+                                best = { r: sr, c: sc, dir: tryDir, score };
+                            }
+                        }
+                    }
+                }
+                if (best) {
+                    commit(entry, best.r, best.c, best.dir);
+                } else {
+                    // Fallback: place below existing grid
+                    let maxR = 0;
+                    grid.forEach((_, k) => { maxR = Math.max(maxR, Number(k.split(",")[0])); });
+                    commit(entry, maxR + 2, 0, "H");
+                }
+            }
+
+            // Normalize coordinates so minRow = 0 and minCol = 0
+            let minR = Infinity, minC = Infinity;
+            placed.forEach(p => { minR = Math.min(minR, p.row); minC = Math.min(minC, p.col); });
+            placed.forEach(p => { p.row -= minR; p.col -= minC; });
+
+            return {
+                id: 0,
+                title: title || "Classroom Puzzle",
+                letters,
+                words: placed,
+                bonus: []
+            };
+        }
+
+        function loadCustomLevel(customLevel) {
+            state.isEndless = false;
+            state.isCustom = true;
+            state.foundWords.clear();
+            state.foundBonusWords.clear();
+            state.revealedHintCells.clear();
+            state.combo = 0;
+            updateComboUI();
+
+            state.activeLevelData = customLevel;
+            dom.hudLevelLabel.textContent = customLevel.title || "Word Puzzle";
+            document.getElementById("hud-level-chevron").classList.add("hidden");
+            document.getElementById("btn-levels").disabled = true;
+
+            const hasClues = customLevel.words.some(w => Boolean(w.clue));
+            dom.btnClues.classList.toggle("hidden", !hasClues);
+
+            state.wheelOrder = state.activeLevelData.letters.map((char, idx) => ({ char, id: idx }));
+            shuffleArray(state.wheelOrder);
+
+            edtechraBridge.startTime = Date.now();
+            edtechraBridge.hintsUsed = 0;
+
+            buildCrosswordBoard();
+            renderWheel();
+            updateHUD();
+        }
+
+        function loadLevel(index, isEndless = false) {
+            state.isEndless = isEndless;
+            state.isCustom = false;
+            state.foundWords.clear();
+            state.foundBonusWords.clear();
+            state.revealedHintCells.clear();
+            state.combo = 0;
+            updateComboUI();
+
+            if (isEndless) {
+                const template = ENDLESS_POOLS[(state.endlessCount - 1) % ENDLESS_POOLS.length];
+                state.activeLevelData = JSON.parse(JSON.stringify(template));
+                dom.hudLevelLabel.textContent = `Endless #${state.endlessCount}`;
+            } else {
+                state.currentLevelIndex = index;
+                state.activeLevelData = JSON.parse(JSON.stringify(CURATED_LEVELS[index]));
+                dom.hudLevelLabel.textContent = `Level ${state.activeLevelData.id}`;
+            }
+
+            state.wheelOrder = state.activeLevelData.letters.map((char, idx) => ({ char, id: idx }));
+            shuffleArray(state.wheelOrder);
+
+            buildCrosswordBoard();
+            renderWheel();
+            updateHUD();
+            saveProgress();
+        }
+
+        function buildCrosswordBoard() {
+            const words = state.activeLevelData.words;
+            state.cellMap.clear();
+            let maxR = 0, maxC = 0;
+            words.forEach((entry, wIdx) => {
+                for (let i = 0; i < entry.word.length; i++) {
+                    const r = entry.dir === "V" ? entry.row + i : entry.row;
+                    const c = entry.dir === "H" ? entry.col + i : entry.col;
+                    maxR = Math.max(maxR, r); maxC = Math.max(maxC, c);
+                    const key = `${r},${c}`;
+                    if (!state.cellMap.has(key)) {
+                        state.cellMap.set(key, { r, c, char: entry.word[i], wordIndices: [wIdx], element: null });
+                    } else {
+                        state.cellMap.get(key).wordIndices.push(wIdx);
+                    }
+                }
+            });
+
+            state.gridRows = maxR + 1;
+            state.gridCols = maxC + 1;
+
+            const containerRect = dom.boardContainer.getBoundingClientRect();
+            const availW = Math.max(240, containerRect.width - 28);
+            const availH = Math.max(180, containerRect.height - 28);
+            const gap = 6;
+            const cellW = Math.floor((availW - gap * (state.gridCols - 1)) / state.gridCols);
+            const cellH = Math.floor((availH - gap * (state.gridRows - 1)) / state.gridRows);
+            const cellSize = Math.max(26, Math.min(50, cellW, cellH));
+
+            dom.crosswordGrid.innerHTML = "";
+            dom.crosswordGrid.style.gridTemplateColumns = `repeat(${state.gridCols}, ${cellSize}px)`;
+            dom.crosswordGrid.style.gridTemplateRows = `repeat(${state.gridRows}, ${cellSize}px)`;
+
+            for (let r = 0; r < state.gridRows; r++) {
+                for (let c = 0; c < state.gridCols; c++) {
+                    const key = `${r},${c}`;
+                    const cellDiv = document.createElement("div");
+                    cellDiv.style.width = `${cellSize}px`;
+                    cellDiv.style.height = `${cellSize}px`;
+                    cellDiv.style.fontSize = `${Math.floor(cellSize * 0.52)}px`;
+                    if (state.cellMap.has(key)) {
+                        const cellData = state.cellMap.get(key);
+                        cellDiv.className = "board-cell hidden-slot";
+                        cellDiv.dataset.key = key;
+                        cellDiv.textContent = cellData.char;
+                        cellData.element = cellDiv;
+                    } else {
+                        cellDiv.className = "pointer-events-none";
+                    }
+                    dom.crosswordGrid.appendChild(cellDiv);
+                }
+            }
+            refreshBoardVisuals();
+        }
+
+        function refreshBoardVisuals() {
+            const words = state.activeLevelData.words;
+            state.cellMap.forEach((cellData, key) => {
+                const isWordSolved = cellData.wordIndices.some(wIdx => state.foundWords.has(words[wIdx].word));
+                const isHinted = state.revealedHintCells.has(key);
+                if (isWordSolved) cellData.element.className = "board-cell revealed-slot";
+                else if (isHinted) cellData.element.className = "board-cell hinted-slot";
+                else cellData.element.className = "board-cell hidden-slot";
+            });
+        }
+
+        function renderWheel() {
+            dom.nodesContainer.innerHTML = "";
+            const count = state.wheelOrder.length;
+            const wheelRect = dom.wheelWrapper.getBoundingClientRect();
+            const size = wheelRect.width || 224;
+            const center = size / 2;
+            const radius = size * 0.34;
+            const nodeSize = count >= 7 ? size * 0.20 : size * 0.24;
+
+            state.wheelOrder.forEach((item, idx) => {
+                const angle = (Math.PI * 2 * idx) / count - Math.PI / 2;
+                const x = center + Math.cos(angle) * radius;
+                const y = center + Math.sin(angle) * radius;
+
+                const node = document.createElement("div");
+                node.className = "letter-node";
+                node.dataset.index = idx;
+                node.textContent = item.char;
+                node.style.width = `${nodeSize}px`;
+                node.style.height = `${nodeSize}px`;
+                node.style.fontSize = `${Math.floor(nodeSize * 0.48)}px`;
+                node.style.left = `${(x / size) * 100}%`;
+                node.style.top = `${(y / size) * 100}%`;
+
+                item.normX = (x / size) * 240;
+                item.normY = (y / size) * 240;
+                item.element = node;
+                dom.nodesContainer.appendChild(node);
+            });
+        }
+
+        function shuffleWheel() {
+            if (state.isDragging) return;
+            sound.playPop(2);
+            shuffleArray(state.wheelOrder);
+            const count = state.wheelOrder.length;
+            const wheelRect = dom.wheelWrapper.getBoundingClientRect();
+            const size = wheelRect.width || 224;
+            const center = size / 2;
+            const radius = size * 0.34;
+
+            state.wheelOrder.forEach((item, idx) => {
+                const angle = (Math.PI * 2 * idx) / count - Math.PI / 2;
+                const x = center + Math.cos(angle) * radius;
+                const y = center + Math.sin(angle) * radius;
+                item.normX = (x / size) * 240;
+                item.normY = (y / size) * 240;
+                item.element.dataset.index = idx;
+                item.element.style.left = `${(x / size) * 100}%`;
+                item.element.style.top = `${(y / size) * 100}%`;
+            });
+        }
+
+        function updateSwipeTrail() {
+            if (state.selectedNodes.length === 0) {
+                dom.swipeTrail.setAttribute("points", "");
+                dom.swipeTrailGlow.setAttribute("points", "");
+                return;
+            }
+            const points = state.selectedNodes.map(idx => {
+                const item = state.wheelOrder[idx];
+                return `${item.normX},${item.normY}`;
+            });
+            if (state.isDragging && state.pointerPos) {
+                const rect = dom.wheelWrapper.getBoundingClientRect();
+                const relX = ((state.pointerPos.x - rect.left) / rect.width) * 240;
+                const relY = ((state.pointerPos.y - rect.top) / rect.height) * 240;
+                points.push(`${relX.toFixed(1)},${relY.toFixed(1)}`);
+            }
+            const str = points.join(" ");
+            dom.swipeTrail.setAttribute("points", str);
+            dom.swipeTrailGlow.setAttribute("points", str);
+        }
+
+        function updateWordPreview() {
+            const word = state.selectedNodes.map(i => state.wheelOrder[i].char).join("");
+            if (word.length > 0) {
+                dom.wordPreview.textContent = word;
+                dom.wordPreview.classList.remove("opacity-0", "scale-90", "shake-invalid", "pop-valid", "pop-bonus");
+                dom.wordPreview.classList.add("opacity-100", "scale-100");
+            } else {
+                dom.wordPreview.classList.remove("opacity-100", "scale-100");
+                dom.wordPreview.classList.add("opacity-0", "scale-90");
+            }
+        }
+
+        function getNodeAtPoint(clientX, clientY) {
+            const rect = dom.wheelWrapper.getBoundingClientRect();
+            const count = state.wheelOrder.length;
+            const hitRadius = (rect.width * (count >= 7 ? 0.135 : 0.155));
+            for (let i = 0; i < state.wheelOrder.length; i++) {
+                const nodeRect = state.wheelOrder[i].element.getBoundingClientRect();
+                const cx = nodeRect.left + nodeRect.width / 2;
+                const cy = nodeRect.top + nodeRect.height / 2;
+                if (Math.hypot(clientX - cx, clientY - cy) <= hitRadius) return i;
+            }
+            return -1;
+        }
+
+        function handlePointerDown(e) {
+            if (e.button !== undefined && e.button !== 0) return;
+            sound.init();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const hitIdx = getNodeAtPoint(clientX, clientY);
+            if (hitIdx === -1) return;
+            state.isDragging = true;
+            state.selectedNodes = [hitIdx];
+            state.pointerPos = { x: clientX, y: clientY };
+            state.wheelOrder[hitIdx].element.classList.add("selected");
+            sound.playPop(0);
+            updateSwipeTrail();
+            updateWordPreview();
+        }
+
+        function handlePointerMove(e) {
+            if (!state.isDragging) return;
+            if (e.cancelable) e.preventDefault();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            state.pointerPos = { x: clientX, y: clientY };
+            const hitIdx = getNodeAtPoint(clientX, clientY);
+            if (hitIdx !== -1) {
+                const lastIdx = state.selectedNodes[state.selectedNodes.length - 1];
+                const prevIdx = state.selectedNodes.length >= 2 ? state.selectedNodes[state.selectedNodes.length - 2] : -1;
+                if (hitIdx === prevIdx) {
+                    const removed = state.selectedNodes.pop();
+                    state.wheelOrder[removed].element.classList.remove("selected");
+                    sound.playPop(Math.max(0, state.selectedNodes.length - 1));
+                    updateWordPreview();
+                } else if (!state.selectedNodes.includes(hitIdx) && hitIdx !== lastIdx) {
+                    state.selectedNodes.push(hitIdx);
+                    state.wheelOrder[hitIdx].element.classList.add("selected");
+                    sound.playPop(state.selectedNodes.length - 1);
+                    updateWordPreview();
+                }
+            }
+            updateSwipeTrail();
+        }
+
+        function handlePointerUp() {
+            if (!state.isDragging) return;
+            state.isDragging = false;
+            state.pointerPos = null;
+            const formedWord = state.selectedNodes.map(i => state.wheelOrder[i].char).join("");
+            const sourceNodes = state.selectedNodes.map(i => state.wheelOrder[i].element);
+            state.wheelOrder.forEach(item => item.element.classList.remove("selected"));
+            state.selectedNodes = [];
+            updateSwipeTrail();
+            if (formedWord.length >= 2) evaluateWord(formedWord, sourceNodes);
+            else updateWordPreview();
+        }
+
+        function evaluateWord(word, sourceNodes) {
+            const targetEntryIndex = state.activeLevelData.words.findIndex(w => w.word === word);
+            if (targetEntryIndex !== -1) {
+                if (state.foundWords.has(word)) {
+                    state.combo = 0; updateComboUI(); sound.playPop(1);
+                    showToast("Already Found!", "text-amber-300");
+                    pulseWordCells(state.activeLevelData.words[targetEntryIndex]);
+                    hidePreviewAfterDelay(350);
+                    return;
+                }
+                state.foundWords.add(word);
+                state.combo += 1; updateComboUI();
+                const bonusCoins = word.length * 2 + (state.combo > 1 ? state.combo * 2 : 0);
+                state.coins += bonusCoins; updateHUD(); saveProgress();
+                sound.playSuccess(state.combo);
+                dom.wordPreview.classList.add("pop-valid");
+                hidePreviewAfterDelay(450);
+                showToast(state.combo >= 2 ? `${state.combo}x Streak! +${bonusCoins} ✦` : `+${bonusCoins} ✦`, "text-emerald-300");
+                animateWordToBoard(state.activeLevelData.words[targetEntryIndex], sourceNodes, () => {
+                    refreshBoardVisuals(); checkLevelCompletion();
+                });
+                return;
+            }
+            if (state.activeLevelData.bonus.includes(word)) {
+                if (state.foundBonusWords.has(word)) {
+                    sound.playPop(1); showToast("Bonus Already Collected!", "text-amber-300");
+                    hidePreviewAfterDelay(350); return;
+                }
+                state.foundBonusWords.add(word);
+                state.coins += 5; updateHUD(); saveProgress();
+                sound.playBonus(); dom.wordPreview.classList.add("pop-bonus");
+                hidePreviewAfterDelay(450); showToast(`Bonus Word! +5 ✦`, "text-amber-300");
+                const bonusBtnRect = document.getElementById("btn-bonus").getBoundingClientRect();
+                fx.burst(bonusBtnRect.left + bonusBtnRect.width / 2, bonusBtnRect.top + bonusBtnRect.height / 2, ["#fbbf24", "#fef08a"], 18);
+                return;
+            }
+            state.combo = 0; updateComboUI(); sound.playInvalid();
+            dom.wordPreview.classList.add("shake-invalid");
+            hidePreviewAfterDelay(450);
+        }
+
+        function animateWordToBoard(wordEntry, sourceNodes, onComplete) {
+            const chars = wordEntry.word.split("");
+            let completedCount = 0;
+            chars.forEach((ch, idx) => {
+                const r = wordEntry.dir === "V" ? wordEntry.row + idx : wordEntry.row;
+                const c = wordEntry.dir === "H" ? wordEntry.col + idx : wordEntry.col;
+                const targetCell = state.cellMap.get(`${r},${c}`)?.element;
+                const srcNode = sourceNodes[idx % sourceNodes.length];
+                if (!targetCell || !srcNode) {
+                    completedCount++; if (completedCount === chars.length) onComplete(); return;
+                }
+                const srcRect = srcNode.getBoundingClientRect(), dstRect = targetCell.getBoundingClientRect();
+                const flyer = document.createElement("div");
+                flyer.className = "flying-letter text-2xl sm:text-3xl";
+                flyer.textContent = ch;
+                flyer.style.left = `${srcRect.left + srcRect.width / 2}px`;
+                flyer.style.top = `${srcRect.top + srcRect.height / 2}px`;
+                flyer.style.transform = "translate(-50%, -50%) scale(1.2)";
+                document.body.appendChild(flyer);
+                requestAnimationFrame(() => {
+                    const dx = (dstRect.left + dstRect.width / 2) - (srcRect.left + srcRect.width / 2);
+                    const dy = (dstRect.top + dstRect.height / 2) - (srcRect.top + srcRect.height / 2);
+                    flyer.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.95)`;
+                    flyer.style.opacity = "0.85";
+                });
+                setTimeout(() => {
+                    flyer.remove();
+                    fx.burst(dstRect.left + dstRect.width / 2, dstRect.top + dstRect.height / 2, ["#10b981", "#6ee7b7", "#fbbf24"], 10);
+                    completedCount++;
+                    if (completedCount === chars.length) onComplete();
+                }, 430);
+            });
+        }
+
+        function pulseWordCells(wordEntry) {
+            for (let i = 0; i < wordEntry.word.length; i++) {
+                const r = wordEntry.dir === "V" ? wordEntry.row + i : wordEntry.row;
+                const c = wordEntry.dir === "H" ? wordEntry.col + i : wordEntry.col;
+                const el = state.cellMap.get(`${r},${c}`)?.element;
+                if (el) { el.classList.remove("flash-duplicate"); void el.offsetWidth; el.classList.add("flash-duplicate"); }
+            }
+        }
+
+        function hidePreviewAfterDelay(ms) {
+            setTimeout(() => {
+                if (!state.isDragging) {
+                    dom.wordPreview.classList.remove("opacity-100", "scale-100", "shake-invalid", "pop-valid", "pop-bonus");
+                    dom.wordPreview.classList.add("opacity-0", "scale-90");
+                }
+            }, ms);
+        }
+
+        function showToast(text, colorClass = "text-white") {
+            const badge = document.createElement("div");
+            badge.className = `toast-badge glass-pill px-4 py-1.5 rounded-full text-xs sm:text-sm font-black whitespace-nowrap shadow-xl ${colorClass}`;
+            badge.textContent = text;
+            dom.toastAnchor.appendChild(badge);
+            setTimeout(() => badge.remove(), 1550);
+        }
+
+        function useHint() {
+            const HINT_COST = 25;
+            if (state.coins < HINT_COST) { sound.playInvalid(); showToast("Need 25 ✦ for Hint!", "text-rose-400"); return; }
+            const words = state.activeLevelData.words, candidates = [];
+            state.cellMap.forEach((cellData, key) => {
+                const isWordSolved = cellData.wordIndices.some(wIdx => state.foundWords.has(words[wIdx].word));
+                if (!isWordSolved && !state.revealedHintCells.has(key)) candidates.push(cellData);
+            });
+            if (candidates.length === 0) { showToast("All letters already visible!", "text-amber-300"); return; }
+            state.coins -= HINT_COST;
+            edtechraBridge.hintsUsed++;
+            const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+            state.revealedHintCells.add(`${chosen.r},${chosen.c}`);
+            sound.playBonus(); updateHUD(); saveProgress(); refreshBoardVisuals();
+            const rect = chosen.element.getBoundingClientRect();
+            fx.burst(rect.left + rect.width / 2, rect.top + rect.height / 2, ["#fbbf24", "#fef08a"], 16);
+            words.forEach(wObj => {
+                if (state.foundWords.has(wObj.word)) return;
+                let allRevealed = true;
+                for (let i = 0; i < wObj.word.length; i++) {
+                    const r = wObj.dir === "V" ? wObj.row + i : wObj.row;
+                    const c = wObj.dir === "H" ? wObj.col + i : wObj.col;
+                    const k = `${r},${c}`, cd = state.cellMap.get(k);
+                    const solvedByOther = cd.wordIndices.some(idx => state.foundWords.has(words[idx].word));
+                    if (!state.revealedHintCells.has(k) && !solvedByOther) { allRevealed = false; break; }
+                }
+                if (allRevealed) state.foundWords.add(wObj.word);
+            });
+            refreshBoardVisuals(); checkLevelCompletion();
+        }
+
+        function checkLevelCompletion() {
+            const totalTargetWords = state.activeLevelData.words.length;
+            if (state.foundWords.size < totalTargetWords) return;
+
+            setTimeout(() => {
+                sound.playFanfare();
+                const levelReward = 30;
+                state.coins += levelReward;
+                if (!state.isEndless && !state.isCustom) {
+                    const nextLvlNum = state.activeLevelData.id + 1;
+                    if (nextLvlNum <= CURATED_LEVELS.length && nextLvlNum > state.unlockedLevel) state.unlockedLevel = nextLvlNum;
+                }
+                updateHUD(); saveProgress();
+                fx.burst(window.innerWidth * 0.3, window.innerHeight * 0.35, ["#fbbf24", "#10b981", "#6366f1"], 35);
+                fx.burst(window.innerWidth * 0.7, window.innerHeight * 0.35, ["#fef08a", "#34d399", "#f472b6"], 35);
+
+                if (edtechraBridge.active && !edtechraBridge.reported) {
+                    edtechraBridge.reported = true;
+                    const timeSec = Math.max(1, Math.round((Date.now() - edtechraBridge.startTime) / 1000));
+                    window.parent.postMessage({
+                        type: "EDTECHRA_GAME_COMPLETE",
+                        payload: {
+                            gameId: "lumina-words",
+                            scoreEarned: edtechraBridge.maxPoints,
+                            maxAvailablePoints: edtechraBridge.maxPoints,
+                            completionStatus: "completed",
+                            timeTakenSeconds: timeSec,
+                            details: { wordsSolved: totalTargetWords, hintsUsed: edtechraBridge.hintsUsed }
+                        }
+                    }, "*");
+                }
+
+                dom.completeTitle.textContent = state.isCustom
+                    ? "Puzzle Cleared!"
+                    : state.isEndless ? `Endless #${state.endlessCount} Cleared!` : `Level ${state.activeLevelData.id} Cleared!`;
+                dom.completeSubtitle.textContent = `"${state.activeLevelData.title}" mastered`;
+                dom.completeReward.textContent = edtechraBridge.active ? `+${edtechraBridge.maxPoints} pts` : `+${levelReward} ✦`;
+                dom.completeBonus.textContent = `${state.foundBonusWords.size}`;
+
+                if (edtechraBridge.active) {
+                    document.getElementById("btn-next-level").textContent = "Play Again ↻";
+                }
+
+                dom.modalComplete.classList.remove("hidden");
+                dom.modalComplete.classList.add("flex");
+            }, 450);
+        }
+
+        function updateHUD() {
+            dom.hudCoins.textContent = state.coins;
+            dom.bonusCountBadge.textContent = state.foundBonusWords.size;
+        }
+
+        function updateComboUI() {
+            if (state.combo >= 2) {
+                dom.comboBadge.classList.remove("hidden"); dom.comboBadge.classList.add("flex");
+                dom.comboCount.textContent = `${state.combo}x`;
+            } else {
+                dom.comboBadge.classList.add("hidden"); dom.comboBadge.classList.remove("flex");
+            }
+        }
+
+        function updateMuteIcon() {
+            const on = document.getElementById("icon-sound-on"), off = document.getElementById("icon-sound-off");
+            if (sound.muted) { on.classList.add("hidden"); off.classList.remove("hidden"); }
+            else { on.classList.remove("hidden"); off.classList.add("hidden"); }
+        }
+
+        function openLevelsModal() {
+            if (edtechraBridge.active) return;
+            dom.levelsGrid.innerHTML = "";
+            CURATED_LEVELS.forEach((lvl, idx) => {
+                const unlocked = lvl.id <= state.unlockedLevel;
+                const isCurrent = !state.isEndless && idx === state.currentLevelIndex;
+                const btn = document.createElement("button");
+                btn.disabled = !unlocked;
+                btn.className = `p-3 rounded-2xl border text-left transition-all flex flex-col justify-between ${
+                    unlocked ? isCurrent ? "bg-amber-500/20 border-amber-400 text-white shadow-lg shadow-amber-500/15"
+                        : "bg-white/5 hover:bg-white/15 border-white/15 text-slate-100 btn-tactile"
+                        : "bg-slate-900/50 border-white/5 text-slate-500 cursor-not-allowed"
+                }`;
+                btn.innerHTML = `<div class="flex items-center justify-between w-full"><span class="font-black text-base">${lvl.id}</span><span class="text-xs">${unlocked ? (lvl.id < state.unlockedLevel ? "★" : "●") : "🔒"}</span></div><div class="text-[11px] font-semibold truncate mt-1 opacity-85">${lvl.title}</div>`;
+                if (unlocked) btn.addEventListener("click", () => { dom.modalLevels.classList.add("hidden"); dom.modalLevels.classList.remove("flex"); loadLevel(idx, false); });
+                dom.levelsGrid.appendChild(btn);
+            });
+            dom.modalLevels.classList.remove("hidden"); dom.modalLevels.classList.add("flex");
+        }
+
+        function openBonusModal() {
+            dom.bonusWordsList.innerHTML = "";
+            if (state.foundBonusWords.size === 0) {
+                dom.bonusWordsList.innerHTML = `<p class="text-sm text-slate-400 italic w-full text-center py-6">Swipe extra valid English words not on the crossword to collect bonus coins!</p>`;
+            } else {
+                state.foundBonusWords.forEach(w => {
+                    const chip = document.createElement("span");
+                    chip.className = "px-3 py-1 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-200 font-bold text-sm";
+                    chip.textContent = w; dom.bonusWordsList.appendChild(chip);
+                });
+            }
+            dom.modalBonus.classList.remove("hidden"); dom.modalBonus.classList.add("flex");
+        }
+
+        function openCluesModal() {
+            dom.cluesList.innerHTML = "";
+            (state.activeLevelData?.words || []).forEach((w, idx) => {
+                const solved = state.foundWords.has(w.word);
+                const row = document.createElement("div");
+                row.className = `p-3 rounded-2xl border ${solved ? "bg-emerald-500/15 border-emerald-400/40 text-emerald-100" : "bg-white/5 border-white/10 text-slate-200"}`;
+                row.innerHTML = `<div class="flex items-center justify-between text-xs font-extrabold uppercase tracking-wider mb-1"><span>Word ${idx + 1} (${w.word.length} letters)</span><span>${solved ? "✓ Found" : w.dir === "H" ? "Across" : "Down"}</span></div><div class="text-sm font-medium">${w.clue || "Find this word on the wheel"}</div>`;
+                dom.cluesList.appendChild(row);
+            });
+            dom.modalClues.classList.remove("hidden"); dom.modalClues.classList.add("flex");
+        }
+
+        function shuffleArray(arr) {
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+        }
+
+        dom.wheelWrapper.addEventListener("mousedown", handlePointerDown);
+        window.addEventListener("mousemove", handlePointerMove);
+        window.addEventListener("mouseup", handlePointerUp);
+        dom.wheelWrapper.addEventListener("touchstart", handlePointerDown, { passive: false });
+        window.addEventListener("touchmove", handlePointerMove, { passive: false });
+        window.addEventListener("touchend", handlePointerUp);
+
+        document.getElementById("btn-shuffle").addEventListener("click", shuffleWheel);
+        document.getElementById("btn-hint").addEventListener("click", useHint);
+        document.getElementById("btn-mute").addEventListener("click", () => { sound.muted = !sound.muted; updateMuteIcon(); saveProgress(); });
+        document.getElementById("btn-levels").addEventListener("click", openLevelsModal);
+        document.getElementById("close-levels").addEventListener("click", () => { dom.modalLevels.classList.add("hidden"); dom.modalLevels.classList.remove("flex"); });
+        document.getElementById("btn-bonus").addEventListener("click", openBonusModal);
+        document.getElementById("close-bonus").addEventListener("click", () => { dom.modalBonus.classList.add("hidden"); dom.modalBonus.classList.remove("flex"); });
+        dom.btnClues.addEventListener("click", openCluesModal);
+        document.getElementById("close-clues").addEventListener("click", () => { dom.modalClues.classList.add("hidden"); dom.modalClues.classList.remove("flex"); });
+
+        document.getElementById("btn-endless").addEventListener("click", () => {
+            if (edtechraBridge.active) return;
+            state.endlessCount = state.isEndless ? state.endlessCount + 1 : 1;
+            loadLevel(0, true); showToast("Endless Puzzle Loaded!", "text-indigo-300");
+        });
+        document.getElementById("modal-btn-endless").addEventListener("click", () => {
+            dom.modalLevels.classList.add("hidden"); dom.modalLevels.classList.remove("flex");
+            state.endlessCount = 1; loadLevel(0, true);
+        });
+        document.getElementById("btn-next-level").addEventListener("click", () => {
+            dom.modalComplete.classList.add("hidden"); dom.modalComplete.classList.remove("flex");
+            if (edtechraBridge.active && state.isCustom && edtechraBridge.customLevel) {
+                loadCustomLevel(edtechraBridge.customLevel);
+            } else if (state.isEndless) {
+                state.endlessCount += 1; loadLevel(0, true);
+            } else {
+                loadLevel((state.currentLevelIndex + 1) % CURATED_LEVELS.length, false);
+            }
+        });
+
+        window.addEventListener("resize", () => {
+            if (state.activeLevelData) { buildCrosswordBoard(); renderWheel(); }
+        });
+
+        window.onload = () => {
+            loadProgress();
+            loadLevel(state.currentLevelIndex, false);
+            window.parent.postMessage({ type: "EDTECHRA_GAME_READY", gameId: "lumina-words" }, "*");
+        };
+
+        /* ---------- EDTECHRA INTEGRATION BRIDGE ---------- */
+        window.addEventListener("message", ev => {
+            const msg = ev.data;
+            if (!msg || msg.type !== "EDTECHRA_INIT_GAME") return;
+            const p = msg.payload || {}, cfg = p.config || {};
+            edtechraBridge.active = true;
+            edtechraBridge.maxPoints = Number(p.maxPoints) || 100;
+            edtechraBridge.reported = false;
+
+            if (p.mode === "student" || p.mode === "preview") {
+                document.getElementById("btn-endless").classList.add("hidden");
+                document.getElementById("btn-bonus").classList.add("hidden");
+            }
+
+            const words = Array.isArray(cfg.words) ? cfg.words : [];
+            const custom = generateCustomLuminaLevel(cfg.title || p.title || "Lumina Words", words);
+            if (custom) {
+                edtechraBridge.customLevel = custom;
+                loadCustomLevel(custom);
+            }
+        });
+    </script>
+</body>
+</html>

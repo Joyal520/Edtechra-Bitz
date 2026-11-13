@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Liquid Sentences</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg1:#0b1026;--bg2:#1b1146;--ink:#f1f5ff;--muted:rgba(241,245,255,.65);--glass:rgba(255,255,255,.07);--line:rgba(255,255,255,.16);--acc:#22d3ee;--acc2:#a78bfa;color-scheme:dark}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+html,body{margin:0;height:100%;overflow:hidden;font-family:Nunito,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--bg1)}
+button{font:inherit;color:inherit;cursor:pointer}.hidden{display:none!important}
+.bg{position:fixed;inset:0;background:linear-gradient(160deg,var(--bg1),var(--bg2));overflow:hidden}
+.bg i{position:absolute;border-radius:50%;filter:blur(70px);opacity:.55;animation:float 18s ease-in-out infinite alternate}
+.bg i:nth-child(1){width:46vmax;height:46vmax;left:-12vmax;top:-10vmax;background:#06b6d4}
+.bg i:nth-child(2){width:40vmax;height:40vmax;right:-14vmax;top:18vh;background:#7c3aed;animation-delay:-6s}
+.bg i:nth-child(3){width:36vmax;height:36vmax;left:20vw;bottom:-18vmax;background:#ec4899;animation-delay:-11s;opacity:.4}
+@keyframes float{to{transform:translate(6vmax,5vmax) scale(1.12)}}
+.glass{background:var(--glass);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--line);border-radius:22px;box-shadow:0 12px 40px rgba(0,0,0,.35)}
+#game{position:fixed;inset:0}
+.hud{position:fixed;z-index:6;top:calc(10px + env(safe-area-inset-top,0px));left:10px;right:10px;display:flex;justify-content:space-between;gap:8px;pointer-events:none}
+.hud>div{display:flex;gap:8px;pointer-events:auto}
+.chip{padding:8px 14px;font-weight:800;font-size:14px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ib{height:38px;min-width:38px;padding:0 12px;border-radius:14px;background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(12px);font-size:16px;transition:transform .15s cubic-bezier(.34,1.56,.64,1)}.ib:active{transform:scale(.9)}
+#hint{position:fixed;z-index:5;left:0;right:0;text-align:center;font-weight:800;font-size:clamp(14px,2.2vw,19px);color:var(--muted);padding:0 16px}
+#tray{position:fixed;z-index:1;border-radius:30px;background:linear-gradient(180deg,rgba(255,255,255,.1),rgba(255,255,255,.03));border:1.5px dashed rgba(255,255,255,.25);transition:box-shadow .3s,border-color .3s,background .3s}
+#tray.hot{border-color:var(--acc);box-shadow:0 0 40px rgba(34,211,238,.35),inset 0 0 40px rgba(34,211,238,.12)}
+#tray.win{border-style:solid;border-color:#4ade80;box-shadow:0 0 50px rgba(74,222,128,.4)}
+#tray.lose{border-color:#fb7185;box-shadow:0 0 50px rgba(251,113,133,.35)}
+#tray span{position:absolute;left:18px;top:8px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:900;opacity:.45}
+#gooL{position:fixed;inset:0;z-index:2;pointer-events:none;filter:url(#goo) drop-shadow(0 10px 12px rgba(0,0,0,.4))}
+#labL{position:fixed;inset:0;z-index:3;pointer-events:none}
+.blob,.lab,.tail{position:absolute;left:0;top:0;will-change:transform}
+.blob{transition:background-color .3s}.tail{border-radius:50%;background:#67e8f9;opacity:0;transition:opacity .2s}
+.lab{pointer-events:auto;cursor:grab;touch-action:none;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.35);white-space:nowrap;border-radius:999px;transition:opacity .3s}
+.lab::before{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(180deg,rgba(255,255,255,.38),rgba(255,255,255,0) 48%,rgba(0,0,0,.2));transition:opacity .5s}
+.lab::after{content:"";position:absolute;left:12%;top:11%;width:34%;height:16%;border-radius:50%;background:rgba(255,255,255,.55);filter:blur(1px);transition:opacity .5s}
+.lab.merged::before,.lab.merged::after{opacity:0}.lab.dragging{cursor:grabbing}
+#fx{position:fixed;inset:0;z-index:8;pointer-events:none;width:100%;height:100%}
+#bar{position:fixed;z-index:6;bottom:calc(14px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);display:flex;gap:8px;padding:8px}
+.pill{padding:10px 16px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.08);font-weight:800;font-size:14px;transition:transform .15s cubic-bezier(.34,1.56,.64,1),background .2s}.pill:hover{background:rgba(255,255,255,.16)}.pill:active{transform:scale(.92)}
+#verdict{position:fixed;z-index:9;left:0;right:0;display:flex;flex-direction:column;align-items:center;gap:10px;pointer-events:none;opacity:0;transition:opacity .35s}
+#verdict.show{opacity:1}#verdict.show.skip{pointer-events:auto;cursor:pointer}
+.badge{width:92px;height:92px;border-radius:50%;display:flex;align-items:center;justify-content:center;transform:scale(0);color:rgba(255,255,255,.5);box-shadow:0 14px 40px rgba(0,0,0,.4)}
+#verdict.ok .badge{background:radial-gradient(circle at 30% 25%,#86efac,#16a34a);color:rgba(74,222,128,.6)}
+#verdict.bad .badge{background:radial-gradient(circle at 30% 25%,#fda4af,#e11d48);color:rgba(251,113,133,.6)}
+#verdict.show .badge{animation:badge .7s cubic-bezier(.34,1.56,.64,1) forwards,vpulse 1.3s .55s ease-out 2}
+@keyframes badge{0%{transform:scale(0) rotate(-35deg)}100%{transform:scale(1) rotate(0)}}
+@keyframes vpulse{0%{box-shadow:0 0 0 0 currentColor,0 14px 40px rgba(0,0,0,.4)}100%{box-shadow:0 0 0 42px transparent,0 14px 40px rgba(0,0,0,.4)}}
+.badge svg{width:56px;height:56px}.badge path{fill:none;stroke:#fff;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:70;stroke-dashoffset:70}
+#verdict.show .badge path{animation:vdraw .5s .35s ease-out forwards}@keyframes vdraw{to{stroke-dashoffset:0}}
+#vTxt{font-weight:900;font-size:clamp(24px,5vw,36px);text-shadow:0 4px 20px rgba(0,0,0,.5);transform:translateY(10px);opacity:0}
+#verdict.show #vTxt,#verdict.show #vSub{animation:vup .5s .3s ease-out forwards}@keyframes vup{to{transform:none;opacity:1}}
+#verdict.ok #vTxt{color:#bbf7d0}#verdict.bad #vTxt{color:#fecdd3}
+#vSub{font-weight:800;font-size:14px;color:var(--muted);opacity:0}
+#vBar{width:min(220px,50vw);height:6px;border-radius:3px;background:rgba(255,255,255,.18);overflow:hidden}#vBar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#22d3ee,#a78bfa);transform-origin:left}
+.go{padding:13px 30px;border:0;border-radius:16px;font-weight:900;font-size:17px;background:linear-gradient(90deg,#22d3ee,#a78bfa 60%,#f472b6);color:#0b1026;box-shadow:0 10px 30px rgba(124,58,237,.5);transition:transform .15s cubic-bezier(.34,1.56,.64,1)}.go:active{transform:scale(.94)}
+.overlay{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(6,8,24,.7);backdrop-filter:blur(10px);overflow:auto}
+.ui{width:100%;max-width:520px;padding:24px;max-height:100%;overflow:auto}
+h1,h2{margin:0 0 4px;font-size:30px;font-weight:900;background:linear-gradient(90deg,#67e8f9,#c4b5fd,#f9a8d4);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{margin:0 0 12px;color:var(--muted);font-size:14px;font-weight:700}
+.lbl{display:block;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:var(--acc);margin:16px 0 6px}
+textarea{width:100%;min-height:180px;padding:12px;border-radius:16px;border:1px solid var(--line);background:rgba(0,0,0,.3);color:var(--ink);font:inherit;font-size:15px;font-weight:700;resize:vertical;user-select:text;-webkit-user-select:text}
+.switch{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.04);cursor:pointer;font-weight:800;font-size:14px;margin-top:8px}
+.tg{width:44px;height:25px;border-radius:13px;background:rgba(255,255,255,.2);position:relative;transition:background .25s}.tg::after{content:"";position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;transition:transform .3s cubic-bezier(.34,1.56,.64,1)}
+.switch.on .tg{background:var(--acc)}.switch.on .tg::after{transform:translateX(19px)}
+.err{color:#fda4af;font-size:13px;font-weight:700;min-height:1em;margin-top:8px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}.stats div{background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:16px;padding:10px 2px;text-align:center}.stats span{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:block}.stats b{font-size:20px;color:#67e8f9}
+.row{display:flex;gap:8px}.row>*{flex:1}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="goo" color-interpolation-filters="sRGB" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur in="SourceGraphic" stdDeviation="6" result="b"/><feColorMatrix in="b" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10"/></filter>
+</defs></svg>
+<div class="bg"><i></i><i></i><i></i></div>
+
+<div id="game" class="hidden">
+  <div class="hud">
+    <div><div class="glass chip" id="hProg">1 / 5</div><div class="glass chip">⭐ <span id="hScore">0</span></div><div class="glass chip" id="hTimeBox">⏱ <span id="hTime">00:00</span></div></div>
+    <div><button class="ib" id="bMute" aria-label="Sound">🔊</button><button class="ib" id="bMenu" aria-label="Menu">⚙</button></div>
+  </div>
+  <div id="hint"></div>
+  <div id="tray"><span>Your sentence</span></div>
+  <div id="gooL"></div><div id="labL"></div>
+  <div id="verdict"><div class="badge"><svg viewBox="0 0 58 58"><path id="vPath" d="M14 30 L26 42 L44 18"/></svg></div><div id="vTxt"></div><div id="vSub"></div><div id="vBar"><i></i></div></div>
+  <div id="bar" class="glass"><button class="pill" id="bShuf">🔀 Shuffle</button><button class="pill" id="bClear">↺ Clear</button><button class="pill" id="bHintBtn">💡 Hint</button></div>
+</div>
+<canvas id="fx"></canvas>
+
+<div class="overlay" id="setup"><div class="glass ui">
+  <h1>💧 Liquid Sentences</h1>
+  <p class="sub">Students drag liquid word-chips into the right order.</p>
+  <label class="lbl">Sentences · one per line · add a hint after |</label>
+  <textarea id="sents" placeholder="The quick brown fox jumps over the lazy dog | A famous sentence&#10;Plants need sunlight and water to grow | Science&#10;We are going to the library after school"></textarea>
+  <button class="pill" id="sample" style="margin-top:8px">Load sample sentences</button>
+  <label class="lbl">Options</label>
+  <div class="switch on" id="swHint"><span>💬 Show hints</span><span class="tg"></span></div>
+  <div class="switch on" id="swTimer"><span>⏱ Show timer</span><span class="tg"></span></div>
+  <div class="switch" id="swRetry"><span>🔁 Let students retry wrong answers</span><span class="tg"></span></div>
+  <div class="err" id="err"></div>
+  <button class="go" id="start" style="width:100%;margin-top:14px">Start game</button>
+</div></div>
+
+<div class="overlay hidden" id="end"><div class="glass ui" style="text-align:center">
+  <div style="font-size:48px">🌊</div><h2>Game complete!</h2><p class="sub" id="endMsg"></p>
+  <div class="stats"><div><span>Solved</span><b id="eN">0</b></div><div><span>Score</span><b id="eS">0</b></div><div id="eTb"><span>Time</span><b id="eT">00:00</b></div><div><span>Hints</span><b id="eH">0</b></div></div>
+  <div class="row"><button class="pill" id="bEdit" style="padding:13px">Edit sentences</button><button class="go" id="bAgain" style="padding:13px">Play again</button></div>
+</div></div>
+
+<script>
+const $=id=>document.getElementById(id),clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const COLORS=["#06b6d4","#8b5cf6","#ec4899","#f59e0b","#10b981","#f97316","#3b82f6","#e11d48"];
+const S={retry:false,pending:false,nt:null,round:0,set:[],list:[],idx:0,words:[],chips:[],tray:[],pool:[],drag:null,press:null,locked:true,score:0,sec:0,tick:null,hints:0,wrong:0,solved:0,showHints:true,timer:true,s:1,h:56,fs:22,pad:20,gap:16,R:null,hover:null,hoverIdx:0,merged:false,mergeGap:-8};
+const edtechraBridge={active:false,maxPoints:100,reported:false};
+const ctxM=document.createElement("canvas").getContext("2d");
+const measure=(t,fs)=>(ctxM.font=`800 ${fs}px Nunito,system-ui,sans-serif`,ctxM.measureText(t).width);
+const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a};
+const fmt=s=>String(s/60|0).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
+
+/* ---------- LIQUID SOUND DESIGN ---------- */
+const A={ctx:null,muted:false,nb:null,
+ init(){if(!this.ctx){const C=window.AudioContext||window.webkitAudioContext;if(!C)return false;this.ctx=new C();const n=this.ctx.sampleRate*.4,b=this.ctx.createBuffer(1,n,this.ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<n;i++)d[i]=Math.random()*2-1;this.nb=b}if(this.ctx.state==="suspended")this.ctx.resume();return true},
+ go(fn){if(this.muted||!this.init())return;fn(this.ctx.currentTime)},
+ bloop(t,f0,f1,vol,dur){const c=this.ctx,o=c.createOscillator(),g=c.createGain(),r=1+(Math.random()-.5)*.12;o.type="sine";o.frequency.setValueAtTime(f0*r,t);o.frequency.exponentialRampToValueAtTime(f1*r,t+dur*.7);
+  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+.008);g.gain.exponentialRampToValueAtTime(.0001,t+dur);o.connect(g);g.connect(c.destination);o.start(t);o.stop(t+dur+.02)},
+ noise(t,f,q,vol,dur,type="bandpass"){const c=this.ctx,s=c.createBufferSource(),fl=c.createBiquadFilter(),g=c.createGain();s.buffer=this.nb;fl.type=type;fl.frequency.value=f;fl.Q.value=q;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+.01);g.gain.exponentialRampToValueAtTime(.0001,t+dur);s.connect(fl);fl.connect(g);g.connect(c.destination);s.start(t);s.stop(t+dur+.02)},
+ pick(){this.go(t=>{this.bloop(t,320,720,.09,.1);if(navigator.vibrate)navigator.vibrate(6)})},
+ place(){this.go(t=>{this.bloop(t,260,820,.13,.16);this.bloop(t+.05,520,1000,.05,.12);this.noise(t,1800,1.2,.03,.1)})},
+ tap(){this.go(t=>this.bloop(t,420,980,.08,.09))},
+ pop(i=0){this.go(t=>this.bloop(t,380+i*40,880+i*40,.035,.08))},
+ whoosh(){this.go(t=>{this.noise(t,900,.7,.08,.35)})},
+ wrong(){this.go(t=>{this.bloop(t,330,200,.1,.25);this.bloop(t+.12,300,180,.09,.28)})},
+ win(){this.go(t=>{[523.25,659.25,783.99,987.77,1174.66].forEach((f,i)=>{this.bloop(t+i*.1,f*.8,f*1.5,.09,.5);this.bloop(t+i*.1+.03,f*1.5,f*2,.03,.4)});this.noise(t,3500,.9,.04,.7,"highpass");if(navigator.vibrate)navigator.vibrate([10,30,10,30,30])})}};
+
+/* ---------- SETUP ---------- */
+$("sample").onclick=()=>$("sents").value="The quick brown fox jumps over the lazy dog | A famous sentence\nPlants need sunlight and water to grow | Science\nShe sells seashells by the seashore | Tongue twister\nWe are going to the library after school | Daily life\nLearning new things makes me happy";
+$("swHint").onclick=e=>{S.showHints=!S.showHints;e.currentTarget.classList.toggle("on",S.showHints)};$("swTimer").onclick=e=>{S.timer=!S.timer;e.currentTarget.classList.toggle("on",S.timer)};$("swRetry").onclick=e=>{S.retry=!S.retry;e.currentTarget.classList.toggle("on",S.retry)};
+function parse(){const out=[];$("sents").value.split("\n").forEach(l=>{l=l.trim();if(!l)return;const i=l.indexOf("|"),t=(i>=0?l.slice(0,i):l).trim().replace(/\s+/g," "),h=i>=0?l.slice(i+1).trim():"",w=t.split(" ");if(w.length>=2&&w.length<=14)out.push({w,h})});return out}
+$("start").onclick=()=>{const p=parse();if(!p.length){$("err").textContent="Add at least one sentence with 2–14 words.";return}if(p.length>20){$("err").textContent="Please use 20 sentences or fewer.";return}$("err").textContent="";S.set=p;A.init();$("setup").classList.add("hidden");begin()};
+
+/* ---------- LAYOUT ---------- */
+function metrics(){const W=innerWidth,H=innerHeight,top=(document.querySelector(".hud").getBoundingClientRect().bottom||56)+34,bot=H-(80+(parseInt(getComputedStyle(document.documentElement).getPropertyValue("--sb"))||0))-6,av=Math.max(220,bot-top),th=Math.max(110,Math.round(av*.4)),mw=Math.min(W-20,960),x=(W-mw)/2;
+  S.R={tray:{x,y:top,w:mw,h:th},pool:{x,y:top+th+14,w:mw,h:Math.max(90,av-th-14)}};
+  const t=$("tray").style;t.left=x+"px";t.top=top+"px";t.width=mw+"px";t.height=th+"px";$("hint").style.top=(top-30)+"px"}
+function flow(ws,aw,h,gap){const lines=[[]];let cur=0;ws.forEach((w,i)=>{if(cur+w>aw&&lines[lines.length-1].length){lines.push([]);cur=0}lines[lines.length-1].push(i);cur+=w+gap});
+  const pos=[];lines.forEach((ln,r)=>{const tot=ln.reduce((s,i)=>s+ws[i],0)+(ln.length-1)*gap;let x=(aw-tot)/2;ln.forEach(i=>{pos[i]={x,row:r};x+=ws[i]+gap})});return{pos,rows:lines.length}}
+function pickScale(){for(const s of[1,.88,.78,.68,.6,.52]){const fs=Math.round(22*s),h=Math.round(56*s),pad=Math.round(20*s),gap=Math.max(14,Math.round(16*s)),ws=S.words.map(w=>measure(w,fs)+pad*2),aw=S.R.tray.w-28;
+    const r=Math.max(flow(ws,aw,h,gap).rows,flow(S.chips.map(c=>measure(c.word,fs)+pad*2),aw,h,gap).rows),need=r*(h+gap)-gap+24;
+    if(need<=Math.min(S.R.tray.h,S.R.pool.h)||s===.52){Object.assign(S,{s,fs,h,pad,gap});return}}}
+function sizeChip(c){c.w=Math.round(measure(c.word,S.fs)+S.pad*2);c.h=S.h;const b=c.b.style,l=c.l.style;b.width=l.width=c.w+"px";b.height=l.height=c.h+"px";b.borderRadius=c.h/2+"px";l.fontSize=S.fs+"px"}
+function place(list,rect,ghost,assign,center){const ws=list.map(c=>c.w);if(ghost&&ghost.i>=0)ws.splice(ghost.i,0,ghost.w);const g=S.merged&&list===S.tray?S.mergeGap:S.gap,f=flow(ws,rect.w-28,S.h,g),off=center?Math.max(0,(rect.h-24-(f.rows*(S.h+g)-g))/2):0,out=[];
+  let k=0;ws.forEach((w,i)=>{const p=f.pos[i];if(ghost&&i===ghost.i)return;const c=list[k++],x=rect.x+14+p.x,y=rect.y+14+off+p.row*(S.h+g);out.push({x,y,w:c.w,h:c.h});if(assign){c.tx=x;c.ty=y}})
+  return out}
+function relayout(){const g=S.drag,gh=z=>g&&S.hover===z?{i:S.hoverIdx,w:g.w}:null;place(S.tray,S.R.tray,gh("tray"),true,false);place(S.pool,S.R.pool,gh("pool"),true,true);$("tray").classList.toggle("hot",!!g&&S.hover==="tray")}
+
+/* ---------- CHIPS ---------- */
+function mk(word,i){const b=document.createElement("div"),l=document.createElement("div");b.className="blob";l.className="lab";l.textContent=word;const col=COLORS[i%8];b.style.backgroundColor=col;
+  $("gooL").appendChild(b);$("labL").appendChild(l);const c={word,b,l,col,x:S.R.pool.x+S.R.pool.w/2,y:S.R.pool.y+S.R.pool.h/2,vx:0,vy:0,tx:0,ty:0,s:0,sv:0,ts:0,w:0,h:0};l.__c=c;return c}
+const tails=[];for(let i=0;i<4;i++){const t=document.createElement("div");t.className="tail";const z=[18,13,9,6][i];t.style.width=t.style.height=z+"px";t.__z=z;t.__f=[.3,.21,.14,.09][i];t.__x=0;t.__y=0;$("gooL").appendChild(t);tails.push(t)}
+function begin(){clearInterval(S.tick);hideVerdict();$("end").classList.add("hidden");$("game").classList.remove("hidden");S.list=shuffle(S.set.map(x=>({...x})));S.idx=0;S.score=0;S.sec=0;S.hints=0;S.solved=0;
+  $("hTimeBox").classList.toggle("hidden",!S.timer);$("hTime").textContent="00:00";$("hScore").textContent=0;if(S.timer)S.tick=setInterval(()=>{if($("end").classList.contains("hidden")&&$("setup").classList.contains("hidden")){S.sec++;$("hTime").textContent=fmt(S.sec)}},1000);load()}
+function clearChips(){S.chips.forEach(c=>{c.ts=0;c.l.style.opacity=0;setTimeout(()=>{c.b.remove();c.l.remove()},400)});S.chips=[];S.tray=[];S.pool=[]}
+function load(){clearChips();S.merged=false;S.locked=true;S.wrong=0;S.words=S.list[S.idx].w;S.round++;S.pending=false;$("tray").classList.remove("win","lose");hideVerdict();
+  $("hProg").textContent=`${S.idx+1} / ${S.list.length}`;const h=S.list[S.idx].h;$("hint").textContent=S.showHints&&h?"💡 "+h:"Drag the words into the right order";metrics();
+  let sc;let tries=0;do{sc=shuffle(S.words.map((w,i)=>({w,i})));tries++}while(sc.map(x=>x.w).join(" ")===S.words.join(" ")&&tries<20);
+  S.chips=sc.map(x=>mk(x.w,x.i));pickScale();S.chips.forEach(sizeChip);S.pool=[...S.chips];relayout();
+  S.chips.forEach((c,i)=>{c.x=c.tx;c.y=c.ty+40;setTimeout(()=>{c.ts=1;A.pop(i)},120+i*90)});setTimeout(()=>S.locked=false,150+S.chips.length*90)}
+
+/* ---------- INTERACTION ---------- */
+const labL=$("labL");
+labL.addEventListener("pointerdown",e=>{const c=e.target.closest(".lab")?.__c;if(!c||S.locked||S.press)return;A.init();e.target.closest(".lab").setPointerCapture(e.pointerId);S.press={c,id:e.pointerId,sx:e.clientX,sy:e.clientY,ox:e.clientX-c.x,oy:e.clientY-c.y,on:false}});
+addEventListener("pointermove",e=>{const p=S.press;if(!p||e.pointerId!==p.id)return;const c=p.c;
+  if(!p.on){if(Math.hypot(e.clientX-p.sx,e.clientY-p.sy)<7)return;p.on=true;S.drag=c;S.tray=S.tray.filter(x=>x!==c);S.pool=S.pool.filter(x=>x!==c);c.ts=1.1;c.l.classList.add("dragging");$("gooL").appendChild(c.b);labL.appendChild(c.l);tails.forEach(t=>{t.__x=c.x+c.w/2;t.__y=c.y+c.h/2;t.style.opacity=.95});A.pick()}
+  c.tx=e.clientX-p.ox;c.ty=e.clientY-p.oy;hover(e.clientX,e.clientY);relayout()});
+function hover(px,py){const T=S.R.tray,z=px>T.x-10&&px<T.x+T.w+10&&py>T.y-10&&py<T.y+T.h+10?"tray":"pool",list=z==="tray"?S.tray:S.pool,pos=place(list,S.R[z],null,false,z==="pool");let idx=list.length;
+  for(let i=0;i<pos.length;i++){const p=pos[i];if(py<p.y-S.gap/2||(py<=p.y+p.h+S.gap/2&&px<p.x+p.w/2)){idx=i;break}}S.hover=z;S.hoverIdx=idx}
+function release(e){const p=S.press;if(!p||(e&&e.pointerId!==p.id))return;S.press=null;const c=p.c;
+  if(p.on){const z=S.hover||"pool",list=z==="tray"?S.tray:S.pool;list.splice(clamp(S.hoverIdx,0,list.length),0,c);S.drag=null;S.hover=null;c.ts=1;c.l.classList.remove("dragging");tails.forEach(t=>t.style.opacity=0);relayout();landed(c,z)}
+  else{const toTray=S.pool.includes(c);S.pool=S.pool.filter(x=>x!==c);S.tray=S.tray.filter(x=>x!==c);(toTray?S.tray:S.pool).push(c);c.vy=-5;relayout();A.tap();if(toTray)landed(c,"tray",true)}}
+addEventListener("pointerup",release);addEventListener("pointercancel",release);
+function landed(c,z,quiet){if(z==="tray"){if(!quiet)A.place();ring(c.tx+c.w/2,c.ty+c.h/2,c.col);drops(c.tx+c.w/2,c.ty+c.h/2,6,c.col)}else if(!quiet)A.tap();check()}
+function later(fn,ms){const r=S.round;return setTimeout(()=>{if(r===S.round)fn()},ms)}
+function check(){if(S.locked||S.drag||S.pending||S.tray.length!==S.chips.length)return;S.pending=true;
+  later(()=>{S.pending=false;if(S.locked||S.drag||S.tray.length!==S.chips.length)return;judge()},320)}  /* let the last chip land first */
+function judge(){if(S.tray.map(c=>c.word).join(" ")===S.words.join(" "))return success();S.wrong++;
+  if(S.retry){A.wrong();S.tray.forEach((c,i)=>{const ok=c.word===S.words[i];c.b.style.backgroundColor=ok?"#22c55e":"#ef4444";if(!ok){c.vx=(Math.random()<.5?-1:1)*(10+Math.random()*6);c.vy=-6}else c.vy=-4;setTimeout(()=>c.b.style.backgroundColor=c.col,900)});
+    verdict(false,"Not quite","Fix the red words",1500,false);clearTimeout(S.nt);S.nt=setTimeout(hideVerdict,1600);return}
+  fail()}
+function success(){S.locked=true;const gain=Math.max(20,100-S.wrong*10),n=S.tray.length,wave=n*75;S.score+=gain;S.solved++;$("hScore").textContent=S.score;
+  S.tray.forEach((c,i)=>later(()=>{c.vy=-14;A.pop(i);ring(c.x+c.w/2,c.y+c.h/2,c.col,52);drops(c.x+c.w/2,c.y,5,c.col)},i*75));   /* jumping wave */
+  later(()=>{S.merged=true;$("tray").classList.add("win");S.tray.forEach(c=>{c.l.classList.add("merged");c.vy=-6;drops(c.tx+c.w/2,c.ty+c.h/2,8,c.col)});relayout();A.win()},wave+120);   /* liquid fuse */
+  later(()=>{clearTimeout(S.nt);verdict(true,"Perfect!","+"+gain+" points",2000,true);S.nt=setTimeout(advance,2100)},wave+330)}
+function fail(){S.locked=true;A.wrong();$("tray").classList.add("lose");
+  S.tray.forEach((c,i)=>{const ok=c.word===S.words[i];c.b.style.backgroundColor=ok?"#22c55e":"#ef4444";c.vx=ok?0:(Math.random()<.5?-1:1)*14;c.vy=-7});
+  later(()=>verdict(false,"Not quite","Here's the right order",3000,true),250);
+  later(()=>{const used=new Set(),order=S.words.map(w=>{const c=S.tray.find(x=>x.word===w&&!used.has(x));used.add(c);return c});S.tray=order;relayout();A.whoosh();
+    order.forEach((c,i)=>later(()=>{c.b.style.backgroundColor="#22c55e";c.vy=-8;A.pop(i);ring(c.x+c.w/2,c.y+c.h/2,"#4ade80",40)},300+i*110))},1300);   /* reveal the answer */
+  clearTimeout(S.nt);S.nt=setTimeout(advance,3500)}
+function verdict(ok,txt,sub,ms,skip){const v=$("verdict"),R=S.R.pool;v.style.top=(R.y+Math.max(0,(R.h-200)/2))+"px";v.className=(ok?"ok":"bad")+(skip?" skip":"");
+  $("vPath").setAttribute("d",ok?"M14 30 L26 42 L44 18":"M18 18 L40 40 M40 18 L18 40");$("vTxt").textContent=txt;$("vSub").textContent=sub;
+  const b=$("vBar").firstElementChild;b.style.transition="none";b.style.transform="scaleX(1)";void b.offsetWidth;b.style.transition=`transform ${ms}ms linear`;b.style.transform="scaleX(0)";
+  $("vBar").style.visibility=skip?"visible":"hidden";void v.offsetWidth;v.classList.add("show")}
+function hideVerdict(){clearTimeout(S.nt);$("verdict").classList.remove("show","skip")}
+function advance(){hideVerdict();if(S.idx>=S.list.length-1)return finish();S.idx++;load()}
+$("verdict").onclick=()=>{const v=$("verdict");if(v.classList.contains("show")&&v.classList.contains("skip"))advance()};
+function finish(){clearInterval(S.tick);clearChips();hideVerdict();$("eN").textContent=`${S.solved}/${S.list.length}`;$("eS").textContent=S.score;$("eT").textContent=fmt(S.sec);$("eTb").classList.toggle("hidden",!S.timer);$("eH").textContent=S.hints;
+  $("endMsg").textContent=S.solved===S.list.length?"Flawless flow! 🌟":S.solved>=S.list.length/2?"Great job!":"Nice effort — practice makes perfect!";$("end").classList.remove("hidden");for(let i=0;i<6;i++)setTimeout(()=>drops(innerWidth*(.15+Math.random()*.7),innerHeight*.5,22,COLORS[i%8]),i*140);A.win();
+  if(edtechraBridge.active&&!edtechraBridge.reported){edtechraBridge.reported=true;
+    const maxRaw=Math.max(1,S.list.length*100);
+    const ratio=Math.max(0,Math.min(1,S.score/maxRaw));
+    const earned=Math.round(ratio*edtechraBridge.maxPoints);
+    window.parent.postMessage({type:"EDTECHRA_GAME_COMPLETE",payload:{gameId:"liquid-sentences",scoreEarned:earned,maxAvailablePoints:edtechraBridge.maxPoints,completionStatus:"completed",timeTakenSeconds:S.sec,details:{solved:S.solved,total:S.list.length,rawScore:S.score,hintsUsed:S.hints}}},"*")}}
+$("bShuf").onclick=()=>{if(S.locked)return;S.pool=shuffle(S.pool);relayout();S.pool.forEach(c=>c.vy=-8);A.whoosh()};
+$("bClear").onclick=()=>{if(S.locked||!S.tray.length)return;S.pool.push(...S.tray);S.tray=[];relayout();S.pool.forEach(c=>c.vy=-6);A.whoosh()};
+$("bHintBtn").onclick=()=>{if(S.locked||S.drag)return;let k=0;while(k<S.tray.length&&S.tray[k].word===S.words[k])k++;if(k>=S.words.length)return;
+  let c=S.pool.find(x=>x.word===S.words[k]);if(!c)c=S.tray.slice(k+1).find(x=>x.word===S.words[k]);if(!c)c=S.tray.slice(k).find(x=>x.word===S.words[k]);if(!c)return;
+  S.pool=S.pool.filter(x=>x!==c);S.tray=S.tray.filter(x=>x!==c);S.tray.splice(k,0,c);S.hints++;S.score=Math.max(0,S.score-15);$("hScore").textContent=S.score;c.vy=-9;relayout();A.place();landed(c,"tray",true)};
+$("bMenu").onclick=()=>$("setup").classList.remove("hidden");$("bMute").onclick=e=>{A.muted=!A.muted;e.currentTarget.textContent=A.muted?"🔇":"🔊"};
+$("bAgain").onclick=begin;$("bEdit").onclick=()=>{$("end").classList.add("hidden");$("game").classList.add("hidden");$("setup").classList.remove("hidden")};
+addEventListener("resize",()=>{fx.resize();if(!S.chips.length)return;metrics();pickScale();S.chips.forEach(sizeChip);relayout()});
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{if(S.chips.length){pickScale();S.chips.forEach(sizeChip);relayout()}});
+
+/* ---------- PHYSICS + RENDER (springs = liquid wobble) ---------- */
+let last=performance.now();
+function frame(now){requestAnimationFrame(frame);const dt=Math.min(2,(now-last)/16.67);last=now;
+  for(const c of S.chips){const d=c===S.drag,K=d?.32:.12,C=d?.46:.25;c.vx+=((c.tx-c.x)*K-c.vx*C)*dt;c.vy+=((c.ty-c.y)*K-c.vy*C)*dt;c.x+=c.vx*dt;c.y+=c.vy*dt;c.sv+=((c.ts-c.s)*.16-c.sv*.2)*dt;c.s+=c.sv*dt;
+    const sp=Math.hypot(c.vx,c.vy),st=Math.min(.24,sp*.012),sc=Math.max(0,c.s);let bt;
+    if(st>.01){const a=Math.atan2(c.vy,c.vx);bt=`translate(${c.x}px,${c.y}px) rotate(${a}rad) scale(${(1+st)*sc},${(1-st*.55)*sc}) rotate(${-a}rad)`}else bt=`translate(${c.x}px,${c.y}px) scale(${sc})`;
+    c.b.style.transform=bt;c.l.style.transform=`translate(${c.x}px,${c.y}px) scale(${sc*(1+st*.3)},${sc*(1-st*.18)})`}
+  const g=S.drag;tails.forEach(t=>{if(g){t.__x+=((g.x+g.w/2)-t.__x)*t.__f*dt*1.4;t.__y+=((g.y+g.h/2)-t.__y)*t.__f*dt*1.4;t.style.transform=`translate(${t.__x-t.__z/2}px,${t.__y-t.__z/2}px)`}});
+  drawFx()}
+requestAnimationFrame(frame);
+
+/* ---------- DROPLET + RIPPLE FX ---------- */
+const fx={cv:$("fx"),ps:[],rs:[],resize(){const d=Math.min(devicePixelRatio||1,2);this.cv.width=innerWidth*d;this.cv.height=innerHeight*d;this.x.setTransform(d,0,0,d,0,0)}};fx.x=fx.cv.getContext("2d");fx.resize();
+function drops(x,y,n,col){for(let i=0;i<n;i++){const a=-Math.PI/2+(Math.random()-.5)*2.4,v=2+Math.random()*5;fx.ps.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,r:2+Math.random()*4,c:col,a:1})}}
+function ring(x,y,col,max=46){fx.rs.push({x,y,r:6,m:max,c:col,a:.8})}
+function drawFx(){const c=fx.x;c.clearRect(0,0,innerWidth,innerHeight);
+  for(let i=fx.rs.length-1;i>=0;i--){const r=fx.rs[i];r.r+=(r.m-r.r)*.1+.6;r.a-=.025;if(r.a<=0){fx.rs.splice(i,1);continue}c.globalAlpha=r.a;c.strokeStyle=r.c;c.lineWidth=2.5;c.beginPath();c.arc(r.x,r.y,r.r,0,7);c.stroke()}
+  for(let i=fx.ps.length-1;i>=0;i--){const p=fx.ps[i];p.x+=p.vx;p.y+=p.vy;p.vy+=.28;p.a-=.016;if(p.a<=0){fx.ps.splice(i,1);continue}c.globalAlpha=p.a;c.fillStyle=p.c;c.beginPath();c.arc(p.x,p.y,p.r,0,7);c.fill();c.fillStyle="rgba(255,255,255,.7)";c.beginPath();c.arc(p.x-p.r*.3,p.y-p.r*.3,p.r*.35,0,7);c.fill()}c.globalAlpha=1}
+
+/* ---------- EDTECHRA INTEGRATION BRIDGE ---------- */
+window.addEventListener("message",ev=>{
+  const msg=ev.data;
+  if(!msg||msg.type!=="EDTECHRA_INIT_GAME")return;
+  const p=msg.payload||{},cfg=p.config||{};
+  edtechraBridge.active=true;
+  edtechraBridge.maxPoints=Number(p.maxPoints)||100;
+  edtechraBridge.reported=false;
+  if(p.mode==="student"||p.mode==="preview"){
+    $("setup").classList.add("hidden");
+    $("bMenu").classList.add("hidden");
+    $("bEdit").classList.add("hidden");
+  }
+  const items=Array.isArray(cfg.sentences)?cfg.sentences:[];
+  const parsed=items.map(it=>{
+    const text=(typeof it==="string"?it:(it.sentence||"")).trim().replace(/\s+/g," ");
+    const hint=typeof it==="string"?"":(it.hint||"").trim();
+    const w=text?text.split(" "):[];
+    return w.length>=2?{w,h:hint}:null;
+  }).filter(Boolean);
+  if(!parsed.length)return;
+  S.set=parsed;
+  S.showHints=cfg.showHints!==false;
+  S.timer=cfg.showTimer!==false;
+  S.retry=Boolean(cfg.allowRetry);
+  begin();
+});
+window.parent.postMessage({type:"EDTECHRA_GAME_READY",gameId:"liquid-sentences"},"*");
+</script>
+</body>
+</html>

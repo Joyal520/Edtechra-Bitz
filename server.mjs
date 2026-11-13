@@ -23237,6 +23237,184 @@ app.post('/api/classes/:id/actions/:actionId/retry', async (req, res) => {
   }
 });
 
+// ==========================================
+// Game Library Phase 1: Submit Game Score & Award Leaderboard Points
+// ==========================================
+app.post('/api/games/submit-score', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth?.user) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const studentId = auth.user.id;
+    const {
+      assignmentId,
+      classroomId,
+      gameId,
+      scoreEarned,
+      maxPoints,
+      completed,
+      timeTakenSeconds,
+      details
+    } = req.body || {};
+
+    if (!assignmentId || !classroomId || !gameId) {
+      return res.status(400).json({ success: false, error: 'assignmentId, classroomId, and gameId are required' });
+    }
+    if (!completed) {
+      return res.status(400).json({ success: false, error: 'Game must be completed before submitting score' });
+    }
+
+    // 1. Verify assignment exists and belongs to the classroom as a Game Library assignment
+    const { data: assignment, error: assignErr } = await serverSupabase
+      .from('assignments')
+      .select('id, classroom_id, title, points, settings')
+      .eq('id', assignmentId)
+      .single();
+
+    if (assignErr || !assignment) {
+      return res.status(404).json({ success: false, error: 'Game assignment not found' });
+    }
+    if (assignment.classroom_id !== classroomId) {
+      return res.status(400).json({ success: false, error: 'Assignment does not belong to this classroom' });
+    }
+    if (!assignment.settings?.is_game_library) {
+      return res.status(400).json({ success: false, error: 'Assignment is not a Game Library activity' });
+    }
+
+    // 2. Verify classroom membership
+    const { data: membership } = await serverSupabase
+      .from('classroom_members')
+      .select('id, role, status')
+      .eq('classroom_id', classroomId)
+      .eq('user_id', studentId)
+      .maybeSingle();
+
+    if (!membership || membership.status !== 'active') {
+      return res.status(403).json({ success: false, error: 'You are not an active member of this classroom' });
+    }
+
+    // 3. Duplicate submission check on assignment_submissions
+    const { data: existingSubmission } = await serverSupabase
+      .from('assignment_submissions')
+      .select('id, points_awarded, final_score, percentage, submitted_at')
+      .eq('assignment_id', assignmentId)
+      .eq('student_id', studentId)
+      .maybeSingle();
+
+    if (existingSubmission) {
+      return res.json({
+        success: true,
+        alreadySubmitted: true,
+        pointsAwarded: 0,
+        existingScore: existingSubmission.final_score ?? existingSubmission.points_awarded ?? 0,
+        maxPoints: Number(assignment.points || 100),
+        percentage: existingSubmission.percentage ?? 100,
+        submissionId: existingSubmission.id,
+        message: 'You have already completed this game. Duplicate submissions do not award extra points.'
+      });
+    }
+
+    // 4. Compute bounded score scaled to assignment's points
+    const assignmentMax = Math.max(1, Number(assignment.points || 100));
+    const reportedMax = Math.max(1, Number(maxPoints || assignmentMax));
+    const rawScore = Math.max(0, Number(scoreEarned || 0));
+    const ratio = Math.min(1, Math.max(0, rawScore / reportedMax));
+    const pointsAwarded = Math.min(assignmentMax, Math.max(0, Math.round(ratio * assignmentMax)));
+    const percentage = Math.round(ratio * 100);
+    const safeTimeSeconds = Math.max(0, Math.round(Number(timeTakenSeconds || 0)));
+    const nowIso = new Date().toISOString();
+
+    const summaryText = JSON.stringify({
+      game_id: gameId,
+      game_name: assignment.settings?.game_name || gameId,
+      student_id: studentId,
+      classroom_id: classroomId,
+      assignment_id: assignmentId,
+      score_earned: pointsAwarded,
+      max_points: assignmentMax,
+      completion_status: 'completed',
+      time_taken_seconds: safeTimeSeconds,
+      details: details || null
+    });
+
+    // 5. Insert submission record (UNIQUE(assignment_id, student_id) guards races)
+    const { data: insertedSub, error: subErr } = await serverSupabase
+      .from('assignment_submissions')
+      .insert({
+        assignment_id: assignmentId,
+        student_id: studentId,
+        status: 'graded',
+        submitted_at: nowIso,
+        graded_at: nowIso,
+        text_response: summaryText,
+        points_awarded: pointsAwarded,
+        final_score: pointsAwarded,
+        percentage,
+        teacher_feedback: `Completed ${assignment.settings?.game_name || 'Game'} in ${safeTimeSeconds}s`
+      })
+      .select('id')
+      .single();
+
+    if (subErr) {
+      if (subErr.code === '23505') {
+        return res.json({
+          success: true,
+          alreadySubmitted: true,
+          pointsAwarded: 0,
+          maxPoints: assignmentMax,
+          message: 'Score already recorded for this assignment.'
+        });
+      }
+      throw subErr;
+    }
+
+    // 6. Award classroom leaderboard points idempotently
+    if (pointsAwarded > 0) {
+      const { data: existingPts } = await serverSupabase
+        .from('classroom_points')
+        .select('id')
+        .eq('classroom_id', classroomId)
+        .eq('student_id', studentId)
+        .eq('source_type', 'activity')
+        .eq('source_id', assignmentId)
+        .maybeSingle();
+
+      if (!existingPts) {
+        const { error: ptsErr } = await serverSupabase
+          .from('classroom_points')
+          .insert({
+            classroom_id: classroomId,
+            student_id: studentId,
+            points: pointsAwarded,
+            source_type: 'activity',
+            source_id: assignmentId,
+            reason: `Game Library: ${assignment.title || assignment.settings?.game_name || gameId}`,
+            awarded_by: studentId
+          });
+
+        if (ptsErr && ptsErr.code !== '23505') {
+          console.error('[games/submit-score] classroom_points insert error:', ptsErr);
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      alreadySubmitted: false,
+      pointsAwarded,
+      maxPoints: assignmentMax,
+      percentage,
+      timeTakenSeconds: safeTimeSeconds,
+      submissionId: insertedSub?.id || null,
+      message: `Score saved! +${pointsAwarded} points added to the classroom leaderboard.`
+    });
+  } catch (err) {
+    console.error('[games/submit-score] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to submit game score' });
+  }
+});
+
 // Global API 404 Handler - Guarantee valid JSON response for unmatched API routes
 app.use('/api', (req, res) => {
   res.setHeader('Content-Type', 'application/json');

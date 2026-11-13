@@ -46,8 +46,16 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-50 text-[#026fc3] border border-blue-200">
-              {assignment.assignment_type}
+            <span
+              className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                assignment.settings?.is_game_library
+                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                  : 'bg-blue-50 text-[#026fc3] border-blue-200'
+              }`}
+            >
+              {assignment.settings?.is_game_library
+                ? String(assignment.settings.game_name || 'Game')
+                : assignment.assignment_type}
             </span>
             <span className="text-xs text-slate-500 font-extrabold flex items-center gap-1">
               <Award className="w-3.5 h-3.5 text-amber-500" />
@@ -145,7 +153,11 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
               >
                 <FileText className="w-3.5 h-3.5" />
                 <span>
-                  {isGraded
+                  {assignment.settings?.is_game_library
+                    ? isGraded || isSubmitted
+                      ? 'Play Again'
+                      : 'Play Game'
+                    : isGraded
                     ? 'View Result'
                     : isEvaluating
                     ? 'View Progress'
