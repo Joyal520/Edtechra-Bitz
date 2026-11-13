@@ -10,6 +10,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { getGameCatalogItem } from '@/services/gameLibraryService';
 import type { GameId } from '@/types/gameLibrary';
+import { normalizeAssignmentLevels, parseStudentLevelProgress } from '@/utils/gameLevelUtils';
 import {
   Send,
   Pin,
@@ -231,21 +232,28 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
       if (seenKeys.has(key) || isMarkedRead(key, a.id)) return;
 
       const sub = a.my_submission;
+      const isGameLibrary = Boolean(a.settings?.is_game_library);
+      const gameLevels = isGameLibrary ? normalizeAssignmentLevels(a) : [];
+      const gameProgress = isGameLibrary ? parseStudentLevelProgress(sub) : null;
+
       // Real student completion detection from submission record
       const isCompleted =
         !isTeacher &&
-        Boolean(
-          sub &&
-            (sub.status === 'submitted' ||
-              sub.status === 'graded' ||
-              sub.status === 'completed' ||
-              sub.status === 'evaluating' ||
-              sub.status === 'processing' ||
-              Boolean(sub.submitted_at))
-        );
+        (isGameLibrary
+          ? Boolean(gameLevels.length > 0 && gameProgress && gameProgress.completedCount >= gameLevels.length)
+          : Boolean(
+              sub &&
+                (sub.status === 'submitted' ||
+                  sub.status === 'graded' ||
+                  sub.status === 'completed' ||
+                  sub.status === 'evaluating' ||
+                  sub.status === 'processing' ||
+                  Boolean(sub.submitted_at))
+            ));
 
-      // Student completed task -> immediately remove from Recent Announcements feed
-      if (!isTeacher && isCompleted) return;
+      // Student completed ordinary task -> immediately remove from Recent Announcements feed
+      // Completed game assignments remain visible with a locked Completed status
+      if (!isTeacher && !isGameLibrary && isCompleted) return;
 
       // Rule A: Due date passed -> remove from active announcement feed
       const isOverdue = a.due_date && new Date(a.due_date).getTime() < nowMs;
@@ -263,12 +271,36 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
         new Date(a.due_date).getTime() - nowMs < 86400000 * 2 &&
         new Date(a.due_date).getTime() > nowMs;
 
-      const isGameLibrary = Boolean(a.settings?.is_game_library);
-      let statusBadge = isDueSoon ? 'Due Soon' : 'Available';
+      const earnedPoints = gameProgress
+        ? gameProgress.totalPointsEarned
+        : (sub?.final_score ?? sub?.points_awarded ?? 0);
+      const hasPartialGameProgress = Boolean(
+        isGameLibrary && gameProgress && gameProgress.completedCount > 0 && !isCompleted
+      );
+      let statusBadge = isCompleted
+        ? 'Completed'
+        : hasPartialGameProgress
+        ? `${gameProgress!.completedCount}/${gameLevels.length} Levels`
+        : isDueSoon
+        ? 'Due Soon'
+        : 'Available';
       let description =
         a.instructions || 'Complete the assignment and submit your work before the deadline.';
-      let scoreText: string | null = null;
-      let actionLabel = isTeacher ? 'Review Work' : isGameLibrary ? 'Play Game' : 'Start Task';
+      let scoreText: string | null =
+        isCompleted || hasPartialGameProgress
+          ? `Earned ${earnedPoints}/${a.points || 100} pts`
+          : isGameLibrary && gameLevels.length > 1
+          ? `${gameLevels.length} Levels`
+          : null;
+      let actionLabel = isTeacher
+        ? 'Review Work'
+        : isGameLibrary
+        ? isCompleted
+          ? 'Completed'
+          : hasPartialGameProgress
+          ? 'Continue'
+          : 'Play Game'
+        : 'Start Task';
 
       if (isTeacher) {
         statusBadge = 'Active';
@@ -285,7 +317,7 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
         dueDate: a.due_date,
         points: a.points || 100,
         statusBadge,
-        isCompleted: false,
+        isCompleted,
         scoreText,
         actionLabel,
         authorName: isGameLibrary ? (classroom?.teacher?.full_name || 'Teacher') : undefined,
@@ -667,17 +699,24 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
           </div>
 
           {item.onAction && item.type === 'game' ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                item.onAction?.();
-              }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-extrabold shadow-sm transition shrink-0 cursor-pointer self-center"
-            >
-              <Play className="w-3.5 h-3.5 fill-current" />
-              <span>{isTeacher ? 'View Results' : 'Play Game'}</span>
-            </button>
+            item.isCompleted && !isTeacher ? (
+              <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-extrabold shrink-0 self-center">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Completed</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  item.onAction?.();
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-extrabold shadow-sm transition shrink-0 cursor-pointer self-center"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>{isTeacher ? 'View Results' : 'Play Game'}</span>
+              </button>
+            )
           ) : (
             item.onAction && (
               <div className="w-8 h-8 rounded-full bg-white border border-slate-200/90 text-slate-400 group-hover:text-indigo-600 group-hover:border-indigo-300 flex items-center justify-center shrink-0 shadow-2xs transition-all group-hover:translate-x-0.5 mt-0.5">

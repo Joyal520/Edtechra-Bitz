@@ -5,6 +5,8 @@ export type GameId =
   | 'classroom-jigsaw'
   | 'lumina-words';
 
+export type LevelUnlockMode = 'sequential' | 'scheduled' | 'daily_limit';
+
 export interface LiquidSentenceItem {
   text: string;
   hint?: string;
@@ -62,6 +64,17 @@ export type GameConfig =
   | ClassroomJigsawConfig
   | LuminaWordsConfig;
 
+export interface GameLevelDefinition {
+  id: string;
+  levelNumber: number;
+  title: string;
+  instructions?: string;
+  points: number;
+  isManuallyLocked?: boolean;
+  unlockAt?: string | null;
+  config: GameConfig;
+}
+
 export interface GameCatalogItem {
   id: GameId;
   name: string;
@@ -78,11 +91,27 @@ export interface GameAssignmentSettings {
   is_game_library: true;
   game_id: GameId;
   game_name: string;
-  game_config: GameConfig;
+  unlock_mode?: LevelUnlockMode;
+  daily_limit?: number;
+  levels?: GameLevelDefinition[];
+  game_config?: GameConfig;
+}
+
+export interface CompletedLevelRecord {
+  levelId: string;
+  levelNumber: number;
+  title: string;
+  scoreEarned: number;
+  maxPoints: number;
+  percentage: number;
+  timeTakenSeconds: number;
+  completedAt: string;
+  details?: Record<string, unknown> | null;
 }
 
 export interface GameCompletionPayload {
   gameId: GameId;
+  levelId?: string;
   scoreEarned: number;
   maxPoints: number;
   completed: boolean;
@@ -99,6 +128,10 @@ export interface GameSubmissionResponse {
   percentage?: number;
   timeTakenSeconds?: number;
   submissionId?: string | null;
+  levelId?: string;
+  completedLevelsCount?: number;
+  totalLevels?: number;
+  totalPointsEarned?: number;
   message?: string;
   error?: string;
 }

@@ -28,7 +28,8 @@ import {
 } from 'lucide-react';
 import { GameLibraryModal } from '@/components/classes/games/GameLibraryModal';
 import { GamePlayerModal } from '@/components/classes/games/GamePlayerModal';
-import type { GameConfig, GameId } from '@/types/gameLibrary';
+import { GameLevelSelectModal } from '@/components/classes/games/GameLevelSelectModal';
+import type { GameConfig, GameId, GameLevelDefinition } from '@/types/gameLibrary';
 import {
   Classroom,
   ClassroomMember,
@@ -169,11 +170,13 @@ export const ClassroomDetailPage: React.FC = () => {
   // Game Library Phase 1 State
   const [gameLibraryModalOpen, setGameLibraryModalOpen] = useState(false);
   const [initialGameIdForLibrary, setInitialGameIdForLibrary] = useState<GameId | null>(null);
+  const [activeGameAssignment, setActiveGameAssignment] = useState<Assignment | null>(null);
   const [activeGamePlay, setActiveGamePlay] = useState<{
     gameId: GameId;
     title: string;
     config: GameConfig;
     assignmentId?: string;
+    levelId?: string;
     maxPoints: number;
     isPreview: boolean;
     alreadyCompletedScore?: number | null;
@@ -1548,24 +1551,8 @@ export const ClassroomDetailPage: React.FC = () => {
             onOpenGame={(gameAssignment) => {
               if (isTeacher) {
                 setActiveReviewAssignment(gameAssignment);
-              } else if (
-                gameAssignment.settings?.is_game_library &&
-                gameAssignment.settings?.game_id &&
-                gameAssignment.settings?.game_config
-              ) {
-                setActiveGamePlay({
-                  gameId: gameAssignment.settings.game_id as GameId,
-                  title: gameAssignment.title,
-                  config: gameAssignment.settings.game_config as GameConfig,
-                  assignmentId: gameAssignment.id,
-                  maxPoints: gameAssignment.points || 100,
-                  isPreview: false,
-                  alreadyCompletedScore: gameAssignment.my_submission
-                    ? (gameAssignment.my_submission.final_score ??
-                      gameAssignment.my_submission.points_awarded ??
-                      0)
-                    : null
-                });
+              } else if (gameAssignment.settings?.is_game_library) {
+                setActiveGameAssignment(gameAssignment);
               }
             }}
             onOpenExam={(exam) => {
@@ -1784,12 +1771,12 @@ export const ClassroomDetailPage: React.FC = () => {
                 </div>
                 <div className="space-y-1 text-center">
                   <h3 className="text-sm sm:text-[15px] font-black text-slate-900 group-hover:text-amber-950 transition-colors">
-                    {isTeacher ? 'Competition' : 'Challenges'}
+                    Games & Competitions
                   </h3>
                   <p className="text-xs text-slate-500 font-medium leading-relaxed line-clamp-2">
                     {isTeacher
-                      ? 'Create challenges, let AI evaluate student work.'
-                      : 'Participate in creative problem-solving challenges.'}
+                      ? 'Create educational games or AI-evaluated classroom challenges.'
+                      : 'Play assigned educational games and join classroom challenges.'}
                   </p>
                 </div>
               </div>
@@ -1798,7 +1785,7 @@ export const ClassroomDetailPage: React.FC = () => {
                 onClick={() => setChallengeListModalOpen(true)}
                 className="btn-liquid-amber w-full py-2.5 px-4 text-xs font-bold"
               >
-                {isTeacher ? 'Challenge Dashboard' : 'Open Challenges'}
+                {isTeacher ? 'Games & Competitions' : 'Games & Challenges'}
               </button>
             </div>
 
@@ -2141,18 +2128,8 @@ export const ClassroomDetailPage: React.FC = () => {
                   onCreateAssignment={() => setShowQuickCreateTask(true)}
                   onOpenSubmissions={(a) => setActiveReviewAssignment(a)}
                   onSubmitWork={(a) => {
-                    if (a.settings?.is_game_library && a.settings?.game_id && a.settings?.game_config) {
-                      setActiveGamePlay({
-                        gameId: a.settings.game_id as GameId,
-                        title: a.title,
-                        config: a.settings.game_config as GameConfig,
-                        assignmentId: a.id,
-                        maxPoints: a.points || 100,
-                        isPreview: false,
-                        alreadyCompletedScore: a.my_submission
-                          ? (a.my_submission.final_score ?? a.my_submission.points_awarded ?? 0)
-                          : null
-                      });
+                    if (a.settings?.is_game_library) {
+                      setActiveGameAssignment(a);
                     } else {
                       setActiveSubmitAssignment(a);
                     }
@@ -2651,18 +2628,9 @@ export const ClassroomDetailPage: React.FC = () => {
           setGameLibraryModalOpen(true);
         }}
         onPlayGameAssignment={(a) => {
-          if (!a.settings?.game_id || !a.settings?.game_config) return;
-          setActiveGamePlay({
-            gameId: a.settings.game_id as GameId,
-            title: a.title,
-            config: a.settings.game_config as GameConfig,
-            assignmentId: a.id,
-            maxPoints: a.points || 100,
-            isPreview: false,
-            alreadyCompletedScore: a.my_submission
-              ? (a.my_submission.final_score ?? a.my_submission.points_awarded ?? 0)
-              : null
-          });
+          if (a.settings?.is_game_library) {
+            setActiveGameAssignment(a);
+          }
         }}
       />
 
@@ -2776,26 +2744,16 @@ export const ClassroomDetailPage: React.FC = () => {
           assignments={assignments}
           initialGameId={initialGameIdForLibrary}
           onPlayAssignment={(a) => {
-            if (!a.settings?.game_id || !a.settings?.game_config) return;
+            if (!a.settings?.is_game_library) return;
             setGameLibraryModalOpen(false);
-            setActiveGamePlay({
-              gameId: a.settings.game_id as GameId,
-              title: a.title,
-              config: a.settings.game_config as GameConfig,
-              assignmentId: a.id,
-              maxPoints: a.points || 100,
-              isPreview: false,
-              alreadyCompletedScore: a.my_submission
-                ? (a.my_submission.final_score ?? a.my_submission.points_awarded ?? 0)
-                : null
-            });
+            setActiveGameAssignment(a);
           }}
-          onPreviewGame={(gameId, title, config) => {
+          onPreviewGame={(gameId, title, config, points = 100) => {
             setActiveGamePlay({
               gameId,
               title,
               config,
-              maxPoints: 100,
+              maxPoints: points,
               isPreview: true
             });
           }}
@@ -2805,6 +2763,32 @@ export const ClassroomDetailPage: React.FC = () => {
             if (targetCid === classroom.id) {
               loadAllClassroomData(true);
             }
+          }}
+        />
+      )}
+
+      {/* Student Level Selection Modal */}
+      {classroom && activeGameAssignment && (
+        <GameLevelSelectModal
+          isOpen={Boolean(activeGameAssignment)}
+          onClose={() => setActiveGameAssignment(null)}
+          assignment={
+            assignments.find((a) => a.id === activeGameAssignment.id) || activeGameAssignment
+          }
+          classroomTimezone={classroom.leaderboard_timezone || 'UTC'}
+          onPlayLevel={(level: GameLevelDefinition) => {
+            const latestAssignment =
+              assignments.find((a) => a.id === activeGameAssignment.id) || activeGameAssignment;
+            setActiveGamePlay({
+              gameId: (latestAssignment.settings?.game_id as GameId) || 'liquid-sentences',
+              title: `${latestAssignment.title} — ${level.title}`,
+              config: level.config,
+              assignmentId: latestAssignment.id,
+              levelId: level.id,
+              maxPoints: level.points,
+              isPreview: false,
+              alreadyCompletedScore: null
+            });
           }}
         />
       )}
@@ -2819,6 +2803,7 @@ export const ClassroomDetailPage: React.FC = () => {
           config={activeGamePlay.config}
           classroomId={classroom.id}
           assignmentId={activeGamePlay.assignmentId}
+          levelId={activeGamePlay.levelId}
           maxPoints={activeGamePlay.maxPoints}
           isPreview={activeGamePlay.isPreview}
           alreadyCompletedScore={activeGamePlay.alreadyCompletedScore}

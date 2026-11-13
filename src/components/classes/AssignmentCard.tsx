@@ -155,7 +155,7 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
                 <span>
                   {assignment.settings?.is_game_library
                     ? isGraded || isSubmitted
-                      ? 'Play Again'
+                      ? 'Completed'
                       : 'Play Game'
                     : isGraded
                     ? 'View Result'

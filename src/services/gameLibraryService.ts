@@ -7,7 +7,9 @@ import type {
   GameCompletionPayload,
   GameConfig,
   GameId,
-  GameSubmissionResponse
+  GameLevelDefinition,
+  GameSubmissionResponse,
+  LevelUnlockMode
 } from '@/types/gameLibrary';
 
 export const GAME_CATALOG: GameCatalogItem[] = [
@@ -147,8 +149,8 @@ class GameLibraryService {
     const { data, error } = await supabase
       .from('classroom_members')
       .select('classroom:classrooms(id, title, subject, grade, is_archived)')
-      .eq('user_id', user.id)
-      .in('role', ['teacher', 'co_teacher'])
+      .eq('profile_id', user.id)
+      .in('role', ['teacher', 'co-teacher'])
       .eq('status', 'active');
 
     if (error || !data) return [];
@@ -177,7 +179,10 @@ class GameLibraryService {
     points: number;
     dueDate?: string | null;
     instructions?: string;
-    config: GameConfig;
+    config?: GameConfig;
+    levels?: GameLevelDefinition[];
+    unlockMode?: LevelUnlockMode;
+    dailyLimit?: number;
   }): Promise<{ data?: Assignment; error?: string }> {
     if (!supabase) return { error: 'Supabase is not configured' };
     const {
@@ -186,16 +191,36 @@ class GameLibraryService {
     if (!user) return { error: 'Authentication required' };
 
     const catalogItem = getGameCatalogItem(params.gameId);
+    const normalizedLevels =
+      params.levels && params.levels.length > 0
+        ? params.levels.map((lvl, idx) => ({
+            ...lvl,
+            levelNumber: idx + 1,
+            points: Math.max(1, Math.round(lvl.points || 20))
+          }))
+        : undefined;
+
+    const totalPoints = normalizedLevels
+      ? normalizedLevels.reduce((sum, l) => sum + l.points, 0)
+      : Math.max(1, Math.round(params.points || 100));
+
     const settings: GameAssignmentSettings = {
       is_game_library: true,
       game_id: params.gameId,
       game_name: catalogItem.name,
-      game_config: params.config
+      unlock_mode: params.unlockMode || 'sequential',
+      daily_limit: params.dailyLimit || 1,
+      levels: normalizedLevels,
+      game_config: params.config || normalizedLevels?.[0]?.config
     };
+
+    const levelSummary = normalizedLevels
+      ? `${normalizedLevels.length} ${normalizedLevels.length === 1 ? 'level' : 'levels'}`
+      : 'interactive challenge';
 
     const cleanInstructions =
       (params.instructions || '').trim() ||
-      `Play ${catalogItem.name}: "${params.title.trim()}". Complete the game to earn up to ${params.points} points on the classroom leaderboard.`;
+      `Play ${catalogItem.name}: "${params.title.trim()}" (${levelSummary}). Complete levels to earn up to ${totalPoints} points on the classroom leaderboard.`;
 
     try {
       const { data, error } = await supabase
@@ -205,7 +230,7 @@ class GameLibraryService {
           title: params.title.trim(),
           instructions: cleanInstructions,
           assignment_type: 'activity',
-          points: Math.max(1, Math.round(params.points || 100)),
+          points: totalPoints,
           due_date: params.dueDate || null,
           attachment_urls: [],
           settings,
@@ -236,6 +261,7 @@ class GameLibraryService {
           assignmentId: params.assignmentId,
           classroomId: params.classroomId,
           gameId: params.payload.gameId,
+          levelId: params.payload.levelId || null,
           scoreEarned: params.payload.scoreEarned,
           maxPoints: params.payload.maxPoints,
           completed: params.payload.completed,

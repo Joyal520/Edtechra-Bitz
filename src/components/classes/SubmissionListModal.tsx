@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Assignment, AssignmentSubmission } from '@/types/classroom';
 import { assignmentService } from '@/services/assignmentService';
+import { normalizeAssignmentLevels, parseStudentLevelProgress } from '@/utils/gameLevelUtils';
 
 interface SubmissionListModalProps {
   isOpen: boolean;
@@ -128,6 +129,35 @@ export const SubmissionListModal: React.FC<SubmissionListModalProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Teacher Level Progress Overview (for Game Library assignments) */}
+        {assignment.settings?.is_game_library && (() => {
+          const gameLevels = normalizeAssignmentLevels(assignment);
+          const lockedCount = gameLevels.filter((l) => l.isManuallyLocked).length;
+          const completedAllCount = submissions.filter(
+            (s) => parseStudentLevelProgress(s).completedCount >= gameLevels.length
+          ).length;
+          return (
+            <div className="mt-3 p-3 rounded-2xl bg-sky-50/80 border border-sky-200 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center shrink-0">
+              <div className="p-2 rounded-xl bg-white border border-sky-100">
+                <div className="text-[10px] font-bold uppercase text-slate-400">Total Levels</div>
+                <div className="text-sm font-black text-slate-900">{gameLevels.length}</div>
+              </div>
+              <div className="p-2 rounded-xl bg-white border border-sky-100">
+                <div className="text-[10px] font-bold uppercase text-slate-400">Locked Levels</div>
+                <div className="text-sm font-black text-rose-600">{lockedCount}</div>
+              </div>
+              <div className="p-2 rounded-xl bg-white border border-sky-100">
+                <div className="text-[10px] font-bold uppercase text-slate-400">Started</div>
+                <div className="text-sm font-black text-sky-700">{submissions.length}</div>
+              </div>
+              <div className="p-2 rounded-xl bg-white border border-sky-100">
+                <div className="text-[10px] font-bold uppercase text-slate-400">Completed All</div>
+                <div className="text-sm font-black text-emerald-600">{completedAllCount}</div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Content Body (2 Columns) */}
         {loading ? (

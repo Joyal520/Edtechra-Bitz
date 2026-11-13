@@ -14,6 +14,7 @@ import { AiChallenge } from '@/types/aiChallenge';
 import type { Assignment } from '@/types/classroom';
 import type { GameId } from '@/types/gameLibrary';
 import { GAME_CATALOG, getGameCatalogItem } from '@/services/gameLibraryService';
+import { normalizeAssignmentLevels, parseStudentLevelProgress } from '@/utils/gameLevelUtils';
 import { aiChallengeService } from '@/services/aiChallengeService';
 import { useClassroomAuth } from '@/hooks/useClassroomAuth';
 import { CreateChallengeModal } from './CreateChallengeModal';
@@ -89,16 +90,16 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
             <div>
               <div className="flex items-center gap-2 mb-0.5">
                 <span className="text-[10px] font-black uppercase tracking-wider bg-white/20 px-2.5 py-0.5 rounded-full">
-                  {isTeacher ? 'Teacher Dashboard' : 'Student Challenges'}
+                  {isTeacher ? 'Teacher Hub' : 'Student Hub'}
                 </span>
               </div>
               <h2 className="text-xl font-black tracking-tight">
-                {isTeacher ? 'AI Challenge Competition' : 'AI Challenge'}
+                Games & Competitions
               </h2>
               <p className="text-xs text-indigo-100 font-medium">
                 {isTeacher
-                  ? 'Create challenges, collect student work and let AI evaluate submissions automatically'
-                  : 'Complete challenges and receive automated AI assessment'}
+                  ? 'Assign educational games or create AI-evaluated classroom challenges'
+                  : 'Play assigned educational games and participate in classroom challenges'}
               </p>
             </div>
           </div>
@@ -206,7 +207,9 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
               <div className="space-y-3">
                 {gameAssignments.map((a) => {
                   const sub = a.my_submission;
-                  const completed = Boolean(sub);
+                  const levels = normalizeAssignmentLevels(a);
+                  const prog = parseStudentLevelProgress(sub);
+                  const completed = levels.length > 0 && prog.completedCount >= levels.length;
                   const cat = getGameCatalogItem((a.settings?.game_id as GameId) || 'liquid-sentences');
                   return (
                     <div
@@ -224,14 +227,19 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
                             <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
                               {String(a.settings?.game_name || cat.name)}
                             </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
+                              {prog.completedCount}/{levels.length} Levels
+                            </span>
                             {completed ? (
                               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                                 <CheckCircle2 className="w-3 h-3" />
-                                Completed ({sub?.final_score ?? sub?.points_awarded ?? 0}/{a.points} pts)
+                                Completed ({prog.totalPointsEarned}/{a.points} pts)
                               </span>
                             ) : (
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                                Up to {a.points} pts
+                                {prog.totalPointsEarned > 0
+                                  ? `${prog.totalPointsEarned}/${a.points} pts`
+                                  : `Up to ${a.points} pts`}
                               </span>
                             )}
                           </div>
@@ -243,17 +251,31 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
                           )}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onClose();
-                          onPlayGameAssignment?.(a);
-                        }}
-                        className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-sm transition shrink-0 cursor-pointer"
-                      >
-                        <Play className="w-3.5 h-3.5 fill-current" />
-                        <span>{completed ? 'Replay Game' : 'Play Game'}</span>
-                      </button>
+                      {completed ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose();
+                            onPlayGameAssignment?.(a);
+                          }}
+                          className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold shrink-0 cursor-pointer hover:bg-emerald-100 transition"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Completed</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose();
+                            onPlayGameAssignment?.(a);
+                          }}
+                          className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-sm transition shrink-0 cursor-pointer"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span>Play Game</span>
+                        </button>
+                      )}
                     </div>
                   );
                 })}

@@ -23238,8 +23238,30 @@ app.post('/api/classes/:id/actions/:actionId/retry', async (req, res) => {
 });
 
 // ==========================================
-// Game Library Phase 1: Submit Game Score & Award Leaderboard Points
+// Game Library: Multi-Level Score Submission & Leaderboard Points
 // ==========================================
+function getDateKeyInTz(dateInput, timeZone = 'UTC') {
+  const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+  if (isNaN(d.getTime())) return '';
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timeZone || 'UTC',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(d);
+  } catch {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'UTC',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(d);
+  }
+}
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 app.post('/api/games/submit-score', async (req, res) => {
   try {
     const auth = await verifyAuthUser(req);
@@ -23251,6 +23273,7 @@ app.post('/api/games/submit-score', async (req, res) => {
       assignmentId,
       classroomId,
       gameId,
+      levelId,
       scoreEarned,
       maxPoints,
       completed,
@@ -23262,7 +23285,7 @@ app.post('/api/games/submit-score', async (req, res) => {
       return res.status(400).json({ success: false, error: 'assignmentId, classroomId, and gameId are required' });
     }
     if (!completed) {
-      return res.status(400).json({ success: false, error: 'Game must be completed before submitting score' });
+      return res.status(400).json({ success: false, error: 'Level must be completed before submitting score' });
     }
 
     // 1. Verify assignment exists and belongs to the classroom as a Game Library assignment
@@ -23282,94 +23305,247 @@ app.post('/api/games/submit-score', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Assignment is not a Game Library activity' });
     }
 
-    // 2. Verify classroom membership
-    const { data: membership } = await serverSupabase
-      .from('classroom_members')
-      .select('id, role, status')
-      .eq('classroom_id', classroomId)
-      .eq('user_id', studentId)
-      .maybeSingle();
+    // 2. Verify classroom membership & fetch classroom timezone
+    const [{ data: membership }, { data: classroomRow }] = await Promise.all([
+      serverSupabase
+        .from('classroom_members')
+        .select('id, role, status')
+        .eq('classroom_id', classroomId)
+        .eq('profile_id', studentId)
+        .maybeSingle(),
+      serverSupabase
+        .from('classrooms')
+        .select('leaderboard_timezone')
+        .eq('id', classroomId)
+        .maybeSingle()
+    ]);
 
     if (!membership || membership.status !== 'active') {
       return res.status(403).json({ success: false, error: 'You are not an active member of this classroom' });
     }
 
-    // 3. Duplicate submission check on assignment_submissions
+    const classroomTz = classroomRow?.leaderboard_timezone || 'UTC';
+
+    // 3. Resolve target level
+    const rawLevels = Array.isArray(assignment.settings?.levels) && assignment.settings.levels.length > 0
+      ? [...assignment.settings.levels].sort((a, b) => Number(a.levelNumber || 0) - Number(b.levelNumber || 0))
+      : [{
+          id: assignment.id,
+          levelNumber: 1,
+          title: assignment.title || 'Level 1',
+          points: Number(assignment.points || 100),
+          isManuallyLocked: false,
+          unlockAt: null
+        }];
+
+    const targetIndex = levelId
+      ? rawLevels.findIndex((l) => String(l.id) === String(levelId))
+      : 0;
+
+    if (targetIndex === -1) {
+      return res.status(400).json({ success: false, error: 'Invalid levelId for this game assignment' });
+    }
+
+    const targetLevel = rawLevels[targetIndex];
+    const resolvedLevelId = String(targetLevel.id);
+
+    // 4. Load existing submission & per-level completion map
     const { data: existingSubmission } = await serverSupabase
       .from('assignment_submissions')
-      .select('id, points_awarded, final_score, percentage, submitted_at')
+      .select('id, status, points_awarded, text_response, submitted_at, graded_at, teacher_feedback')
       .eq('assignment_id', assignmentId)
       .eq('student_id', studentId)
       .maybeSingle();
 
-    if (existingSubmission) {
+    let levelsCompleted = {};
+    if (existingSubmission?.text_response) {
+      try {
+        const parsed = JSON.parse(existingSubmission.text_response);
+        if (parsed?.levels_completed && typeof parsed.levels_completed === 'object') {
+          levelsCompleted = { ...parsed.levels_completed };
+        } else if (parsed?.assignment_id) {
+          const legacyId = String(parsed.level_id || parsed.assignment_id);
+          levelsCompleted[legacyId] = {
+            levelId: legacyId,
+            levelNumber: 1,
+            title: 'Level 1',
+            scoreEarned: Number(existingSubmission.points_awarded ?? parsed.score_earned ?? 0),
+            maxPoints: Number(parsed.max_points ?? assignment.points ?? 100),
+            percentage: Number(parsed.percentage ?? 100),
+            timeTakenSeconds: Number(parsed.time_taken_seconds ?? 0),
+            completedAt: existingSubmission.submitted_at || new Date().toISOString()
+          };
+        }
+      } catch {
+        // ignore parse errors
+      }
+    }
+
+    // 5. Duplicate submission check for THIS specific level
+    if (levelsCompleted[resolvedLevelId]) {
+      const existingRec = levelsCompleted[resolvedLevelId];
+      const completedCount = Object.keys(levelsCompleted).length;
+      const totalEarned = Object.values(levelsCompleted).reduce((s, r) => s + Number(r?.scoreEarned || 0), 0);
       return res.json({
         success: true,
         alreadySubmitted: true,
         pointsAwarded: 0,
-        existingScore: existingSubmission.final_score ?? existingSubmission.points_awarded ?? 0,
-        maxPoints: Number(assignment.points || 100),
-        percentage: existingSubmission.percentage ?? 100,
-        submissionId: existingSubmission.id,
-        message: 'You have already completed this game. Duplicate submissions do not award extra points.'
+        existingScore: Number(existingRec.scoreEarned || 0),
+        maxPoints: Math.max(1, Number(targetLevel.points || 20)),
+        percentage: Number(existingRec.percentage ?? 100),
+        submissionId: existingSubmission?.id || null,
+        levelId: resolvedLevelId,
+        completedLevelsCount: completedCount,
+        totalLevels: rawLevels.length,
+        totalPointsEarned: totalEarned,
+        message: 'You have already completed this level. Duplicate submissions do not award extra points.'
       });
     }
 
-    // 4. Compute bounded score scaled to assignment's points
-    const assignmentMax = Math.max(1, Number(assignment.points || 100));
-    const reportedMax = Math.max(1, Number(maxPoints || assignmentMax));
+    // 6. Backend Level Unlock Enforcement
+    if (targetLevel.isManuallyLocked) {
+      return res.status(403).json({
+        success: false,
+        error: 'Your teacher has locked this level.'
+      });
+    }
+
+    const unlockMode = assignment.settings?.unlock_mode || 'sequential';
+    const dailyLimit = Math.max(1, Number(assignment.settings?.daily_limit || 1));
+
+    if (unlockMode === 'scheduled') {
+      if (targetLevel.unlockAt) {
+        const unlockMs = new Date(targetLevel.unlockAt).getTime();
+        if (!isNaN(unlockMs) && Date.now() < unlockMs) {
+          return res.status(403).json({
+            success: false,
+            error: `This level is scheduled to unlock on ${new Date(unlockMs).toLocaleDateString()}.`
+          });
+        }
+      }
+    } else if (unlockMode === 'daily_limit') {
+      const todayKey = getDateKeyInTz(new Date(), classroomTz);
+      const completedToday = Object.values(levelsCompleted).filter(
+        (rec) => rec?.completedAt && getDateKeyInTz(rec.completedAt, classroomTz) === todayKey
+      ).length;
+      if (completedToday >= dailyLimit) {
+        return res.status(403).json({
+          success: false,
+          error: `Daily limit reached (${dailyLimit} per day). Come back tomorrow to unlock the next level.`
+        });
+      }
+      if (targetIndex > 0 && !levelsCompleted[String(rawLevels[targetIndex - 1].id)]) {
+        return res.status(403).json({
+          success: false,
+          error: 'Complete the previous level to unlock this level.'
+        });
+      }
+    } else {
+      // Sequential mode (default)
+      if (targetIndex > 0 && !levelsCompleted[String(rawLevels[targetIndex - 1].id)]) {
+        return res.status(403).json({
+          success: false,
+          error: 'Complete the previous level to unlock this level.'
+        });
+      }
+    }
+
+    // 7. Compute bounded score scaled to this level's points
+    const levelMax = Math.max(1, Number(targetLevel.points || 20));
+    const reportedMax = Math.max(1, Number(maxPoints || levelMax));
     const rawScore = Math.max(0, Number(scoreEarned || 0));
     const ratio = Math.min(1, Math.max(0, rawScore / reportedMax));
-    const pointsAwarded = Math.min(assignmentMax, Math.max(0, Math.round(ratio * assignmentMax)));
+    const pointsAwarded = Math.min(levelMax, Math.max(0, Math.round(ratio * levelMax)));
     const percentage = Math.round(ratio * 100);
     const safeTimeSeconds = Math.max(0, Math.round(Number(timeTakenSeconds || 0)));
     const nowIso = new Date().toISOString();
 
+    const updatedLevelsCompleted = {
+      ...levelsCompleted,
+      [resolvedLevelId]: {
+        levelId: resolvedLevelId,
+        levelNumber: Number(targetLevel.levelNumber || targetIndex + 1),
+        title: targetLevel.title || `Level ${targetIndex + 1}`,
+        scoreEarned: pointsAwarded,
+        maxPoints: levelMax,
+        percentage,
+        timeTakenSeconds: safeTimeSeconds,
+        completedAt: nowIso,
+        details: details || null
+      }
+    };
+
+    const completedLevelsCount = Object.keys(updatedLevelsCompleted).length;
+    const totalPointsEarned = Object.values(updatedLevelsCompleted).reduce(
+      (sum, rec) => sum + Number(rec?.scoreEarned || 0),
+      0
+    );
+    const allLevelsCompleted = completedLevelsCount >= rawLevels.length;
+    const assignmentTotalMax = rawLevels.reduce((sum, l) => sum + Math.max(1, Number(l.points || 20)), 0);
+
     const summaryText = JSON.stringify({
       game_id: gameId,
       game_name: assignment.settings?.game_name || gameId,
+      is_multi_level: true,
       student_id: studentId,
       classroom_id: classroomId,
       assignment_id: assignmentId,
-      score_earned: pointsAwarded,
-      max_points: assignmentMax,
-      completion_status: 'completed',
-      time_taken_seconds: safeTimeSeconds,
-      details: details || null
+      total_levels: rawLevels.length,
+      completed_levels_count: completedLevelsCount,
+      total_points_earned: totalPointsEarned,
+      max_points: assignmentTotalMax,
+      levels_completed: updatedLevelsCompleted
     });
 
-    // 5. Insert submission record (UNIQUE(assignment_id, student_id) guards races)
-    const { data: insertedSub, error: subErr } = await serverSupabase
-      .from('assignment_submissions')
-      .insert({
-        assignment_id: assignmentId,
-        student_id: studentId,
-        status: 'graded',
-        submitted_at: nowIso,
-        graded_at: nowIso,
-        text_response: summaryText,
-        points_awarded: pointsAwarded,
-        final_score: pointsAwarded,
-        percentage,
-        teacher_feedback: `Completed ${assignment.settings?.game_name || 'Game'} in ${safeTimeSeconds}s`
-      })
-      .select('id')
-      .single();
+    const newStatus = allLevelsCompleted ? 'graded' : 'submitted';
+    const feedbackText = `${completedLevelsCount}/${rawLevels.length} levels completed (${totalPointsEarned}/${assignmentTotalMax} pts)`;
 
-    if (subErr) {
-      if (subErr.code === '23505') {
-        return res.json({
-          success: true,
-          alreadySubmitted: true,
-          pointsAwarded: 0,
-          maxPoints: assignmentMax,
-          message: 'Score already recorded for this assignment.'
-        });
+    // 8. Save submission record (insert or update)
+    let submissionId = existingSubmission?.id || null;
+    if (existingSubmission) {
+      const { error: updErr } = await serverSupabase
+        .from('assignment_submissions')
+        .update({
+          status: newStatus,
+          graded_at: allLevelsCompleted ? nowIso : existingSubmission.graded_at,
+          text_response: summaryText,
+          points_awarded: totalPointsEarned,
+          teacher_feedback: feedbackText
+        })
+        .eq('id', existingSubmission.id);
+
+      if (updErr) throw updErr;
+    } else {
+      const { data: insertedSub, error: subErr } = await serverSupabase
+        .from('assignment_submissions')
+        .insert({
+          assignment_id: assignmentId,
+          classroom_id: classroomId,
+          student_id: studentId,
+          status: newStatus,
+          submitted_at: nowIso,
+          graded_at: allLevelsCompleted ? nowIso : null,
+          text_response: summaryText,
+          points_awarded: totalPointsEarned,
+          teacher_feedback: feedbackText
+        })
+        .select('id')
+        .single();
+
+      if (subErr) {
+        if (subErr.code === '23505') {
+          return res.status(409).json({
+            success: false,
+            error: 'Concurrent submission detected. Please retry.'
+          });
+        }
+        throw subErr;
       }
-      throw subErr;
+      submissionId = insertedSub?.id || null;
     }
 
-    // 6. Award classroom leaderboard points idempotently
+    // 9. Award classroom leaderboard points idempotently per level (with rollback on failure)
+    const levelSourceId = UUID_REGEX.test(resolvedLevelId) ? resolvedLevelId : assignmentId;
     if (pointsAwarded > 0) {
       const { data: existingPts } = await serverSupabase
         .from('classroom_points')
@@ -23377,7 +23553,7 @@ app.post('/api/games/submit-score', async (req, res) => {
         .eq('classroom_id', classroomId)
         .eq('student_id', studentId)
         .eq('source_type', 'activity')
-        .eq('source_id', assignmentId)
+        .eq('source_id', levelSourceId)
         .maybeSingle();
 
       if (!existingPts) {
@@ -23388,13 +23564,31 @@ app.post('/api/games/submit-score', async (req, res) => {
             student_id: studentId,
             points: pointsAwarded,
             source_type: 'activity',
-            source_id: assignmentId,
-            reason: `Game Library: ${assignment.title || assignment.settings?.game_name || gameId}`,
+            source_id: levelSourceId,
+            reason: `Game Library: ${assignment.title || assignment.settings?.game_name || gameId} (${targetLevel.title || `Level ${targetIndex + 1}`})`,
             awarded_by: studentId
           });
 
         if (ptsErr && ptsErr.code !== '23505') {
-          console.error('[games/submit-score] classroom_points insert error:', ptsErr);
+          console.error('[games/submit-score] classroom_points insert error, rolling back:', ptsErr);
+          if (existingSubmission) {
+            await serverSupabase
+              .from('assignment_submissions')
+              .update({
+                status: existingSubmission.status,
+                graded_at: existingSubmission.graded_at,
+                text_response: existingSubmission.text_response,
+                points_awarded: existingSubmission.points_awarded,
+                teacher_feedback: existingSubmission.teacher_feedback
+              })
+              .eq('id', existingSubmission.id);
+          } else if (submissionId) {
+            await serverSupabase.from('assignment_submissions').delete().eq('id', submissionId);
+          }
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to update classroom leaderboard points. Please retry.'
+          });
         }
       }
     }
@@ -23403,11 +23597,15 @@ app.post('/api/games/submit-score', async (req, res) => {
       success: true,
       alreadySubmitted: false,
       pointsAwarded,
-      maxPoints: assignmentMax,
+      maxPoints: levelMax,
       percentage,
       timeTakenSeconds: safeTimeSeconds,
-      submissionId: insertedSub?.id || null,
-      message: `Score saved! +${pointsAwarded} points added to the classroom leaderboard.`
+      submissionId,
+      levelId: resolvedLevelId,
+      completedLevelsCount,
+      totalLevels: rawLevels.length,
+      totalPointsEarned,
+      message: `${targetLevel.title || `Level ${targetIndex + 1}`} completed! +${pointsAwarded} points added to the classroom leaderboard.`
     });
   } catch (err) {
     console.error('[games/submit-score] error:', err);
