@@ -2,6 +2,7 @@ import { authenticatedFetch } from '@/lib/apiAuth';
 import { supabase } from '@/lib/supabase';
 import type { Assignment } from '@/types/classroom';
 import type {
+  ClassroomJigsawConfig,
   GameAssignmentSettings,
   GameCatalogItem,
   GameCompletionPayload,
@@ -9,8 +10,14 @@ import type {
   GameId,
   GameLevelDefinition,
   GameSubmissionResponse,
-  LevelUnlockMode
+  LevelUnlockMode,
+  LiquidSentencesConfig,
+  LuminaWordsConfig,
+  MemoryMatchConfig,
+  SaveTheBalloonConfig,
+  SavedLibraryGame
 } from '@/types/gameLibrary';
+import { createLevelId } from '@/utils/gameLevelUtils';
 
 export const GAME_CATALOG: GameCatalogItem[] = [
   {
@@ -138,6 +145,29 @@ export interface TeacherClassroomOption {
   grade_level?: string | null;
 }
 
+export function countGameContentItems(gameId: GameId, levels: GameLevelDefinition[]): number {
+  return levels.reduce((total, lvl) => {
+    const cfg = lvl.config;
+    switch (gameId) {
+      case 'liquid-sentences':
+        return total + ((cfg as LiquidSentencesConfig).sentences?.length || 0);
+      case 'save-the-balloon':
+        return total + ((cfg as SaveTheBalloonConfig).words?.length || 0);
+      case 'memory-match':
+        return total + ((cfg as MemoryMatchConfig).pairs?.length || 0);
+      case 'classroom-jigsaw': {
+        const jc = cfg as ClassroomJigsawConfig;
+        const count = jc.images?.length || (jc.imageDataUrl ? 1 : 0);
+        return total + count;
+      }
+      case 'lumina-words':
+        return total + ((cfg as LuminaWordsConfig).words?.length || 0);
+      default:
+        return total;
+    }
+  }, 0);
+}
+
 class GameLibraryService {
   async getTeacherClassrooms(): Promise<TeacherClassroomOption[]> {
     if (!supabase) return [];
@@ -183,6 +213,7 @@ class GameLibraryService {
     levels?: GameLevelDefinition[];
     unlockMode?: LevelUnlockMode;
     dailyLimit?: number;
+    libraryGameId?: string;
   }): Promise<{ data?: Assignment; error?: string }> {
     if (!supabase) return { error: 'Supabase is not configured' };
     const {
@@ -206,6 +237,7 @@ class GameLibraryService {
 
     const settings: GameAssignmentSettings = {
       is_game_library: true,
+      ...(params.libraryGameId ? { library_game_id: params.libraryGameId } : {}),
       game_id: params.gameId,
       game_name: catalogItem.name,
       unlock_mode: params.unlockMode || 'sequential',
@@ -245,6 +277,127 @@ class GameLibraryService {
     } catch (err: any) {
       console.error('[GameLibraryService] createGameAssignment error:', err);
       return { error: err?.message || 'Failed to publish game assignment.' };
+    }
+  }
+
+  async getSavedGames(): Promise<SavedLibraryGame[]> {
+    if (!supabase) return [];
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const { data, error } = await supabase
+      .from('teacher_game_library')
+      .select('*')
+      .eq('teacher_id', user.id)
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      console.error('[GameLibraryService] getSavedGames error:', error);
+      return [];
+    }
+    return (data || []) as SavedLibraryGame[];
+  }
+
+  async saveGameToLibrary(params: {
+    id?: string;
+    gameId: GameId;
+    title: string;
+    description?: string;
+    levels: GameLevelDefinition[];
+    unlockMode?: LevelUnlockMode;
+    dailyLimit?: number;
+    settings?: Record<string, unknown>;
+  }): Promise<{ data?: SavedLibraryGame; error?: string }> {
+    if (!supabase) return { error: 'Supabase is not configured' };
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+    if (!user) return { error: 'Authentication required' };
+
+    const catalogItem = getGameCatalogItem(params.gameId);
+    const normalizedLevels = params.levels.map((lvl, idx) => ({
+      ...lvl,
+      levelNumber: idx + 1,
+      points: Math.max(1, Math.round(lvl.points || 20))
+    }));
+
+    const payload = {
+      teacher_id: user.id,
+      game_id: params.gameId,
+      title: params.title.trim() || `${catalogItem.name} Challenge`,
+      description: (params.description ?? catalogItem.shortDescription).trim(),
+      thumbnail_url: catalogItem.thumbnailUrl,
+      unlock_mode: params.unlockMode || 'sequential',
+      daily_limit: Math.max(1, Number(params.dailyLimit || 1)),
+      levels: normalizedLevels,
+      settings: params.settings || {},
+      updated_at: new Date().toISOString()
+    };
+
+    try {
+      if (params.id) {
+        const { data, error } = await supabase
+          .from('teacher_game_library')
+          .update(payload)
+          .eq('id', params.id)
+          .eq('teacher_id', user.id)
+          .select()
+          .single();
+        if (error) throw error;
+        return { data: data as SavedLibraryGame };
+      }
+
+      const { data, error } = await supabase
+        .from('teacher_game_library')
+        .insert(payload)
+        .select()
+        .single();
+      if (error) throw error;
+      return { data: data as SavedLibraryGame };
+    } catch (err: any) {
+      console.error('[GameLibraryService] saveGameToLibrary error:', err);
+      return { error: err?.message || 'Failed to save game to library.' };
+    }
+  }
+
+  async duplicateSavedGame(game: SavedLibraryGame): Promise<{ data?: SavedLibraryGame; error?: string }> {
+    const clonedLevels: GameLevelDefinition[] = (game.levels || []).map((lvl, idx) => ({
+      ...JSON.parse(JSON.stringify(lvl)),
+      id: createLevelId(),
+      levelNumber: idx + 1
+    }));
+
+    return this.saveGameToLibrary({
+      gameId: game.game_id,
+      title: `${game.title} (Copy)`,
+      description: game.description,
+      levels: clonedLevels,
+      unlockMode: game.unlock_mode,
+      dailyLimit: game.daily_limit,
+      settings: game.settings ? JSON.parse(JSON.stringify(game.settings)) : {}
+    });
+  }
+
+  async deleteSavedGame(id: string): Promise<{ success: boolean; error?: string }> {
+    if (!supabase) return { success: false, error: 'Supabase is not configured' };
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: 'Authentication required' };
+
+    try {
+      const { error } = await supabase
+        .from('teacher_game_library')
+        .delete()
+        .eq('id', id)
+        .eq('teacher_id', user.id);
+      if (error) throw error;
+      return { success: true };
+    } catch (err: any) {
+      console.error('[GameLibraryService] deleteSavedGame error:', err);
+      return { success: false, error: err?.message || 'Failed to delete saved game.' };
     }
   }
 

@@ -29,7 +29,7 @@ import {
 import { GameLibraryModal } from '@/components/classes/games/GameLibraryModal';
 import { GamePlayerModal } from '@/components/classes/games/GamePlayerModal';
 import { GameLevelSelectModal } from '@/components/classes/games/GameLevelSelectModal';
-import type { GameConfig, GameId, GameLevelDefinition } from '@/types/gameLibrary';
+import type { GameConfig, GameId, GameLevelDefinition, SavedLibraryGame } from '@/types/gameLibrary';
 import {
   Classroom,
   ClassroomMember,
@@ -170,6 +170,8 @@ export const ClassroomDetailPage: React.FC = () => {
   // Game Library Phase 1 State
   const [gameLibraryModalOpen, setGameLibraryModalOpen] = useState(false);
   const [initialGameIdForLibrary, setInitialGameIdForLibrary] = useState<GameId | null>(null);
+  const [editingSavedGame, setEditingSavedGame] = useState<SavedLibraryGame | null>(null);
+  const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
   const [activeGameAssignment, setActiveGameAssignment] = useState<Assignment | null>(null);
   const [activeGamePlay, setActiveGamePlay] = useState<{
     gameId: GameId;
@@ -2621,12 +2623,28 @@ export const ClassroomDetailPage: React.FC = () => {
         classroomId={classroom.id}
         isTeacher={isTeacher}
         onClose={() => setChallengeListModalOpen(false)}
-        onUpdated={loadAllClassroomData}
+        onUpdated={() => loadAllClassroomData(true)}
         gameAssignments={assignments.filter((a) => Boolean(a.settings?.is_game_library))}
         onOpenGameLibrary={(gameId) => {
+          setEditingSavedGame(null);
           setInitialGameIdForLibrary(gameId || null);
           setGameLibraryModalOpen(true);
         }}
+        onEditSavedGame={(savedGame) => {
+          setInitialGameIdForLibrary(null);
+          setEditingSavedGame(savedGame);
+          setGameLibraryModalOpen(true);
+        }}
+        onPreviewGame={(gameId, title, config, points = 100) => {
+          setActiveGamePlay({
+            gameId,
+            title,
+            config,
+            maxPoints: points,
+            isPreview: true
+          });
+        }}
+        libraryRefreshKey={libraryRefreshKey}
         onPlayGameAssignment={(a) => {
           if (a.settings?.is_game_library) {
             setActiveGameAssignment(a);
@@ -2737,12 +2755,15 @@ export const ClassroomDetailPage: React.FC = () => {
           onClose={() => {
             setGameLibraryModalOpen(false);
             setInitialGameIdForLibrary(null);
+            setEditingSavedGame(null);
           }}
           classroomId={classroom.id}
           classroomName={classroom.title}
           isTeacher={isTeacher}
           assignments={assignments}
           initialGameId={initialGameIdForLibrary}
+          editingSavedGame={editingSavedGame}
+          onSavedToLibrary={() => setLibraryRefreshKey((k) => k + 1)}
           onPlayAssignment={(a) => {
             if (!a.settings?.is_game_library) return;
             setGameLibraryModalOpen(false);

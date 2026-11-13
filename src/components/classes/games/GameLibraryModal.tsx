@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft,
+  BookmarkCheck,
   Calendar,
   CheckCircle2,
   Gamepad2,
   Loader2,
   Play,
+  Save,
   Send,
   Sparkles,
   Trophy,
@@ -28,7 +30,8 @@ import type {
   LiquidSentencesConfig,
   LuminaWordsConfig,
   MemoryMatchConfig,
-  SaveTheBalloonConfig
+  SaveTheBalloonConfig,
+  SavedLibraryGame
 } from '@/types/gameLibrary';
 import { createLevelId } from '@/utils/gameLevelUtils';
 import { GameLevelManager } from './GameLevelManager';
@@ -41,9 +44,11 @@ interface GameLibraryModalProps {
   isTeacher: boolean;
   assignments: Assignment[];
   initialGameId?: GameId | null;
+  editingSavedGame?: SavedLibraryGame | null;
   onPlayAssignment: (assignment: Assignment) => void;
   onPreviewGame: (gameId: GameId, title: string, config: GameConfig, points?: number) => void;
   onPublished: (targetClassroomId: string) => void;
+  onSavedToLibrary?: (savedGame: SavedLibraryGame) => void;
 }
 
 type TeacherStep = 'select' | 'configure' | 'assign';
@@ -153,18 +158,23 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
   isTeacher,
   assignments,
   initialGameId = null,
+  editingSavedGame = null,
   onPlayAssignment,
   onPreviewGame,
-  onPublished
+  onPublished,
+  onSavedToLibrary
 }) => {
   const [step, setStep] = useState<TeacherStep>('select');
   const [selectedGameId, setSelectedGameId] = useState<GameId>('liquid-sentences');
+  const [editingLibraryId, setEditingLibraryId] = useState<string | null>(null);
   const [levels, setLevels] = useState<GameLevelDefinition[]>(() =>
     createInitialLevels('liquid-sentences')
   );
   const [unlockMode, setUnlockMode] = useState<LevelUnlockMode>('sequential');
   const [dailyLimit, setDailyLimit] = useState<number>(1);
   const [configError, setConfigError] = useState<string | null>(null);
+  const [savingLibrary, setSavingLibrary] = useState(false);
+  const [librarySaveMessage, setLibrarySaveMessage] = useState<string | null>(null);
 
   // Step 3: Assign fields
   const [classrooms, setClassrooms] = useState<TeacherClassroomOption[]>([]);
@@ -178,17 +188,34 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
     if (!isOpen) return;
     setConfigError(null);
     setPublishError(null);
+    setLibrarySaveMessage(null);
     setTargetClassroomId(classroomId);
-    setUnlockMode('sequential');
-    setDailyLimit(1);
 
-    if (isTeacher && initialGameId) {
+    if (isTeacher && editingSavedGame) {
+      setEditingLibraryId(editingSavedGame.id);
+      setSelectedGameId(editingSavedGame.game_id);
+      setLevels(
+        editingSavedGame.levels && editingSavedGame.levels.length > 0
+          ? JSON.parse(JSON.stringify(editingSavedGame.levels))
+          : createInitialLevels(editingSavedGame.game_id)
+      );
+      setUnlockMode(editingSavedGame.unlock_mode || 'sequential');
+      setDailyLimit(editingSavedGame.daily_limit || 1);
+      setGameTitle(editingSavedGame.title);
+      setStep('configure');
+    } else if (isTeacher && initialGameId) {
       const item = getGameCatalogItem(initialGameId);
+      setEditingLibraryId(null);
       setSelectedGameId(initialGameId);
       setLevels(createInitialLevels(initialGameId));
+      setUnlockMode('sequential');
+      setDailyLimit(1);
       setGameTitle(`${item.name} Challenge`);
       setStep('configure');
     } else {
+      setEditingLibraryId(null);
+      setUnlockMode('sequential');
+      setDailyLimit(1);
       setStep('select');
     }
 
@@ -354,6 +381,32 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
     setStep('assign');
   };
 
+  const handleSaveToLibrary = async () => {
+    const validLevels = validateAllLevels();
+    if (!validLevels) return;
+    const titleToSave = gameTitle.trim() || `${getGameCatalogItem(selectedGameId).name} Challenge`;
+    setSavingLibrary(true);
+    setLibrarySaveMessage(null);
+    const saved = await gameLibraryService.saveGameToLibrary({
+      id: editingLibraryId || undefined,
+      gameId: selectedGameId,
+      title: titleToSave,
+      levels: validLevels,
+      unlockMode,
+      dailyLimit
+    });
+    setSavingLibrary(false);
+    if (saved.error || !saved.data) {
+      setConfigError(saved.error || 'Failed to save game to library.');
+      return;
+    }
+    setEditingLibraryId(saved.data.id);
+    setGameTitle(saved.data.title);
+    setLevels(validLevels);
+    setLibrarySaveMessage('Saved to your Game Library');
+    onSavedToLibrary?.(saved.data);
+  };
+
   const handlePublish = async (e: React.FormEvent) => {
     e.preventDefault();
     const validLevels = validateAllLevels();
@@ -370,6 +423,20 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
     setPublishing(true);
     setPublishError(null);
 
+    // Automatically save/update the game in the teacher's personal Game Library
+    const libResult = await gameLibraryService.saveGameToLibrary({
+      id: editingLibraryId || undefined,
+      gameId: selectedGameId,
+      title: gameTitle.trim(),
+      levels: validLevels,
+      unlockMode,
+      dailyLimit
+    });
+    if (libResult.data) {
+      setEditingLibraryId(libResult.data.id);
+      onSavedToLibrary?.(libResult.data);
+    }
+
     const dueIso = dueDate ? new Date(dueDate).toISOString() : null;
     const result = await gameLibraryService.createGameAssignment({
       classroomId: targetClassroomId,
@@ -379,7 +446,8 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
       dueDate: dueIso,
       levels: validLevels,
       unlockMode,
-      dailyLimit
+      dailyLimit,
+      libraryGameId: libResult.data?.id
     });
 
     setPublishing(false);
@@ -486,6 +554,25 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
                   {configError}
                 </div>
               )}
+              {librarySaveMessage && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold flex items-center gap-2">
+                  <BookmarkCheck className="w-4 h-4 shrink-0" />
+                  <span>{librarySaveMessage}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Game Title (saved in your Game Library)
+                </label>
+                <input
+                  type="text"
+                  value={gameTitle}
+                  onChange={(e) => setGameTitle(e.target.value)}
+                  placeholder={`e.g., ${currentCatalog.name} Challenge`}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold"
+                />
+              </div>
 
               <GameLevelManager
                 gameId={selectedGameId}
@@ -589,7 +676,7 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
                 >
                   Back to Games
                 </button>
-                <div className="flex items-center gap-2.5">
+                <div className="flex flex-wrap items-center gap-2.5">
                   <button
                     type="button"
                     onClick={() => levels[0] && handlePreviewLevel(levels[0])}
@@ -597,6 +684,19 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
                   >
                     <Play className="w-3.5 h-3.5" />
                     Preview Level 1
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveToLibrary}
+                    disabled={savingLibrary}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-60 text-xs font-bold"
+                  >
+                    {savingLibrary ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Save className="w-3.5 h-3.5" />
+                    )}
+                    {editingLibraryId ? 'Update Library' : 'Save to Library'}
                   </button>
                   <button
                     type="button"

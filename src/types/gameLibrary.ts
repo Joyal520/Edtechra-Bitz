@@ -89,12 +89,28 @@ export interface GameCatalogItem {
 
 export interface GameAssignmentSettings {
   is_game_library: true;
+  library_game_id?: string;
   game_id: GameId;
   game_name: string;
   unlock_mode?: LevelUnlockMode;
   daily_limit?: number;
   levels?: GameLevelDefinition[];
   game_config?: GameConfig;
+}
+
+export interface SavedLibraryGame {
+  id: string;
+  teacher_id: string;
+  game_id: GameId;
+  title: string;
+  description: string;
+  thumbnail_url: string;
+  unlock_mode: LevelUnlockMode;
+  daily_limit: number;
+  levels: GameLevelDefinition[];
+  settings?: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface CompletedLevelRecord {
