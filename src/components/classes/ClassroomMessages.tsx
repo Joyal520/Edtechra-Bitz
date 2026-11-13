@@ -640,8 +640,46 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
           item.onAction ? 'cursor-pointer group' : ''
         } flex flex-col gap-2`}
       >
+        {/* Mobile-only Simplified Game Announcement Card */}
+        {item.type === 'game' && (
+          <div className="flex flex-col items-center text-center gap-3.5 py-1.5 px-1 sm:hidden">
+            {item.rawItem?.settings?.game_id && (
+              <div className="w-44 h-44 aspect-square rounded-2xl overflow-hidden border-2 border-white ring-1 ring-sky-200 shadow-md shrink-0">
+                <img
+                  src={getGameCatalogItem(item.rawItem.settings.game_id as GameId).thumbnailUrl}
+                  alt={String(item.rawItem.settings.game_name || item.title)}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            )}
+            <h4 className="text-base font-black text-slate-900 leading-snug px-2">
+              {item.title}
+            </h4>
+            {item.onAction && (
+              item.isCompleted && !isTeacher ? (
+                <span className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-sm font-black">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Completed</span>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    item.onAction?.();
+                  }}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white text-sm font-black shadow-md shadow-sky-600/20 active:scale-[0.98] transition cursor-pointer"
+                >
+                  <Play className="w-4 h-4 fill-current" />
+                  <span>{isTeacher ? 'View Results' : 'Play Game'}</span>
+                </button>
+              )
+            )}
+          </div>
+        )}
+
         {/* Top Header: [ICON] TYPE • Status (Left) | Relative Time & Mark as read (Right) */}
-        <div className="flex items-center justify-between gap-2 w-full">
+        <div className={`${item.type === 'game' ? 'hidden sm:flex' : 'flex'} items-center justify-between gap-2 w-full`}>
           <div className="flex items-center gap-2 min-w-0 flex-wrap">
             <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 border shadow-2xs ${iconBg}`}>
               {icon}
@@ -673,7 +711,7 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
         </div>
 
         {/* Middle Row: Title (with Action Arrow / Play Game CTA) & Description */}
-        <div className="flex items-start justify-between gap-3.5">
+        <div className={`${item.type === 'game' ? 'hidden sm:flex' : 'flex'} items-start justify-between gap-3.5`}>
           {item.type === 'game' && item.rawItem?.settings?.game_id && (
             <img
               src={getGameCatalogItem(item.rawItem.settings.game_id as GameId).thumbnailUrl}
@@ -742,7 +780,7 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
         </div>
 
         {/* Bottom Row: Compact Metadata (Middle dot separated) */}
-        <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600 font-medium pt-1.5 border-t border-slate-200/60">
+        <div className={`${item.type === 'game' ? 'hidden sm:flex' : 'flex'} items-center gap-2 flex-wrap text-xs text-slate-600 font-medium pt-1.5 border-t border-slate-200/60`}>
           {item.scheduledAt && (
             <span className="font-semibold text-slate-800">
               {formatScheduledDate(item.scheduledAt)}

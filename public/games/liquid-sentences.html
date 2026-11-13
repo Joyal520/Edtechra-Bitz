@@ -18,7 +18,7 @@ button{font:inherit;color:inherit;cursor:pointer}.hidden{display:none!important}
 .bg i:nth-child(3){width:36vmax;height:36vmax;left:20vw;bottom:-18vmax;background:#ec4899;animation-delay:-11s;opacity:.4}
 @keyframes float{to{transform:translate(6vmax,5vmax) scale(1.12)}}
 .glass{background:var(--glass);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--line);border-radius:22px;box-shadow:0 12px 40px rgba(0,0,0,.35)}
-#game{position:fixed;inset:0}
+#game{position:fixed;inset:0;touch-action:none}
 .hud{position:fixed;z-index:6;top:calc(10px + env(safe-area-inset-top,0px));left:10px;right:10px;display:flex;justify-content:space-between;gap:8px;pointer-events:none}
 .hud>div{display:flex;gap:8px;pointer-events:auto}
 .chip{padding:8px 14px;font-weight:800;font-size:14px;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -33,10 +33,10 @@ button{font:inherit;color:inherit;cursor:pointer}.hidden{display:none!important}
 #labL{position:fixed;inset:0;z-index:3;pointer-events:none}
 .blob,.lab,.tail{position:absolute;left:0;top:0;will-change:transform}
 .blob{transition:background-color .3s}.tail{border-radius:50%;background:#67e8f9;opacity:0;transition:opacity .2s}
-.lab{pointer-events:auto;cursor:grab;touch-action:none;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.35);white-space:nowrap;border-radius:999px;transition:opacity .3s}
+.lab{pointer-events:auto;cursor:grab;touch-action:none;-webkit-user-drag:none;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.35);white-space:nowrap;border-radius:999px;transition:opacity .3s}
 .lab::before{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(180deg,rgba(255,255,255,.38),rgba(255,255,255,0) 48%,rgba(0,0,0,.2));transition:opacity .5s}
 .lab::after{content:"";position:absolute;left:12%;top:11%;width:34%;height:16%;border-radius:50%;background:rgba(255,255,255,.55);filter:blur(1px);transition:opacity .5s}
-.lab.merged::before,.lab.merged::after{opacity:0}.lab.dragging{cursor:grabbing}
+.lab.merged::before,.lab.merged::after{opacity:0}.lab.dragging{cursor:grabbing;z-index:20}
 #fx{position:fixed;inset:0;z-index:8;pointer-events:none;width:100%;height:100%}
 #bar{position:fixed;z-index:6;bottom:calc(14px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);display:flex;gap:8px;padding:8px}
 .pill{padding:10px 16px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.08);font-weight:800;font-size:14px;transition:transform .15s cubic-bezier(.34,1.56,.64,1),background .2s}.pill:hover{background:rgba(255,255,255,.16)}.pill:active{transform:scale(.92)}
@@ -170,16 +170,16 @@ function load(){clearChips();S.merged=false;S.locked=true;S.wrong=0;S.words=S.li
 
 /* ---------- INTERACTION ---------- */
 const labL=$("labL");
-labL.addEventListener("pointerdown",e=>{const c=e.target.closest(".lab")?.__c;if(!c||S.locked||S.press)return;A.init();e.target.closest(".lab").setPointerCapture(e.pointerId);S.press={c,id:e.pointerId,sx:e.clientX,sy:e.clientY,ox:e.clientX-c.x,oy:e.clientY-c.y,on:false}});
+labL.addEventListener("pointerdown",e=>{const el=e.target.closest(".lab"),c=el?.__c;if(!c||S.locked||S.press)return;A.init();try{el.setPointerCapture(e.pointerId)}catch{}S.press={c,id:e.pointerId,sx:e.clientX,sy:e.clientY,ox:e.clientX-c.x,oy:e.clientY-c.y,on:false}});
 addEventListener("pointermove",e=>{const p=S.press;if(!p||e.pointerId!==p.id)return;const c=p.c;
-  if(!p.on){if(Math.hypot(e.clientX-p.sx,e.clientY-p.sy)<7)return;p.on=true;S.drag=c;S.tray=S.tray.filter(x=>x!==c);S.pool=S.pool.filter(x=>x!==c);c.ts=1.1;c.l.classList.add("dragging");$("gooL").appendChild(c.b);labL.appendChild(c.l);tails.forEach(t=>{t.__x=c.x+c.w/2;t.__y=c.y+c.h/2;t.style.opacity=.95});A.pick()}
+  if(!p.on){if(Math.hypot(e.clientX-p.sx,e.clientY-p.sy)<7)return;p.on=true;S.drag=c;S.tray=S.tray.filter(x=>x!==c);S.pool=S.pool.filter(x=>x!==c);c.ts=1.1;c.l.classList.add("dragging");$("gooL").appendChild(c.b);tails.forEach(t=>{t.__x=c.x+c.w/2;t.__y=c.y+c.h/2;t.style.opacity=.95});A.pick()}
   c.tx=e.clientX-p.ox;c.ty=e.clientY-p.oy;hover(e.clientX,e.clientY);relayout()});
 function hover(px,py){const T=S.R.tray,z=px>T.x-10&&px<T.x+T.w+10&&py>T.y-10&&py<T.y+T.h+10?"tray":"pool",list=z==="tray"?S.tray:S.pool,pos=place(list,S.R[z],null,false,z==="pool");let idx=list.length;
   for(let i=0;i<pos.length;i++){const p=pos[i];if(py<p.y-S.gap/2||(py<=p.y+p.h+S.gap/2&&px<p.x+p.w/2)){idx=i;break}}S.hover=z;S.hoverIdx=idx}
 function release(e){const p=S.press;if(!p||(e&&e.pointerId!==p.id))return;S.press=null;const c=p.c;
-  if(p.on){const z=S.hover||"pool",list=z==="tray"?S.tray:S.pool;list.splice(clamp(S.hoverIdx,0,list.length),0,c);S.drag=null;S.hover=null;c.ts=1;c.l.classList.remove("dragging");tails.forEach(t=>t.style.opacity=0);relayout();landed(c,z)}
+  if(p.on){const T=S.R.tray,inTray=c.y+c.h/2<T.y+T.h+10,z=S.hover||(inTray?"tray":"pool"),list=z==="tray"?S.tray:S.pool,idx=clamp(S.hoverIdx??list.length,0,list.length);list.splice(idx,0,c);S.drag=null;S.hover=null;S.hoverIdx=0;c.ts=1;c.l.classList.remove("dragging");tails.forEach(t=>t.style.opacity=0);relayout();landed(c,z)}
   else{const toTray=S.pool.includes(c);S.pool=S.pool.filter(x=>x!==c);S.tray=S.tray.filter(x=>x!==c);(toTray?S.tray:S.pool).push(c);c.vy=-5;relayout();A.tap();if(toTray)landed(c,"tray",true)}}
-addEventListener("pointerup",release);addEventListener("pointercancel",release);
+addEventListener("pointerup",release);addEventListener("pointercancel",release);addEventListener("blur",()=>{if(S.press)release({pointerId:S.press.id})});
 function landed(c,z,quiet){if(z==="tray"){if(!quiet)A.place();ring(c.tx+c.w/2,c.ty+c.h/2,c.col);drops(c.tx+c.w/2,c.ty+c.h/2,6,c.col)}else if(!quiet)A.tap();check()}
 function later(fn,ms){const r=S.round;return setTimeout(()=>{if(r===S.round)fn()},ms)}
 function check(){if(S.locked||S.drag||S.pending||S.tray.length!==S.chips.length)return;S.pending=true;
