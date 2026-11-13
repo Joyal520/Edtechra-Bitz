@@ -249,19 +249,19 @@ window.addEventListener("message",ev=>{
   edtechraBridge.active=true;
   edtechraBridge.maxPoints=Number(p.maxPoints)||100;
   edtechraBridge.reported=false;
-  if(p.mode==="student"||p.mode==="preview"){
-    $("setup").classList.add("hidden");
-    $("bMenu").classList.add("hidden");
-    $("bEdit").classList.add("hidden");
-  }
   const items=Array.isArray(cfg.sentences)?cfg.sentences:[];
   const parsed=items.map(it=>{
-    const text=(typeof it==="string"?it:(it.sentence||"")).trim().replace(/\s+/g," ");
+    const text=(typeof it==="string"?it:(it.text||it.sentence||"")).trim().replace(/\s+/g," ");
     const hint=typeof it==="string"?"":(it.hint||"").trim();
     const w=text?text.split(" "):[];
     return w.length>=2?{w,h:hint}:null;
   }).filter(Boolean);
   if(!parsed.length)return;
+  if(p.mode==="student"||p.mode==="preview"){
+    $("setup").classList.add("hidden");
+    $("bMenu").classList.add("hidden");
+    $("bEdit").classList.add("hidden");
+  }
   S.set=parsed;
   S.showHints=cfg.showHints!==false;
   S.timer=cfg.showTimer!==false;
