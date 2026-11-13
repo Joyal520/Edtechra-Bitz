@@ -136,7 +136,7 @@ import { gradeTaskSubmission, TASK_CATEGORIES } from './server/hybridGradingServ
 import { generateEvaluationReportPdf } from './server/pdfReportService.mjs';
 import { getR2Config } from './server/r2Config.mjs';
 import { moderatePostContent } from './server/moderationService.mjs';
-import { generateArticleCoverImage, buildArticleImagePrompt, generateQuizCoverImage } from './server/geminiImageService.mjs';
+import { generateArticleCoverImage, buildArticleImagePrompt, generateQuizCoverImage, uploadCustomQuizCoverToSupabase } from './server/geminiImageService.mjs';
 import {
   loadVocabularyCache,
   saveVocabularyCache,
@@ -5834,37 +5834,40 @@ function sanitizeQuizOptionText(opt, fallbackIdx = 0) {
   return text.slice(0, 110);
 }
 
-function buildDifficultyRulesBlock(difficulty = 'Medium', topic = '') {
+function buildDifficultyRulesBlock(difficulty = 'Medium', topic = '', studentLevel = 'Beginner') {
   const normTopic = String(topic || '').toLowerCase();
   const isObjectPronouns = normTopic.includes('object pronoun');
+  const cleanLevel = String(studentLevel || 'Beginner').trim();
 
   if (difficulty === 'Easy') {
-    return `DIFFICULTY LEVEL: EASY (Basic Recognition, Simple Sentences, Direct Identification)
-- Cognitive demand: Basic recognition, direct identification, or simple noun-to-pronoun replacement in short, clear single-clause sentences.
-- Sentence complexity: Short, everyday sentences (6–14 words) with unambiguous context.
+    return `DIFFICULTY LEVEL: EASY (Student Level: ${cleanLevel})
+- Target length: Keep EVERY question short and fast to read (STRICTLY 5–12 words in the sentence, readable in under 5 seconds).
+- Style: Familiar everyday people and objects, one clear short sentence, basic recognition, simple everyday vocabulary.
 ${
   isObjectPronouns
-    ? `- Topic constraint (Object Pronouns): Directly assess recognizing and choosing me, you, him, her, it, us, them after verbs or prepositions, or replacing a single noun with the matching object pronoun.`
-    : `- Focus on foundational recognition and direct identification of ${topic}.`
+    ? `- Topic constraint (Object Pronouns): Use short direct sentences testing me, you, him, her, it, us, them after common verbs or prepositions (e.g., "Please help ____." or "I see Ali. I know ____.").`
+    : `- Focus on basic recognition and direct understanding of ${topic} with simple words.`
 }`;
   }
 
   if (difficulty === 'Hard') {
-    return `DIFFICULTY LEVEL: HARD (Complex Sentences, Error Identification, Contextual Application, Grammatical Analysis)
-- Cognitive demand: Multi-clause sentences, grammatical error identification, compound object structures, subtle case distinctions, and analytical application. Do NOT merely use harder vocabulary—increase actual grammatical/analytical complexity.
+    return `DIFFICULTY LEVEL: HARD (Student Level: ${cleanLevel})
+- Target length: Concise everyday sentences (8–18 words max). NEVER write long paragraphs.
+- Style: Harder thinking without complicated vocabulary! Use simple everyday words, two connected short ideas, choosing which full sentence is correct, spotting a wrong pronoun in everyday speech, or picking the right reply in a 2-line chat.
 ${
   isObjectPronouns
-    ? `- Topic constraint (Object Pronouns): Assess complex applications of me, you, him, her, it, us, them, whom—such as compound objects ("between you and me", "invited Clara and me"), error identification in multi-clause sentences, appositives renaming direct objects, infinitive/gerund objects, elliptical comparisons ("affected them more than me"), and distinguishing object pronouns from reflexive or subject pronouns.`
-    : `- Include error identification, multi-step contextual analysis, and complex sentence structures testing ${topic}.`
+    ? `- Topic constraint (Object Pronouns): Test trickier everyday thinking with me, you, him, her, it, us, them—like choosing the right full sentence ("The coach asked Maya and ____.", "Between you and ____...") or choosing between two people/things in context—using ONLY simple school words.`
+    : `- Increase reasoning challenge around ${topic} while keeping vocabulary simple and beginner-friendly.`
 }`;
   }
 
-  return `DIFFICULTY LEVEL: MEDIUM (Sentence Completion, Choosing Correct Forms in Context, Contextual Usage)
-- Cognitive demand: Multi-clause sentence completion, contextual selection, compound objects or indirect + direct object pairs, and distinguishing target forms from distractors in realistic context.
+  return `DIFFICULTY LEVEL: MEDIUM (Student Level: ${cleanLevel})
+- Target length: Short, natural everyday sentences (STRICTLY 8–15 words, easy to read during a 20-second timer).
+- Style: Everyday situations (school, home, friends, sports), varied sentence patterns, or a short 2-line question and answer.
 ${
   isObjectPronouns
-    ? `- Topic constraint (Object Pronouns): Assess contextual completion and placement of me, you, him, her, it, us, them across two-clause sentences, dialogues, indirect objects, and prepositional phrases.`
-    : `- Focus on contextual sentence completion and practical application of ${topic}.`
+    ? `- Topic constraint (Object Pronouns): Test me, you, him, her, it, us, them in short everyday situations and natural replies (e.g., "Sam dropped his pen. Pick ____ up." or "Ana and I are ready. Wait for ____.").`
+    : `- Focus on clear everyday application of ${topic} in short sentences.`
 }`;
 }
 
@@ -5873,90 +5876,88 @@ function buildStrictQuizSystemPrompt({
   topic,
   difficulty,
   targetCount,
-  studentLevel = '',
-  learningObjectives = ''
+  studentLevel = 'Beginner',
+  learningObjectives = '',
+  durationSec = 20
 }) {
   const normTopic = String(topic || '').toLowerCase();
+  const cleanLevel = String(studentLevel || 'Beginner').trim();
   const isGrammarOrPronoun =
     String(category || '').toLowerCase().includes('grammar') ||
     String(category || '').toLowerCase().includes('english') ||
     normTopic.includes('pronoun');
 
   const conceptDistinctionBlock = isGrammarOrPronoun
-    ? `\nCONCEPT BOUNDARY & GRAMMAR DISTINCTION (PART 12.B — MANDATORY):
-Distinguish strictly between:
-- Subject pronouns (I, you, he, she, it, we, they) — perform the action of the verb.
-- Object pronouns (me, you, him, her, it, us, them, whom) — receive the action of a verb or follow a preposition.
-- Possessive adjectives (my, your, his, her, its, our, their) — modify a noun.
-- Possessive pronouns (mine, yours, his, hers, its, ours, theirs) — stand alone without a noun.
-- Reflexive pronouns (myself, yourself, himself, herself, itself, ourselves, yourselves, themselves) — refer back to the clause subject.
-NEVER test a subject-pronoun blank inside an Object Pronouns quiz (or vice versa) unless the topic explicitly requests a comparison.`
+    ? `\nCONCEPT BOUNDARY (MANDATORY):
+Keep topic boundaries strict so unrelated grammar forms are never tested:
+- Subject words: I, you, he, she, it, we, they (do the action before a verb).
+- Object pronouns: me, you, him, her, it, us, them (receive the action after a verb or word like to/for/with).
+- Ownership words: my, your, his, her, its, our, their / mine, yours, hers, ours, theirs.
+- "-self" words: myself, yourself, himself, herself, itself, ourselves, themselves.
+NEVER put a blank in the subject slot (like "____ helped Tom") or ownership slot (like "shared ____ notes") inside an Object Pronouns quiz.`
     : '';
 
   const objectPronounGuard = normTopic.includes('object pronoun')
     ? `\nMANDATORY TOPIC LOCK FOR OBJECT PRONOUNS:
-- Every single question MUST exclusively assess English Object Pronouns: me, you, him, her, it, us, them (and whom where appropriate for Hard).
-- Assess: (a) me, you, him, her, it, us, them; (b) correct placement of object pronouns after transitive verbs and prepositions; (c) replacing object nouns/noun phrases with object pronouns; (d) correct usage in sentences and short dialogues.
-- UNAMBIGUOUS SINGLE CORRECT ANSWER RULE: Every sentence MUST include a clear antecedent noun (e.g. "Sarah lost her keys; have you seen ___?" or "The teacher praised Tom and Maya; she thanked ___") and the 3 distractor options MUST be grammatically wrong cases or wrong number (e.g. ["them", "they", "their", "it"] or ["him", "he", "his", "himself"]). NEVER give 4 bare object pronouns like ["me", "you", "him", "her"] where multiple options could fit the blank!
-- STRICT PROHIBITION: Do NOT put the blank in subject position (e.g., "___ help each other" is a Subject Pronoun question and is FORBIDDEN here). Do NOT test unrelated verb tenses, articles, or prepositions.`
+- EVERY single question MUST test English object pronouns (me, you, him, her, it, us, them).
+- Give ONE clear person/people/thing in the question so ONLY ONE option fits (e.g., "Sara is nice. We like ____." with ["her", "she", "hers", "they"]). NEVER offer 4 bare object pronouns where two different genders/people could both fit!
+- For "Choose the correct sentence" questions, provide 4 full sentences where EXACTLY ONE is natural and grammatically right and 3 clearly use the wrong pronoun (e.g., A. "She saw Tom and I." B. "She saw Tom and me." C. "She saw Tom and my." D. "She saw Tom and we.").`
     : '';
 
-  const formatVarietyBlock = `
-QUESTION VARIETY & FORMAT MIX (PART 12.C — DO NOT REPEAT THE SAME PATTERN):
-Mix appropriate formats across the ${targetCount} questions instead of repeating one sentence template:
-1. "sentence_completion" — Complete a contextual sentence with the target form.
-2. "pronoun_identification" / "concept_application" — Identify which word/phrase functions as the target concept.
-3. "error_identification" — Spot and correct a grammatical error in context.
-4. "sentence_replacement" — Replace an underlined/bracketed noun phrase with the correct form.
-5. "context_selection" — Choose the grammatically accurate continuation in an unfamiliar context.
-6. "correct_sentence" — Identify which of 4 complete sentences uses the target concept correctly.
-7. "short_dialogue" — Choose the natural, grammatically correct reply in a brief 2-turn conversation.
-8. "practical_application" — Apply the rule in realistic academic or everyday writing.`;
+  return `You are a supportive classroom teacher creating a live quiz for ${cleanLevel} English learners and school students.
+Return ONLY valid JSON.
 
-  return `You are an expert EdTechra Curriculum & Assessment Architect.
-Your task is to generate an educationally controlled, topic-accurate Live Quiz in strict JSON format.
+PART 14 BEGINNER-FRIENDLY WRITING RULES (MANDATORY):
+1. SIMPLE EVERYDAY ENGLISH:
+   - Write short, natural sentences students can understand within ~5 seconds (Timer is ${durationSec}s).
+   - Use familiar everyday topics (friends, class, family, pets, books, games, food).
+2. ZERO TECHNICAL GRAMMAR JARGON (CRITICAL):
+   - NEVER use technical words in questions, options, hints, or explanations!
+   - Strictly FORBIDDEN words: "transitive verb", "intransitive verb", "antecedent", "noun phrase", "possessive adjective", "possessive determiner", "reflexive pronoun", "grammatical function", "grammatical role", "grammatical usage", "sentence structure analysis", "error identification", "elliptical comparison", "appositive", "subject case", "object case".
+   - Instead write plain explanations like: "'Them' refers to Tom and Maya and comes after the verb 'thanked'." or "Use 'me' after 'for', not 'I'."
+3. ZERO CATEGORY LABELS IN QUESTIONS (CRITICAL):
+   - NEVER begin a question with labels like "Sentence replacement:", "Context selection:", "Error identification:", "Short dialogue:", "Correct sentence:", "Practical application:", "Contextual usage:", or "Pronoun identification:".
+   - Put AT MOST ONE simple direct instruction (or zero colons!) when helpful, e.g. "Choose the correct word: Anna called ____." or "Choose the correct sentence." or simply "Look at that dog. Do you like ____?".
+   - NEVER put more than ONE colon (:) in a question.
+4. QUESTION VARIETY WITHOUT LABELS:
+   Across ${targetCount} questions, naturally mix:
+   - Direct fill-in-the-blank: "Dad cooked lunch for ____."
+   - Short 2-line question/reply: "Did you see Leo? — Yes, I met ____ at noon."
+   - Full-sentence choice: "Choose the correct sentence." with 4 sentences as options.
+   - Word replacement: "Replace 'Maya and me' with one word: The teacher helped ____."
+   - Do NOT repeat the same sentence frame twice (never repeat "The coach praised..." or "John helped Mary" patterns).
 
-PART 12.A — LEARNING OBJECTIVE CONTROL (IDENTIFY BEFORE WRITING):
-1. Subject: "${category}"
-2. Exact Requested Topic (MANDATORY CONSTRAINT): "${topic}" — Every single question MUST directly assess "${topic}".${conceptDistinctionBlock}${objectPronounGuard}
-3. Specific Learning Objective: ${learningObjectives || `Mastery of ${topic} in ${category} at ${difficulty} cognitive complexity`}. Each question must include a specific "learningObjective" string.
-4. Intended Student Level: ${studentLevel || `Age-appropriate classroom learners studying ${category} (${difficulty} level)`}
-5. Selected Difficulty: "${difficulty}"
-${buildDifficultyRulesBlock(difficulty, topic)}
-6. Expected Number of Questions: Generate EXACTLY ${targetCount} distinct questions in the "questions" array.
-7. Question Formats:${formatVarietyBlock}
+QUIZ SPECIFICATION:
+- Subject: "${category}"
+- Exact Topic (MANDATORY): "${topic}"${conceptDistinctionBlock}${objectPronounGuard}
+- Learning Objective: ${learningObjectives || `Use ${topic} accurately in short, everyday English`}
+- Student Level: ${cleanLevel}
+- Exact Question Count: ${targetCount}
+${buildDifficultyRulesBlock(difficulty, topic, cleanLevel)}
 
-MANDATORY EDUCATIONAL QUALITY & EXPLANATION RULES:
-- PROHIBITION AGAINST UNRELATED CONTENT: NEVER include questions about unrelated grammar rules or generic placeholder concepts.
-- PROHIBITION AGAINST REPETITIVE OR CLONED QUESTIONS: Every question must be meaningfully and structurally different. NEVER reuse the same sentence template with swapped names (e.g., "John loves Mary", "John likes Mary", "John helps Mary" is strictly forbidden).
-- INDEPENDENT 4-OPTION EVALUATION: Before finalizing each question, independently evaluate all 4 options. Ensure EXACTLY ONE option is defensibly correct and the 3 distractors are plausible yet unambiguously incorrect.
-- EXPLANATION VALIDATION: Each "explanation" MUST explain the actual grammatical/subject rule and why the correct answer fits the sentence's grammatical role. NEVER invent antecedents, names, or relationships that do not exist in the question sentence.
-- Required Strict Output Schema:
-Return ONLY a valid JSON object matching this exact structure:
+REQUIRED JSON SCHEMA:
 {
-  "title": "Engaging, topic-specific quiz title",
-  "description": "Concise 1-sentence summary of the learning objective",
-  "learningObjective": "Overall quiz learning objective",
+  "title": "Short, engaging, topic-specific quiz title",
+  "description": "One simple sentence describing what students practice",
+  "learningObjective": "Simple learning objective",
   "questions": [
     {
-      "question": "Choose the correct option: Full question sentence here?",
-      "questionFormat": "sentence_completion",
+      "question": "Short beginner-friendly question here?",
       "options": ["Option A", "Option B", "Option C", "Option D"],
       "correctIndex": 0,
       "correctAnswer": "Option A",
-      "explanation": "Clear educational explanation of the actual grammatical/subject rule.",
+      "explanation": "Simple, accurate 1-sentence reason in everyday English with NO jargon.",
       "difficulty": "${difficulty}",
       "topic": "${topic}",
-      "learningObjective": "Specific learning objective assessed by this item",
-      "hint": "Helpful hint that guides student reasoning without giving away the answer",
+      "learningObjective": "What this question checks",
+      "hint": "Short friendly tip without jargon",
       "questionType": "multiple_choice"
     }
   ]
 }
-Additional Option Rules:
-- Each question MUST have EXACTLY 4 distinct, non-empty options.
-- Exactly ONE option must be unambiguously correct ("correctAnswer" must match options[correctIndex]).
-- NEVER use "All of the above", "None of the above", "Both A and B", or placeholder labels.`;
+Option Rules:
+- Always provide EXACTLY 4 distinct options and 1 unambiguous correct answer ("correctAnswer" equals options[correctIndex]).
+- NEVER use "All of the above", "None of the above", or placeholders.`;
 }
 
 app.post('/api/live-quiz/ai-generate', async (req, res) => {
@@ -5985,8 +5986,14 @@ app.post('/api/live-quiz/ai-generate', async (req, res) => {
       generateCover = true
     } = req.body || {};
 
-    const cleanTopic = String(topic || title || content || category || 'General Knowledge').trim();
-    const cleanCategory = String(category || 'English Grammar').trim();
+    const cleanTopic = String(topic || '').trim() || String(title || '').trim() || String(content || '').trim() || String(category || '').trim();
+    if (!cleanTopic) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please provide a quiz topic, title, or reference content.'
+      });
+    }
+    const cleanCategory = String(category || 'English Grammar').trim() || 'General';
     const cleanDifficulty = ['Easy', 'Medium', 'Hard'].includes(difficulty) ? difficulty : 'Medium';
     const targetCount = Math.min(50, Math.max(1, Number(questionCount) || 10));
     const targetTimer = Math.min(120, Math.max(5, Number(timePerQuestion) || 20));
@@ -6001,8 +6008,9 @@ app.post('/api/live-quiz/ai-generate', async (req, res) => {
       topic: cleanTopic,
       difficulty: cleanDifficulty,
       targetCount,
-      studentLevel,
-      learningObjectives
+      studentLevel: studentLevel || 'Beginner',
+      learningObjectives,
+      durationSec: targetTimer
     });
 
     const avoidRecentBlock =
@@ -6109,18 +6117,19 @@ Base Points per Question: ${targetPoints} (100 Base Points Total + Speed Bonus)$
       subject: cleanCategory,
       topic: cleanTopic,
       difficulty: cleanDifficulty,
+      studentLevel: studentLevel || 'Beginner',
       expectedCount: targetCount,
       durationSec: targetTimer,
       pointsPerQuestion: targetPoints,
       previouslyGeneratedQuestions: previouslyGeneratedForTopic
     });
 
-    // If any questions failed validation (off-topic, duplicate, bad options, wrong difficulty),
+    // If any questions failed validation (off-topic, duplicate, bad options, wrong difficulty, jargon/labels),
     // regenerate ONLY the failed questions (up to 2 targeted passes) within the serverless time budget!
     for (let retryPass = 0; retryPass < 2 && !validation.passed; retryPass++) {
       const remainingMs = getRemainingBudgetMs();
       if (remainingMs < 9000) {
-        console.warn(`[LiveQuiz Quality Validator] Skipping AI retry pass ${retryPass + 1} (${remainingMs}ms remaining in serverless budget); using curated topic-accurate bank.`);
+        console.warn(`[LiveQuiz Quality Validator] Skipping AI retry pass ${retryPass + 1} (${remainingMs}ms remaining in serverless budget).`);
         break;
       }
       const failedCount = validation.failedItems.length;
@@ -6140,15 +6149,16 @@ Base Points per Question: ${targetPoints} (100 Base Points Total + Speed Bonus)$
         topic: cleanTopic,
         difficulty: cleanDifficulty,
         targetCount: failedCount,
-        studentLevel,
-        learningObjectives
+        studentLevel: studentLevel || 'Beginner',
+        learningObjectives,
+        durationSec: targetTimer
       });
 
       const regenUserPrompt = `We need EXACTLY ${failedCount} replacement question(s) for Subject "${cleanCategory}", Topic "${cleanTopic}", Difficulty "${cleanDifficulty}".
 The previous attempt had validation issues on these slots:
 ${failureSummary}
 
-CRITICAL: Do NOT duplicate or closely resemble ANY of these already-accepted questions in the quiz:
+CRITICAL: Keep every question short, in simple everyday English with NO grammar jargon and NO category label prefixes. Do NOT duplicate or closely resemble ANY of these already-accepted questions:
 ${[...acceptedQuestionsList, ...previouslyGeneratedForTopic.slice(-8)].map((q, idx) => `${idx + 1}. ${q}`).join('\n')}
 
 Return JSON with "questions": [ ... ${failedCount} valid replacement questions ... ].`;
@@ -6159,6 +6169,7 @@ Return JSON with "questions": [ ... ${failedCount} valid replacement questions .
           taskType: AI_TASK_TYPES.QUIZ_GENERATION,
           prompt: regenUserPrompt,
           systemPrompt: regenSystemPrompt,
+          schema: quizResponseSchema,
           preferredProvider,
           allowFallbackToGemini: false,
           allowFallbackToOpenAI: false,
@@ -6187,6 +6198,7 @@ Return JSON with "questions": [ ... ${failedCount} valid replacement questions .
             subject: cleanCategory,
             topic: cleanTopic,
             difficulty: cleanDifficulty,
+            studentLevel: studentLevel || 'Beginner',
             expectedCount: targetCount,
             durationSec: targetTimer,
             pointsPerQuestion: targetPoints,
@@ -6198,8 +6210,8 @@ Return JSON with "questions": [ ... ${failedCount} valid replacement questions .
       }
     }
 
-    // If any slots are still missing or invalid after targeted AI regeneration,
-    // fill ONLY those specific failed slots from the curated Topic-Accurate Bank
+    // If curated slots exist (e.g. Object Pronouns), fill ONLY failed slots that still didn't pass;
+    // otherwise never invent unrelated generic questions!
     if (!validation.passed) {
       const currentAccepted = validation.questions.filter(Boolean);
       const existingTexts = [
@@ -6216,27 +6228,36 @@ Return JSON with "questions": [ ... ${failedCount} valid replacement questions .
         pointsPerQuestion: targetPoints
       });
 
-      const merged = [...validation.questions];
-      let cIdx = 0;
-      for (const failedItem of validation.failedItems) {
-        if (cIdx < curatedReplacements.length) {
-          merged[failedItem.index] = curatedReplacements[cIdx++];
-          regeneratedCount++;
+      if (curatedReplacements.length > 0) {
+        const merged = [...validation.questions];
+        let cIdx = 0;
+        for (const failedItem of validation.failedItems) {
+          if (cIdx < curatedReplacements.length) {
+            merged[failedItem.index] = curatedReplacements[cIdx++];
+            regeneratedCount++;
+          }
         }
-      }
 
-      validation = validateQuizBatch(merged, {
-        subject: cleanCategory,
-        topic: cleanTopic,
-        difficulty: cleanDifficulty,
-        expectedCount: targetCount,
-        durationSec: targetTimer,
-        pointsPerQuestion: targetPoints,
-        previouslyGeneratedQuestions: []
-      });
+        validation = validateQuizBatch(merged, {
+          subject: cleanCategory,
+          topic: cleanTopic,
+          difficulty: cleanDifficulty,
+          studentLevel: studentLevel || 'Beginner',
+          expectedCount: targetCount,
+          durationSec: targetTimer,
+          pointsPerQuestion: targetPoints,
+          previouslyGeneratedQuestions: []
+        });
+      }
     }
 
     const finalQuestions = validation.questions.filter(Boolean);
+    if (finalQuestions.length === 0) {
+      return res.status(502).json({
+        success: false,
+        error: `Could not generate beginner-friendly, topic-accurate questions for "${cleanTopic}". Please retry or simplify the topic.`
+      });
+    }
 
     // Update rolling topic memory so subsequent generations of the same topic produce fresh questions
     const updatedHistory = [
@@ -6247,23 +6268,27 @@ Return JSON with "questions": [ ... ${failedCount} valid replacement questions .
 
     const validationReport = {
       ...validation.report,
-      passed: true,
+      passed: validation.passed && finalQuestions.length >= targetCount,
       regeneratedCount
     };
 
     // Automatically generate quiz cover image only if requested AND sufficient serverless budget remains.
-    // Frontend calls /api/live-quiz/ai-generate-cover in parallel so question generation never times out.
+    // Frontend calls /api/live-quiz/ai-generate-cover sequentially so neither request hits serverless timeouts.
     let coverImageUrl = null;
     if (generateCover === true && getRemainingBudgetMs() > 15000) {
       try {
-        const coverRes = await generateQuizCoverImage({
-          id: `quiz_${user.id.slice(0, 8)}_${Date.now()}`,
-          title: generatedTitle,
-          topic: cleanTopic,
-          category: cleanCategory,
-          difficulty: cleanDifficulty
-        });
-        if (coverRes?.publicUrl) {
+        const coverRes = await generateQuizCoverImage(
+          {
+            id: `quiz_${user.id.slice(0, 8)}_${Date.now()}`,
+            userId: user.id,
+            title: generatedTitle,
+            topic: cleanTopic,
+            category: cleanCategory,
+            difficulty: cleanDifficulty
+          },
+          { userId: user.id, supabaseClient: serverSupabase }
+        );
+        if (coverRes?.success && coverRes?.publicUrl) {
           coverImageUrl = coverRes.publicUrl;
         }
       } catch (coverErr) {
@@ -6308,6 +6333,8 @@ app.post('/api/live-quiz/ai-regenerate-question', async (req, res) => {
       topic = '',
       category = 'English Grammar',
       difficulty = 'Medium',
+      studentLevel = 'Beginner',
+      learningObjectives = '',
       currentQuestion = '',
       questionIndex = 0,
       existingQuestions = [],
@@ -6331,10 +6358,13 @@ app.post('/api/live-quiz/ai-regenerate-question', async (req, res) => {
       category: cleanCategory,
       topic: cleanTopic,
       difficulty: cleanDifficulty,
-      targetCount: 1
+      targetCount: 1,
+      studentLevel: studentLevel || 'Beginner',
+      learningObjectives,
+      durationSec: effectiveTimer
     });
 
-    const userPrompt = `Generate ONE fresh, topic-accurate ${cleanDifficulty} question for Subject: "${cleanCategory}", Topic: "${cleanTopic}".
+    const userPrompt = `Generate ONE fresh, beginner-friendly, topic-accurate ${cleanDifficulty} question for Subject: "${cleanCategory}", Topic: "${cleanTopic}", Student Level: "${studentLevel || 'Beginner'}".
 ${currentQuestion ? `Replace this question with a completely different sentence and angle: "${currentQuestion}"` : ''}
 ${
   allToAvoid.length > 0
@@ -6343,7 +6373,34 @@ ${
 }
 Return JSON with "questions": [ { ...single question object... } ].`;
 
+    const singleQuestionSchema = {
+      type: 'object',
+      properties: {
+        questions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              question: { type: 'string' },
+              options: { type: 'array', items: { type: 'string' } },
+              correctIndex: { type: 'integer' },
+              correctAnswer: { type: 'string' },
+              explanation: { type: 'string' },
+              difficulty: { type: 'string' },
+              topic: { type: 'string' },
+              learningObjective: { type: 'string' },
+              hint: { type: 'string' },
+              questionType: { type: 'string' }
+            },
+            required: ['question', 'options', 'correctIndex', 'correctAnswer', 'explanation']
+          }
+        }
+      },
+      required: ['questions']
+    };
+
     let validatedQuestion = null;
+    let lastAiError = '';
     const preferredProvider = provider === 'gemini' || provider === 'openai' ? provider : undefined;
 
     try {
@@ -6351,6 +6408,7 @@ Return JSON with "questions": [ { ...single question object... } ].`;
         taskType: AI_TASK_TYPES.QUIZ_GENERATION,
         prompt: userPrompt,
         systemPrompt,
+        schema: singleQuestionSchema,
         preferredProvider,
         allowFallbackToGemini: true,
         allowFallbackToOpenAI: true,
@@ -6368,6 +6426,7 @@ Return JSON with "questions": [ { ...single question object... } ].`;
           subject: cleanCategory,
           topic: cleanTopic,
           difficulty: cleanDifficulty,
+          studentLevel: studentLevel || 'Beginner',
           durationSec: effectiveTimer,
           pointsPerQuestion: effectivePts
         });
@@ -6378,10 +6437,15 @@ Return JSON with "questions": [ { ...single question object... } ].`;
           );
         if (check.valid && !isDup) {
           validatedQuestion = check.sanitized;
+        } else {
+          lastAiError = isDup
+            ? 'Generated duplicate question.'
+            : (check.reasons || []).join('; ') || 'Generated question failed validation.';
         }
       }
     } catch (aiErr) {
-      console.warn('[LiveQuiz AI Regenerate Question] Fallback notice:', aiErr.message);
+      lastAiError = aiErr.message || 'AI provider error';
+      console.warn('[LiveQuiz AI Regenerate Question] Error:', lastAiError);
     }
 
     if (!validatedQuestion) {
@@ -6394,7 +6458,14 @@ Return JSON with "questions": [ { ...single question object... } ].`;
         durationSec: effectiveTimer,
         pointsPerQuestion: effectivePts
       });
-      validatedQuestion = fallbackList[0];
+      validatedQuestion = fallbackList[0] || null;
+    }
+
+    if (!validatedQuestion) {
+      return res.status(502).json({
+        success: false,
+        error: lastAiError || `Could not regenerate a valid question for "${cleanTopic}". Please retry.`
+      });
     }
 
     return res.json({
@@ -6419,24 +6490,30 @@ app.post('/api/live-quiz/ai-generate-cover', async (req, res) => {
     const user = authData.user;
 
     const { title = '', topic = '', category = 'General', difficulty = 'Medium' } = req.body || {};
-    const coverRes = await generateQuizCoverImage({
-      id: `quiz_${user.id.slice(0, 8)}_${Date.now()}`,
-      title: title || topic || category,
-      topic: topic || title || category,
-      category,
-      difficulty
-    });
+    const coverRes = await generateQuizCoverImage(
+      {
+        id: `quiz_${user.id.slice(0, 8)}_${Date.now()}`,
+        userId: user.id,
+        title: title || topic || category,
+        topic: topic || title || category,
+        category,
+        difficulty
+      },
+      { userId: user.id, supabaseClient: serverSupabase }
+    );
 
     if (!coverRes?.success || !coverRes?.publicUrl) {
-      return res.status(500).json({
+      return res.status(502).json({
         success: false,
-        error: coverRes?.error || 'Failed to generate cover image'
+        error: coverRes?.error || 'AI cover generation failed. Please retry or upload a custom cover image.'
       });
     }
 
     return res.json({
       success: true,
       coverImageUrl: coverRes.publicUrl,
+      storagePath: coverRes.storagePath || null,
+      bucket: coverRes.bucket || 'quiz-covers',
       model: coverRes.model
     });
   } catch (err) {
@@ -6444,6 +6521,73 @@ app.post('/api/live-quiz/ai-generate-cover', async (req, res) => {
     return res.status(500).json({
       success: false,
       error: err.message || 'Failed to generate quiz cover image'
+    });
+  }
+});
+
+app.post('/api/live-quiz/upload-cover', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData?.user) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+    const user = authData.user;
+
+    const { imageBase64 = '', contentType = 'image/png', filename = 'custom-cover.png' } = req.body || {};
+    if (!imageBase64 || typeof imageBase64 !== 'string') {
+      return res.status(400).json({ success: false, error: 'Missing imageBase64 payload.' });
+    }
+
+    let rawBase64 = imageBase64.trim();
+    let effectiveMime = String(contentType || 'image/png').toLowerCase();
+    const dataUrlMatch = rawBase64.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/s);
+    if (dataUrlMatch) {
+      effectiveMime = dataUrlMatch[1].toLowerCase();
+      rawBase64 = dataUrlMatch[2];
+    }
+
+    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/webp'].includes(effectiveMime)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Unsupported image format. Please upload PNG, JPG, or WebP.'
+      });
+    }
+
+    const buffer = Buffer.from(rawBase64, 'base64');
+    if (!buffer || buffer.length === 0) {
+      return res.status(400).json({ success: false, error: 'Uploaded cover image is empty or corrupted.' });
+    }
+    if (buffer.length > 10 * 1024 * 1024) {
+      return res.status(400).json({ success: false, error: 'Cover image exceeds 10MB limit.' });
+    }
+
+    const uploadRes = await uploadCustomQuizCoverToSupabase({
+      buffer,
+      contentType: effectiveMime,
+      userId: user.id,
+      filename,
+      prefix: 'custom',
+      supabaseClient: serverSupabase
+    });
+
+    if (!uploadRes.success || !uploadRes.publicUrl) {
+      return res.status(502).json({
+        success: false,
+        error: uploadRes.error || 'Failed to store cover image in Supabase Storage.'
+      });
+    }
+
+    return res.json({
+      success: true,
+      publicUrl: uploadRes.publicUrl,
+      storagePath: uploadRes.storagePath,
+      bucket: uploadRes.bucket || 'quiz-covers'
+    });
+  } catch (err) {
+    console.error('[LiveQuiz Upload Cover] Error:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to upload quiz cover image'
     });
   }
 });

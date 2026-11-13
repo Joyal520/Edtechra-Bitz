@@ -24,7 +24,6 @@ import {
 } from 'lucide-react';
 import { LiveQuizQuestion, LiveQuizDifficulty, LiveQuiz } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
-import { courseStudioService } from '@/services/courseStudioService';
 import { DEFAULT_QUIZ_COVER, extractCoverFromDescription, cleanDescription } from '@/utils/quizCover';
 import { FormattedQuestionText } from './LiveQuizUI';
 
@@ -103,6 +102,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
   const [learningContent, setLearningContent] = useState('');
   const [questionCount, setQuestionCount] = useState<number>(10);
   const [difficulty, setDifficulty] = useState<LiveQuizDifficulty>('Medium');
+  const [studentLevel, setStudentLevel] = useState<'Beginner' | 'Elementary' | 'Intermediate'>('Beginner');
   const [category, setCategory] = useState('Grammar');
   const [pointsPerQuestion, setPointsPerQuestion] = useState<number>(10);
   const [aiProvider, setAiProvider] = useState<'auto' | 'openai' | 'gemini'>('auto');
@@ -146,6 +146,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
   // Cover Image State
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
+  const [coverError, setCoverError] = useState<string | null>(null);
   const coverFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Initialize or reset form based on initialQuiz and isOpen
@@ -202,6 +203,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         setLearningContent('');
         setQuestionCount(10);
         setDifficulty('Medium');
+        setStudentLevel('Beginner');
         setCategory('Grammar');
         setPointsPerQuestion(10);
         setAiProvider('auto');
@@ -218,8 +220,10 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         setManualCategory('Grammar');
         setManualDifficulty('Medium');
         setCoverImageUrl(null);
+        setCoverError(null);
         setManualQuestions(buildDefaultQuestions(5, 20));
       }
+      setCoverError(null);
       setError(null);
     }
   }, [isOpen, initialQuiz]);
@@ -230,23 +234,28 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Cover image size must be under 5MB.');
+    if (file.size > 10 * 1024 * 1024) {
+      const sizeMsg = 'Cover image size must be under 10MB.';
+      setCoverError(sizeMsg);
+      setError(sizeMsg);
       return;
     }
 
     setUploadingCover(true);
+    setCoverError(null);
     setError(null);
     try {
-      const res = await courseStudioService.uploadCourseImage(file, 'quiz-covers', true);
-      if (res && res.publicUrl) {
-        setCoverImageUrl(res.publicUrl);
-      } else {
-        throw new Error('Upload succeeded but no public URL was returned.');
+      const res = await liveQuizService.uploadQuizCoverImage(file);
+      if (res.error || !res.publicUrl) {
+        throw new Error(res.error || 'Upload failed: no Supabase Storage URL returned.');
       }
+      // Replace cover only after Supabase Storage upload succeeds cleanly
+      setCoverImageUrl(res.publicUrl);
     } catch (uploadErr: any) {
-      console.error('R2 cover upload error:', uploadErr);
-      setError(`Cover image upload failed: ${uploadErr.message || 'Please check your connection and try again.'}`);
+      const msg = uploadErr.message || 'Cover image upload failed. Your existing cover was preserved.';
+      console.error('Supabase Storage cover upload error:', uploadErr);
+      setCoverError(msg);
+      setError(msg);
     } finally {
       setUploadingCover(false);
       if (coverFileInputRef.current) {
@@ -257,8 +266,33 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
 
   const handleResetCover = () => {
     setCoverImageUrl(null);
+    setCoverError(null);
     if (coverFileInputRef.current) {
       coverFileInputRef.current.value = '';
+    }
+  };
+
+  const triggerCoverGeneration = async (meta: {
+    title: string;
+    topic: string;
+    category: string;
+    difficulty: LiveQuizDifficulty;
+  }) => {
+    setIsGeneratingCover(true);
+    setCoverError(null);
+    try {
+      const res = await liveQuizService.generateAiCoverImage(meta);
+      if (res.error || !res.coverImageUrl) {
+        throw new Error(res.error || 'Failed to generate AI cover image.');
+      }
+      setCoverImageUrl(res.coverImageUrl);
+      return res.coverImageUrl;
+    } catch (err: any) {
+      const msg = err.message || 'Could not generate quiz cover image. You can retry or upload a custom cover.';
+      setCoverError(msg);
+      return null;
+    } finally {
+      setIsGeneratingCover(false);
     }
   };
 
@@ -272,28 +306,19 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
       return;
     }
 
-    setIsGeneratingCover(true);
     setError(null);
-    try {
-      const res = await liveQuizService.generateAiCoverImage({
-        title: effectiveTitle || `${effectiveCat} Challenge`,
-        topic: topic.trim() || effectiveTitle,
-        category: effectiveCat,
-        difficulty: effectiveDiff
-      });
-      if (res.error || !res.coverImageUrl) {
-        throw new Error(res.error || 'Failed to generate cover image');
-      }
-      setCoverImageUrl(res.coverImageUrl);
-    } catch (err: any) {
-      setError(err.message || 'Could not generate quiz cover image.');
-    } finally {
-      setIsGeneratingCover(false);
-    }
+    await triggerCoverGeneration({
+      title: effectiveTitle || `${effectiveCat} Challenge`,
+      topic: topic.trim() || effectiveTitle,
+      category: effectiveCat,
+      difficulty: effectiveDiff
+    });
   };
 
   // ===========================================================================
-  // DIRECT AI QUIZ GENERATION WORKFLOW (PART 2)
+  // DIRECT AI QUIZ GENERATION WORKFLOW (PART 14 + PART 15)
+  // Step 1: Generate & validate topic-accurate beginner-friendly questions
+  // Step 2: Generate topic-specific 16:9 cover in Supabase Storage using resolved title & topic
   // ===========================================================================
   const handleDirectAiGenerate = async () => {
     if (!topic.trim() && !learningContent.trim() && !aiQuizTitle.trim()) {
@@ -302,35 +327,12 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
     }
 
     setError(null);
+    setCoverError(null);
     setIsGeneratingQuiz(true);
 
     try {
       const perQSec = timerEnabled ? timerSeconds : 86400;
       const shouldAutoCover = autoGenerateCover && !coverImageUrl;
-
-      // Run cover image generation in parallel in its own serverless invocation so
-      // /api/live-quiz/ai-generate never hits a 504 gateway timeout.
-      if (shouldAutoCover) {
-        setIsGeneratingCover(true);
-        void liveQuizService
-          .generateAiCoverImage({
-            title: aiQuizTitle.trim() || `${topic.trim() || category} Quiz`,
-            topic: topic.trim() || aiQuizTitle.trim() || category,
-            category,
-            difficulty
-          })
-          .then((coverRes) => {
-            if (coverRes.coverImageUrl) {
-              setCoverImageUrl((prev) => prev || coverRes.coverImageUrl || null);
-            }
-          })
-          .catch((coverErr) => {
-            console.warn('[LiveQuiz] Background cover image generation failed:', coverErr);
-          })
-          .finally(() => {
-            setIsGeneratingCover(false);
-          });
-      }
 
       const res = await liveQuizService.generateAiQuiz({
         title: aiQuizTitle.trim() || undefined,
@@ -338,6 +340,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         topic: topic.trim() || aiQuizTitle.trim(),
         content: learningContent.trim() || undefined,
         difficulty,
+        studentLevel,
         questionCount,
         timePerQuestion: perQSec,
         pointsPerQuestion,
@@ -350,7 +353,8 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
       }
 
       const generated = res.data;
-      setAiQuizTitle(generated.title || aiQuizTitle.trim() || `${topic.trim() || category} Quiz`);
+      const resolvedTitle = generated.title || aiQuizTitle.trim() || `${topic.trim() || category} Quiz`;
+      setAiQuizTitle(resolvedTitle);
       setAiQuizDescription(
         generated.description || `Interactive ${generated.questions.length}-question ${difficulty} quiz on ${topic.trim() || category}.`
       );
@@ -383,6 +387,17 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         }))
       );
       setAiStep('preview_edit');
+
+      // Sequential cover generation using resolved title + subject + topic;
+      // keeps generated questions intact and surfaces clear error + retry/custom upload if cover fails.
+      if (shouldAutoCover && !generated.coverImageUrl) {
+        void triggerCoverGeneration({
+          title: resolvedTitle,
+          topic: topic.trim() || resolvedTitle || category,
+          category,
+          difficulty
+        });
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to generate AI quiz. Please try again.');
     } finally {
@@ -405,6 +420,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         topic: topic.trim() || aiQuizTitle.trim() || category,
         category,
         difficulty,
+        studentLevel,
         questionIndex: qIndex,
         currentQuestion: currentQ.question,
         existingQuestions: existingPrompts,
@@ -804,10 +820,28 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
             </button>
           </div>
           <p className="text-[10px] text-slate-400 font-medium truncate">
-            {coverImageUrl ? 'Custom / AI R2 cover active' : 'Auto-generates 16:9 cover on R2'}
+            {isGeneratingCover
+              ? 'Generating topic cover & saving to Supabase Storage...'
+              : coverImageUrl
+              ? 'Cover saved in Supabase Storage'
+              : 'Auto-generates 16:9 cover in Supabase Storage'}
           </p>
         </div>
       </div>
+
+      {coverError && (
+        <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-bold flex items-center justify-between gap-2 flex-wrap">
+          <span className="flex-1 min-w-[160px]">{coverError}</span>
+          <button
+            type="button"
+            disabled={isGeneratingCover}
+            onClick={handleRegenerateCover}
+            className="px-2 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black cursor-pointer shrink-0"
+          >
+            Retry AI Cover
+          </button>
+        </div>
+      )}
     </div>
   );
 
@@ -1076,8 +1110,8 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Difficulty */}
-                    <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                    {/* Difficulty & Student Level */}
+                    <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5">
                       <label className="block text-xs font-black text-slate-800 uppercase tracking-wider">
                         Difficulty
                       </label>
@@ -1097,9 +1131,27 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                           </button>
                         ))}
                       </div>
-                      <p className="text-[10px] text-slate-400 font-medium pt-1">
-                        Includes explanations & hints
-                      </p>
+                      <div className="pt-1 border-t border-slate-200/70">
+                        <span className="block text-[10px] font-black text-slate-600 uppercase tracking-wider mb-1">
+                          Student Level
+                        </span>
+                        <div className="grid grid-cols-3 gap-1">
+                          {(['Beginner', 'Elementary', 'Intermediate'] as const).map((lvl) => (
+                            <button
+                              key={lvl}
+                              type="button"
+                              onClick={() => setStudentLevel(lvl)}
+                              className={`py-1 px-1 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer truncate ${
+                                studentLevel === lvl
+                                  ? 'bg-indigo-600 text-white shadow-2xs'
+                                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-indigo-50'
+                              }`}
+                            >
+                              {lvl}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
 
                     {/* Subject / Category */}
@@ -1330,7 +1382,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                           Automatically generate quiz cover image
                         </span>
                         <span className="block text-[11px] text-slate-600 font-medium">
-                          AI creates a visual 16:9 cover based on your quiz topic and stores it on R2.
+                          AI creates a visual 16:9 cover based on your quiz topic and stores it in Supabase Storage.
                         </span>
                       </div>
                     </label>
@@ -1404,17 +1456,23 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                       <button
                         type="button"
                         onClick={() => handleSaveGeneratedQuiz(false)}
-                        disabled={isSaving}
+                        disabled={isSaving || isGeneratingCover || uploadingCover}
                         className="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 rounded-xl text-xs font-extrabold shadow-2xs active:scale-95 transition-all cursor-pointer disabled:opacity-50"
                       >
                         <BookmarkPlus className="w-3.5 h-3.5 text-purple-600" />
-                        <span>{isSaving ? 'Saving...' : 'Save to Quiz Library'}</span>
+                        <span>
+                          {isSaving
+                            ? 'Saving...'
+                            : isGeneratingCover
+                            ? 'Generating Cover...'
+                            : 'Save to Quiz Library'}
+                        </span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => handleSaveGeneratedQuiz(true)}
-                        disabled={isSaving}
+                        disabled={isSaving || isGeneratingCover || uploadingCover}
                         className="inline-flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all cursor-pointer disabled:opacity-50"
                       >
                         <Play className="w-3.5 h-3.5 fill-current" />
@@ -1720,15 +1778,15 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                       <button
                         type="button"
                         onClick={() => handleSaveGeneratedQuiz(false)}
-                        disabled={isSaving}
+                        disabled={isSaving || isGeneratingCover || uploadingCover}
                         className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 rounded-xl text-xs font-extrabold cursor-pointer disabled:opacity-50"
                       >
-                        Save to Quiz Library
+                        {isGeneratingCover ? 'Generating Cover...' : 'Save to Quiz Library'}
                       </button>
                       <button
                         type="button"
                         onClick={() => handleSaveGeneratedQuiz(true)}
-                        disabled={isSaving}
+                        disabled={isSaving || isGeneratingCover || uploadingCover}
                         className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all cursor-pointer disabled:opacity-50"
                       >
                         {isSaving ? 'Saving...' : 'Save & Launch Quiz'}
@@ -2106,13 +2164,17 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={isSaving}
+                  disabled={isSaving || isGeneratingCover || uploadingCover}
                   className="px-5 py-2.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-extrabold shadow-md active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
                 >
                   {isSaving
                     ? isEditMode
                       ? 'Updating Quiz...'
                       : 'Saving Quiz...'
+                    : uploadingCover
+                    ? 'Uploading Cover...'
+                    : isGeneratingCover
+                    ? 'Generating Cover...'
                     : isEditMode
                     ? 'Save Changes'
                     : 'Save to Quiz Library'}

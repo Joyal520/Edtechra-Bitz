@@ -37,7 +37,7 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
   const [copied, setCopied] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [isMuted, setIsMuted] = useState(() => quizAudioService.isMuted());
 
   // Active Supabase Realtime channel reference
   const channelRef = useRef<any>(null);
@@ -93,9 +93,19 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
 
   const questionsCount = realQuestionsCount || session.quiz?.questions?.length || 0;
 
-  // 1. Audio management: Respect soundEnabled toggle and cleanup on unmount
+  // 1. Preload real MP3 quiz audio assets early in Lobby & sync unified mute state
   useEffect(() => {
-    if (soundEnabled) {
+    quizAudioService.preloadQuizAudio();
+    const unsubscribe = quizAudioService.subscribe((muted) => {
+      setIsMuted(muted);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMuted) {
       quizAudioService.startBackgroundMusic();
     } else {
       quizAudioService.stopBackgroundMusic();
@@ -103,7 +113,7 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
     return () => {
       quizAudioService.stopBackgroundMusic();
     };
-  }, [soundEnabled]);
+  }, [isMuted]);
 
   // 1b. Stale-state / Reconnection Guard: If quiz is already active, navigate immediately
   useEffect(() => {
@@ -540,8 +550,12 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
   };
 
   const handleToggleSound = () => {
-    quizAudioService.playClick();
-    setSoundEnabled((prev) => !prev);
+    quizAudioService.unlockAudio();
+    const nextMuted = quizAudioService.toggleMute();
+    setIsMuted(nextMuted);
+    if (!nextMuted) {
+      quizAudioService.playClick();
+    }
   };
 
   const handleExitLobby = () => {
@@ -562,7 +576,7 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
         <QuizHeader
           uppercaseBrand={true}
           subtitle="LIVE QUIZ"
-          isMuted={!soundEnabled}
+          isMuted={isMuted}
           onToggleSound={handleToggleSound}
           rightSlot={
             <>

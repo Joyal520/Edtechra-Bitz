@@ -413,6 +413,7 @@ class LiveQuizService {
     topic: string;
     category: string;
     difficulty: 'Easy' | 'Medium' | 'Hard';
+    studentLevel?: string;
     currentQuestion?: string;
     questionIndex: number;
     existingQuestions?: string[];
@@ -437,7 +438,7 @@ class LiveQuizService {
   }
 
   /**
-   * Direct AI Quiz Builder: Generates or regenerates a 16:9 quiz cover image in Cloudflare R2
+   * Direct AI Quiz Builder: Generates or regenerates a 16:9 quiz cover image and stores it in Supabase Storage
    */
   async generateAiCoverImage(params: {
     title?: string;
@@ -453,11 +454,43 @@ class LiveQuizService {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.success || !json.coverImageUrl) {
-        return { error: json.error || 'Failed to generate cover image' };
+        return { error: json.error || `Failed to generate cover image (${res.status})` };
       }
       return { coverImageUrl: json.coverImageUrl };
     } catch (err: any) {
       return { error: err.message || 'Network error generating cover image' };
+    }
+  }
+
+  /**
+   * Uploads a custom quiz cover image into Supabase Storage ('quiz-covers' bucket)
+   * and returns the public Supabase Storage URL.
+   */
+  async uploadQuizCoverImage(file: File): Promise<{ publicUrl?: string; error?: string }> {
+    try {
+      const imageBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Failed to read selected cover image file.'));
+        reader.readAsDataURL(file);
+      });
+
+      const res = await authenticatedFetch('/api/live-quiz/upload-cover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64,
+          contentType: file.type || 'image/png',
+          filename: file.name || 'custom-cover.png'
+        })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success || !json.publicUrl) {
+        return { error: json.error || `Failed to upload cover image (${res.status})` };
+      }
+      return { publicUrl: json.publicUrl };
+    } catch (err: any) {
+      return { error: err.message || 'Network error uploading cover image' };
     }
   }
 
@@ -593,11 +626,11 @@ class LiveQuizService {
       let quizData: any = null;
       let quizError: any = null;
 
-      // Attempt 1: with track_quiz and cover_image (if provided)
+      // Attempt 1: with track_quiz, cover_image, and cover_image_url (if provided)
       const attempt1Payload: any = {
         ...baseInsertPayload,
         track_quiz: trackQuiz,
-        ...(coverImage ? { cover_image: coverImage } : {})
+        ...(coverImage ? { cover_image: coverImage, cover_image_url: coverImage } : {})
       };
       const attempt1 = await supabase
         .from('live_quizzes')
@@ -606,6 +639,21 @@ class LiveQuizService {
         .single();
       quizData = attempt1.data;
       quizError = attempt1.error;
+
+      // Attempt 2: retry with cover_image only if cover_image_url column doesn't exist
+      if (!quizData && quizError && coverImage) {
+        const { data: fbData1, error: fbErr1 } = await supabase
+          .from('live_quizzes')
+          .insert({
+            ...baseInsertPayload,
+            track_quiz: trackQuiz,
+            cover_image: coverImage
+          })
+          .select()
+          .single();
+        quizData = fbData1;
+        quizError = fbErr1;
+      }
 
       // Attempt 2: fallback without cover_image / track_quiz if schema hasn't been migrated yet
       if (!quizData && quizError) {
@@ -870,6 +918,7 @@ class LiveQuizService {
         timer_seconds: timerSeconds,
         track_quiz: trackQuiz,
         cover_image: coverImage,
+        cover_image_url: coverImage,
         updated_at: new Date().toISOString()
       };
 
@@ -886,7 +935,8 @@ class LiveQuizService {
         .single();
 
       if (updateErr) {
-        // Fallback: cover_image or track_quiz column may not exist in production live_quizzes schema
+        // Fallback: cover_image, cover_image_url, or track_quiz column may not exist in older live_quizzes schema
+        delete updateHeaderPayload.cover_image_url;
         delete updateHeaderPayload.cover_image;
         delete updateHeaderPayload.track_quiz;
         const { data: fbData, error: fbErr } = await supabase

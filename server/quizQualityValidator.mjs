@@ -33,6 +33,28 @@ const FORBIDDEN_PLACEHOLDER_PATTERNS = [
   /^option\s+[a-d1-4]$/i
 ];
 
+// PART 14.2: Prohibited technical grammar terminology in student-facing content
+const FORBIDDEN_GRAMMAR_JARGON_PATTERNS = [
+  /\btransitive\s+verb\b/i,
+  /\bintransitive\s+verb\b/i,
+  /\bantecedents?\b/i,
+  /\bnoun\s+phrases?\b/i,
+  /\bpossessive\s+adjectives?\b/i,
+  /\bpossessive\s+determiners?\b/i,
+  /\breflexive\s+pronouns?\b/i,
+  /\bgrammatical\s+(?:function|role|analysis|usage)\b/i,
+  /\bsentence\s+structure\s+analysis\b/i,
+  /\berror\s+identification\b/i,
+  /\belliptical\s+comparisons?\b/i,
+  /\bappositives?\b/i,
+  /\bsubject\s+case\b/i,
+  /\bobject\s+case\b/i
+];
+
+// PART 14.4: Prohibited internal generation labels in student-facing questions
+const FORBIDDEN_CATEGORY_LABEL_REGEX =
+  /^\s*(?:sentence\s+replacement|context\s+selection|error\s+identification|short\s+dialogue|correct\s+sentence|practical\s+application|contextual\s+usage|pronoun\s+identification)\s*:/i;
+
 export const OBJECT_PRONOUNS_SET = new Set(['me', 'you', 'him', 'her', 'it', 'us', 'them', 'whom']);
 export const SUBJECT_PRONOUNS_SET = new Set(['i', 'you', 'he', 'she', 'it', 'we', 'they']);
 export const SUBJECT_ONLY_PRONOUNS_SET = new Set(['i', 'he', 'she', 'we', 'they']);
@@ -275,12 +297,14 @@ export function checkQuestionTopicRelevance(questionObj, { subject = '', topic =
 }
 
 /**
- * Checks whether a question complies with the requested cognitive difficulty level.
+ * Checks whether a question complies with the requested cognitive difficulty level and
+ * Part 14 beginner-friendly brevity/clarity limits.
  */
-export function checkQuestionDifficultyCompliance(questionObj, requestedDifficulty = 'Medium') {
+export function checkQuestionDifficultyCompliance(questionObj, requestedDifficulty = 'Medium', durationSec = 20) {
   const normReq = String(requestedDifficulty || 'Medium').trim().toLowerCase();
   const qText = String(questionObj?.question || '').trim();
   const body = extractQuestionBody(qText);
+  const fullWords = qText.split(/\s+/).filter(Boolean);
   const bodyWords = body.split(/\s+/).filter(Boolean);
 
   if (bodyWords.length < 3) {
@@ -290,17 +314,72 @@ export function checkQuestionDifficultyCompliance(questionObj, requestedDifficul
     };
   }
 
-  if (normReq === 'hard') {
-    // Hard questions must involve substantive sentence context, error analysis, or multi-clause reasoning
-    if (bodyWords.length < 5) {
-      return {
-        compliant: false,
-        reason: 'Hard difficulty requires complex sentences, error identification, or contextual grammatical analysis.'
-      };
-    }
+  // PART 14.3: Enforce concise, fast-readable questions (especially for 20s live quiz timers)
+  const timerCapOffset = Number(durationSec) <= 20 ? 0 : 3;
+  const maxWordsByDiff =
+    normReq === 'easy'
+      ? 16 + timerCapOffset
+      : normReq === 'hard'
+      ? 25 + timerCapOffset
+      : 20 + timerCapOffset;
+
+  if (fullWords.length > maxWordsByDiff) {
+    return {
+      compliant: false,
+      reason: `Question is too long (${fullWords.length} words) for ${requestedDifficulty} level; keep wording short, natural, and under ${maxWordsByDiff} words.`
+    };
+  }
+
+  const hasLongSentenceOptions =
+    Array.isArray(questionObj?.options) &&
+    questionObj.options.some((o) => String(o || '').trim().split(/\s+/).length >= 4);
+
+  if (normReq === 'hard' && bodyWords.length < 5 && !hasLongSentenceOptions) {
+    return {
+      compliant: false,
+      reason: 'Hard difficulty requires meaningful context sentences while still using simple everyday English.'
+    };
   }
 
   return { compliant: true };
+}
+
+/**
+ * PART 14.2 / 14.4 / 14.5: Validates beginner-friendly wording (no jargon, no category labels, no repeated instructions).
+ */
+export function checkBeginnerFriendlyLanguage({ questionText = '', options = [], explanation = '', hint = '' }) {
+  if (FORBIDDEN_CATEGORY_LABEL_REGEX.test(questionText)) {
+    return {
+      valid: false,
+      reason: 'Question starts with an internal category label (such as "Sentence replacement:" or "Context selection:"); use a simple direct instruction.'
+    };
+  }
+
+  // PART 14.5: Avoid repeated instructions / stacked colons
+  const colonCount = (questionText.match(/:/g) || []).length;
+  if (colonCount > 1) {
+    return {
+      valid: false,
+      reason: 'Question contains multiple colons / repeated instructions; use at most one simple instruction.'
+    };
+  }
+
+  // Check all student-facing text for forbidden technical grammar jargon
+  const fieldsToScan = [questionText, explanation, hint, ...options];
+  for (const field of fieldsToScan) {
+    const text = String(field || '');
+    for (const pat of FORBIDDEN_GRAMMAR_JARGON_PATTERNS) {
+      const match = text.match(pat);
+      if (match) {
+        return {
+          valid: false,
+          reason: `Contains technical grammar term "${match[0]}". Use simple everyday English suitable for beginners.`
+        };
+      }
+    }
+  }
+
+  return { valid: true };
 }
 
 /**
@@ -341,21 +420,59 @@ export function checkConceptBoundary({ questionText = '', correctAnswer = '', qu
       }
     }
 
-    // Reject blanks in subject position (e.g., "Tom and Sarah are friends. ___ help each other.")
+    // Reject blanks in subject position (start of sentence/clause OR after conjunction like ", and ___ would ...")
     const body = extractQuestionBody(questionText);
     if (
       questionFormat !== 'error_identification' &&
-      questionFormat !== 'correct_sentence' &&
-      /(?:^|[.!?]\s+)(?:_+|\[\s*_+\s*\])\s+[a-z]{2,}/i.test(body)
+      questionFormat !== 'correct_sentence'
     ) {
-      // Allow imperatives/questions like "___, please" only if not followed by finite verb, otherwise subject position!
-      const afterBlankMatch = body.match(/(?:^|[.!?]\s+)(?:_+|\[\s*_+\s*\])\s+([a-z]+)/i);
-      const nextWord = afterBlankMatch?.[1]?.toLowerCase() || '';
-      if (nextWord && !['and', 'or', 'is', 'are'].includes(nextWord)) {
+      const subjectPosMatch = body.match(
+        /(?:^|[.!?]\s+|(?:,|;|\band\b|\bbut\b|\bso\b|\bbecause\b|\bthat\b|\bwhen\b|\bif\b)\s+)(?:_+|\[\s*_+\s*\])\s+([a-z]+)/i
+      );
+      const nextWord = subjectPosMatch?.[1]?.toLowerCase() || '';
+      if (nextWord && !['and', 'or', 'to', 'for', 'at', 'in', 'on', 'with', 'about', 'from', 'after', 'before', 'yesterday', 'today', 'now', 'here', 'there', 'home'].includes(nextWord)) {
         return {
           valid: false,
           reason: 'Blank appears in subject position, which tests Subject Pronouns instead of Object Pronouns.'
         };
+      }
+
+      // Reject possessive slots where ___ directly modifies a noun (e.g. "shared ___ observations", "lost ___ keys")
+      // after a non-ditransitive verb (unless preceded by a ditransitive verb like give/send/lend/show/tell/hand/pass/buy/bring/offer/teach/ask)
+      const possessiveSlotMatch = body.match(
+        /\b([a-z]+)\s+(?:_+|\[\s*_+\s*\])\s+([a-z]{3,})\b/i
+      );
+      if (possessiveSlotMatch) {
+        const prevVerb = possessiveSlotMatch[1].toLowerCase();
+        const followingWord = possessiveSlotMatch[2].toLowerCase();
+        const ditransitive = new Set([
+          'give', 'gives', 'gave', 'giving',
+          'send', 'sends', 'sent',
+          'lend', 'lends', 'lent',
+          'show', 'shows', 'showed',
+          'tell', 'tells', 'told',
+          'hand', 'hands', 'handed',
+          'pass', 'passes', 'passed',
+          'buy', 'buys', 'bought',
+          'bring', 'brings', 'brought',
+          'offer', 'offers', 'offered',
+          'teach', 'teaches', 'taught',
+          'ask', 'asks', 'asked',
+          'write', 'wrote', 'read', 'make', 'made', 'find', 'found', 'call', 'called', 'name', 'named'
+        ]);
+        const nonNounModifiers = new Set([
+          'the', 'this', 'that', 'these', 'those', 'about', 'after', 'before', 'because', 'during',
+          'every', 'for', 'from', 'here', 'home', 'into', 'last', 'more', 'near', 'next', 'now',
+          'out', 'over', 'some', 'soon', 'than', 'then', 'there', 'today', 'together', 'tomorrow',
+          'tonight', 'under', 'until', 'very', 'well', 'when', 'while', 'with', 'yesterday', 'too', 'right', 'all', 'away', 'back', 'down', 'off', 'up'
+        ]);
+        const isPrepBeforeBlank = ['to', 'for', 'with', 'at', 'from', 'about', 'by', 'of', 'near', 'beside', 'behind'].includes(prevVerb);
+        if (!isPrepBeforeBlank && !ditransitive.has(prevVerb) && !nonNounModifiers.has(followingWord) && /s$/.test(followingWord)) {
+          return {
+            valid: false,
+            reason: `Blank before plural noun "${followingWord}" likely requires a possessive word (like their/his/her) rather than an object pronoun.`
+          };
+        }
       }
     }
   } else if (normTopic.includes('subject pronoun')) {
@@ -447,6 +564,22 @@ export function validateExplanationAccuracy({ questionText = '', correctAnswer =
     }
   }
 
+  // Check if explanation makes an inverted claim like "'me' is a subject pronoun" or "'they' is an object pronoun"
+  const nonsenseObjAsSubj = exp.match(/["']?(me|him|us|them|whom)["']?\s+is\s+(?:a|an)?\s*subject\s+pronoun/i);
+  if (nonsenseObjAsSubj) {
+    return {
+      valid: false,
+      reason: `Explanation incorrectly describes object pronoun "${nonsenseObjAsSubj[1]}" as a subject pronoun.`
+    };
+  }
+  const nonsenseSubjAsObj = exp.match(/["']?(i|he|she|we|they)["']?\s+is\s+(?:a|an)?\s*object\s+pronoun/i);
+  if (nonsenseSubjAsObj) {
+    return {
+      valid: false,
+      reason: `Explanation incorrectly describes subject pronoun "${nonsenseSubjAsObj[1]}" as an object pronoun.`
+    };
+  }
+
   return { valid: true };
 }
 
@@ -458,12 +591,11 @@ export function getQuestionPatternSignature(questionText = '') {
   const colonIdx = raw.indexOf(':');
   const prefix = colonIdx > 0 && colonIdx < 60 ? normalizeQuestionText(raw.slice(0, colonIdx)) : 'noprefix';
   const body = extractQuestionBody(raw);
-  const skeleton = normalizeQuestionText(body)
-    .split(' ')
-    .map((w) => (w.length <= 2 ? w : 'W'))
-    .slice(0, 8)
-    .join('_');
-  return `${prefix}::${skeleton}`;
+  const words = normalizeQuestionText(body).split(' ').filter(Boolean);
+  const opening = words.slice(0, 3).join('_') || 'empty';
+  const hasBlank = /_{2,}|\[blank\]/i.test(raw) ? 'blank' : 'choice';
+  const lenBucket = Math.ceil(words.length / 4);
+  return `${prefix}::${hasBlank}::${opening}::b${lenBucket}`;
 }
 
 /**
@@ -494,17 +626,6 @@ export function sanitizeAndValidateSingleQuestion(
     reasons.push('Empty or overly short question text.');
   }
 
-  // Ensure question has a clear colon-delimited instruction prefix for Part 5 UI highlighting
-  if (questionText && !questionText.includes(':')) {
-    const defaultPrefix =
-      difficulty === 'Easy'
-        ? 'Choose the correct answer'
-        : difficulty === 'Hard'
-        ? 'Analyze and select the correct option'
-        : 'Complete the sentence with the correct option';
-    questionText = `${defaultPrefix}: ${questionText}`;
-  }
-
   // Parse and clean options (DO NOT truncate multi-word options to 3 words!)
   let rawOptions = Array.isArray(rawQ.options) ? rawQ.options : [];
   const cleanedOptions = rawOptions
@@ -527,20 +648,16 @@ export function sanitizeAndValidateSingleQuestion(
     reasons.push('Contains duplicate answer options within the same question.');
   }
 
-  // Reject ambiguous multiple-correct-answer pronoun sets (e.g. ["me", "you", "him", "her"] for "She called ___ yesterday")
+  // Reject ambiguous multiple-correct-answer pronoun sets (e.g. ["her", "him", "them", "us"] for "Sara gave a book to Tom and ____.")
   const normTopicLower = normalizeQuestionText(topic);
   if (normTopicLower.includes('object pronoun') && cleanedOptions.length === 4) {
     const bareObjPronounsInOpts = cleanedOptions.filter((o) =>
       OBJECT_PRONOUNS_SET.has(normalizeQuestionText(o))
     );
-    // If 3 or 4 options are bare object pronouns AND both "me" and "you" (or "him" and "her") appear without a bracketed/named antecedent
-    const optNorms = new Set(cleanedOptions.map((o) => normalizeQuestionText(o)));
-    const hasAmbiguousPersonMix =
-      (optNorms.has('me') && optNorms.has('you')) ||
-      (optNorms.has('me') && optNorms.has('him') && optNorms.has('her'));
-    if (bareObjPronounsInOpts.length >= 3 && hasAmbiguousPersonMix) {
+    const hasBlank = /_{2,}|\[blank\]/i.test(questionText);
+    if (bareObjPronounsInOpts.length >= 3 && hasBlank) {
       reasons.push(
-        'Multiple object pronoun options could be grammatically valid (ambiguous correct answer); distractors must be unambiguously incorrect.'
+        'Multiple object pronoun options could fit the blank; use non-object pronouns (e.g. I, he, she, we, they, my, his) as clear distractors.'
       );
     }
   }
@@ -596,8 +713,12 @@ export function sanitizeAndValidateSingleQuestion(
     reasons.push(topicCheck.reason || `Off-topic question for "${topic}".`);
   }
 
-  // Difficulty compliance check
-  const diffCheck = checkQuestionDifficultyCompliance({ question: questionText }, difficulty);
+  // Difficulty & Part 14 brevity compliance check
+  const diffCheck = checkQuestionDifficultyCompliance(
+    { question: questionText, options: cleanedOptions },
+    difficulty,
+    durationSec
+  );
   if (!diffCheck.compliant) {
     reasons.push(diffCheck.reason || `Does not match requested difficulty "${difficulty}".`);
   }
@@ -618,7 +739,7 @@ export function sanitizeAndValidateSingleQuestion(
   // PART 12.F Explanation Validation
   const explanation =
     String(rawQ.explanation || '').trim() ||
-    `The correct choice is "${cleanedOptions[correctIndex] || ''}" because it accurately applies the grammatical rules of ${topic}.`;
+    `"${cleanedOptions[correctIndex] || ''}" is correct because it matches the person or things receiving the action.`;
 
   const expCheck = validateExplanationAccuracy({
     questionText,
@@ -631,11 +752,22 @@ export function sanitizeAndValidateSingleQuestion(
 
   const learningObjective =
     String(rawQ.learningObjective || rawQ.learning_objective || '').trim() ||
-    `Apply ${topic} accurately at a ${difficulty} proficiency level in ${subject}.`;
+    `Practice ${topic} using simple, everyday English sentences.`;
 
   const hint =
     String(rawQ.hint || '').trim() ||
-    `Focus on how ${topic} functions within the sentence structure.`;
+    `Read the sentence carefully and check which word fits naturally.`;
+
+  // PART 14 Beginner-friendly language, label, and single-instruction validation
+  const langCheck = checkBeginnerFriendlyLanguage({
+    questionText,
+    options: cleanedOptions,
+    explanation,
+    hint
+  });
+  if (!langCheck.valid) {
+    reasons.push(langCheck.reason || 'Question uses complex wording, internal labels, or repeated instructions.');
+  }
 
   const allowedTypes = ['multiple_choice', 'fill_in_blank', 'concept_application', 'error_identification'];
   const rawType = String(rawQ.questionType || rawQ.question_type || 'multiple_choice').toLowerCase();
@@ -833,334 +965,252 @@ export function validateQuizBatch(
 }
 
 /**
- * Curated, high-accuracy fallback question generator used ONLY if an external AI provider
- * is unreachable after retries. Guarantees 100% topic-accurate, difficulty-matched,
- * non-duplicate questions (never generic placeholders).
+ * Curated, beginner-friendly Object Pronouns bank (short, natural everyday English,
+ * zero technical grammar jargon) used only to recover an isolated failed AI slot.
+ * Never generates generic placeholder questions for arbitrary topics.
  */
 const OBJECT_PRONOUN_CURATED_BANK = {
   Easy: [
     {
-      question: 'Choose the correct object pronoun: Sarah is looking for her keys; have you seen ______?',
-      options: ['them', 'they', 'their', 'theirs'],
+      question: 'Sarah lost her keys. Did you see ____?',
+      options: ['them', 'they', 'their', 'she'],
       correctAnswer: 'them',
-      explanation: '"Them" is the plural third-person object pronoun that replaces the plural noun "keys" after the verb "seen".',
-      hint: '"Keys" is plural and receives the action of the verb.',
-      learningObjective: 'Replace a plural noun with the object pronoun "them".'
+      explanation: '"Keys" is plural, so we use "them" after the verb "see".',
+      hint: '"Keys" means more than one thing.',
+      learningObjective: 'Use "them" for plural nouns after a verb.'
     },
     {
-      question: 'Select the object pronoun: My brother called ______ on the phone this morning.',
-      options: ['me', 'I', 'mine', 'my'],
-      correctAnswer: 'me',
-      explanation: '"Me" is the first-person singular object pronoun used as the direct object of the verb "called".',
-      hint: 'Use the first-person singular pronoun that comes after an action verb.',
-      learningObjective: 'Identify "me" as a direct object after an action verb.'
-    },
-    {
-      question: 'Replace the underlined noun: The teacher gave Daniel a gold star -> The teacher gave ______ a gold star.',
-      options: ['him', 'he', 'his', 'himself'],
-      correctAnswer: 'him',
-      explanation: '"Him" is the masculine singular object pronoun functioning as the indirect object of "gave".',
-      hint: 'Daniel is one male person receiving the gold star.',
-      learningObjective: 'Replace a singular masculine noun with the object pronoun "him".'
-    },
-    {
-      question: 'Identify the correct pronoun: This backpack is heavy; can you help ______ carry it?',
-      options: ['us', 'we', 'our', 'ours'],
-      correctAnswer: 'us',
-      explanation: '"Us" is the first-person plural object pronoun used after the verb "help".',
-      hint: 'Which plural first-person pronoun follows a verb?',
-      learningObjective: 'Use the first-person plural object pronoun "us" after a verb.'
-    },
-    {
-      question: 'Choose the correct pronoun: Maria is my best friend, and I sit next to ______ in class.',
-      options: ['her', 'she', 'hers', 'herself'],
-      correctAnswer: 'her',
-      explanation: '"Her" is the feminine singular object pronoun used after the preposition "to".',
-      hint: 'After the preposition "to", we need an object pronoun for Maria.',
-      learningObjective: 'Use the feminine singular object pronoun "her" after a preposition.'
-    },
-    {
-      question: 'Pick the correct object pronoun: That sandwich looks fresh, so I will eat ______ for lunch.',
-      options: ['it', 'its', 'they', 'them'],
-      correctAnswer: 'it',
-      explanation: '"It" is the singular object pronoun used to replace a single non-living thing ("that sandwich").',
-      hint: '"That sandwich" is one thing.',
-      learningObjective: 'Replace a singular inanimate noun with the object pronoun "it".'
-    },
-    {
-      question: 'Select the right object pronoun: Coach Miller wants to speak with ______ after practice.',
-      options: ['you', 'your', 'yours', 'they'],
-      correctAnswer: 'you',
-      explanation: '"You" serves as the second-person object pronoun after the preposition "with".',
-      hint: 'It is the second-person pronoun (not a possessive form).',
-      learningObjective: 'Recognize "you" as an object of a preposition.'
-    },
-    {
-      question: 'Identify the object pronoun in this sentence: The librarian handed them the new science books.',
-      options: ['them', 'librarian', 'handed', 'books'],
-      correctAnswer: 'them',
-      explanation: '"Them" is the object pronoun acting as the indirect object of the verb "handed".',
-      hint: 'Look for the pronoun that receives the books.',
-      learningObjective: 'Directly identify an object pronoun within a simple sentence.'
-    },
-    {
-      question: 'Choose the correct pronoun: Our neighbors invited ______ to the neighborhood picnic.',
-      options: ['us', 'we', 'our', 'they'],
-      correctAnswer: 'us',
-      explanation: '"Us" is the object pronoun that receives the action of the verb "invited".',
-      hint: '"We" is a subject pronoun; choose its object form.',
-      learningObjective: 'Distinguish the object pronoun "us" from the subject pronoun "we".'
-    },
-    {
-      question: 'Replace the noun in brackets: Please pass the salt to [Grandpa] -> Please pass the salt to ______.',
-      options: ['him', 'he', 'his', 'they'],
-      correctAnswer: 'him',
-      explanation: '"Him" replaces "Grandpa" as the object of the preposition "to".',
-      hint: 'Choose the masculine singular object pronoun.',
-      learningObjective: 'Use "him" as the object of a preposition.'
-    },
-    {
-      question: 'Select the correct word: The puppy followed ______ all the way home from the park.',
+      question: 'Choose the correct word: My brother called ____ this morning.',
       options: ['me', 'I', 'my', 'mine'],
       correctAnswer: 'me',
-      explanation: '"Me" is the direct object of the verb "followed".',
-      hint: 'Which first-person pronoun receives the action of "followed"?',
-      learningObjective: 'Select "me" as the direct object of a past-tense verb.'
+      explanation: 'We use "me" after a verb like "called", not "I".',
+      hint: 'Pick the word that follows an action verb.',
+      learningObjective: 'Use "me" after an action verb.'
     },
     {
-      question: 'Choose the object pronoun: Look at those colorful birds! Can you see ______ in the tree?',
+      question: 'The teacher praised Daniel. She gave ____ a star.',
+      options: ['him', 'he', 'his', 'they'],
+      correctAnswer: 'him',
+      explanation: 'Daniel is one boy, so we use "him" after "gave".',
+      hint: 'Which word matches one boy after a verb?',
+      learningObjective: 'Replace a boy name with "him".'
+    },
+    {
+      question: 'This box is heavy. Can you help ____ carry it?',
+      options: ['us', 'we', 'our', 'they'],
+      correctAnswer: 'us',
+      explanation: 'We use "us" after the verb "help", not "we".',
+      hint: '"We" goes before a verb; choose the word that goes after a verb.',
+      learningObjective: 'Use "us" after a verb.'
+    },
+    {
+      question: 'Maria is my friend. I sit next to ____ in class.',
+      options: ['her', 'she', 'hers', 'it'],
+      correctAnswer: 'her',
+      explanation: 'After "to", we use "her" for Maria, not "she".',
+      hint: 'Which word matches a girl after "to"?',
+      learningObjective: 'Use "her" after "to".'
+    },
+    {
+      question: 'Look at that fresh apple. I want to eat ____.',
+      options: ['it', 'them', 'they', 'he'],
+      correctAnswer: 'it',
+      explanation: '"Apple" is one thing, so we use "it" after "eat".',
+      hint: 'How many apples are there?',
+      learningObjective: 'Use "it" for one thing.'
+    },
+    {
+      question: 'Complete the sentence: Coach Lee wants to talk with ____.',
+      options: ['you', 'your', 'yours', 'they'],
+      correctAnswer: 'you',
+      explanation: 'After "with", we use "you", not "your" or "yours".',
+      hint: 'Pick the pronoun that is not showing ownership.',
+      learningObjective: 'Use "you" after "with".'
+    },
+    {
+      question: 'Choose the correct word: Our friends invited ____ to dinner.',
+      options: ['us', 'we', 'our', 'ours'],
+      correctAnswer: 'us',
+      explanation: 'We use "us" after "invited" to show who received the invitation.',
+      hint: 'Use the form that comes after the verb "invited".',
+      learningObjective: 'Tell the difference between "we" and "us".'
+    },
+    {
+      question: 'Choose the correct sentence.',
+      options: [
+        'Grandma smiled at him.',
+        'Grandma smiled at he.',
+        'Grandma smiled at his.',
+        'Grandma smiled at they.'
+      ],
+      correctAnswer: 'Grandma smiled at him.',
+      explanation: 'After "at", we use "him", not "he" or "his".',
+      hint: 'Look at the word right after "at".',
+      learningObjective: 'Choose a sentence with the right object pronoun.'
+    },
+    {
+      question: 'Look at those cute dogs! Do you like ____?',
       options: ['them', 'they', 'their', 'it'],
       correctAnswer: 'them',
-      explanation: '"Them" replaces the plural noun phrase "those colorful birds" as the object of "see".',
-      hint: '"Birds" is plural, so use the plural object pronoun.',
-      learningObjective: 'Match plural antecedents with the object pronoun "them".'
+      explanation: '"Dogs" means more than one, so we use "them" after "like".',
+      hint: 'There is more than one dog.',
+      learningObjective: 'Use "them" for more than one animal or person.'
     }
   ],
   Medium: [
     {
-      question: 'Complete the sentence: Although the puzzle was tricky, Elena solved ______ before the bell rang.',
-      options: ['it', 'them', 'its', 'they'],
-      correctAnswer: 'it',
-      explanation: '"It" refers back to the singular noun "the puzzle" and acts as the direct object of "solved".',
-      hint: 'Check whether the antecedent "the puzzle" is singular or plural.',
-      learningObjective: 'Maintain singular number agreement when selecting an object pronoun in a two-clause sentence.'
-    },
-    {
-      question: 'Choose the correct pronoun pair: When the guests arrived, my parents greeted ______ and offered ______ tea.',
-      options: ['them / them', 'they / them', 'them / their', 'they / their'],
-      correctAnswer: 'them / them',
-      explanation: 'Both blanks follow transitive verbs ("greeted" and "offered") and require the plural object pronoun "them".',
-      hint: 'Both blanks receive the action of a verb referring to "the guests".',
-      learningObjective: 'Use consistent plural object pronouns across compound verb phrases.'
-    },
-    {
-      question: 'Select the correct contextual pronoun: The science teacher explained the experiment to Maya and ______.',
-      options: ['me', 'I', 'myself', 'mine'],
-      correctAnswer: 'me',
-      explanation: 'After the preposition "to", a compound object requires the object pronoun "me" ("to Maya and me").',
-      hint: 'Test the sentence without "Maya and": "explained the experiment to ___".',
-      learningObjective: 'Select the correct object pronoun in a compound prepositional object.'
-    },
-    {
-      question: 'Complete the dialogue: "Did you invite Lucas to the concert?" "Yes, I sent ______ a ticket yesterday."',
-      options: ['him', 'he', 'his', 'them'],
-      correctAnswer: 'him',
-      explanation: '"Him" functions as the indirect object of "sent", referring to the singular masculine noun "Lucas".',
-      hint: 'Who received the ticket?',
-      learningObjective: 'Identify indirect object pronouns in conversational context.'
-    },
-    {
-      question: 'Choose the sentence with correct object pronoun placement: Which sentence uses the object pronoun properly?',
-      options: [
-        'The principal congratulated us after the debate.',
-        'The principal congratulated we after the debate.',
-        'Us congratulated the principal after the debate.',
-        'The principal congratulated ours after the debate.'
-      ],
-      correctAnswer: 'The principal congratulated us after the debate.',
-      explanation: '"Us" is an object pronoun and must follow the transitive verb "congratulated", not act as the subject.',
-      hint: 'Object pronouns follow the verb rather than acting as the sentence subject.',
-      learningObjective: 'Verify correct syntactic placement of object pronouns after transitive verbs.'
-    },
-    {
-      question: 'Select the best completion: Neither of my sisters brought an umbrella, so I shared mine with ______.',
-      options: ['them', 'her', 'they', 'she'],
-      correctAnswer: 'them',
-      explanation: 'In the second clause, the speaker shared the umbrella with both sisters ("them") after the preposition "with".',
-      hint: 'The preposition "with" requires an object pronoun referring to the sisters.',
-      learningObjective: 'Apply object pronouns after prepositions in compound sentences.'
-    },
-    {
-      question: 'Complete the sentence: Ms. Alvarez asked ______ to organize the art supplies before dismissal.',
-      options: ['her and me', 'she and I', 'her and I', 'she and me'],
-      correctAnswer: 'her and me',
-      explanation: 'Both pronouns serve as the direct object of the verb "asked", so both must be in the objective case ("her and me").',
-      hint: 'Both pronouns are objects of the verb "asked".',
-      learningObjective: 'Use objective case for both elements of a compound direct object.'
-    },
-    {
-      question: 'Choose the correct replacement: The museum guide showed [the tourists] the ancient pottery -> The guide showed ______ ______.',
-      options: ['them / it', 'they / it', 'them / them', 'their / its'],
-      correctAnswer: 'them / it',
-      explanation: '"The tourists" (plural) becomes the indirect object "them", and "the ancient pottery" (singular uncountable) becomes "it".',
-      hint: '"Tourists" is plural, while "pottery" is singular.',
-      learningObjective: 'Replace both indirect and direct object nouns with their matching object pronouns.'
-    },
-    {
-      question: 'Identify the correct pronoun: Because Sofia forgot her notebook, Liam lent ______ some paper.',
-      options: ['her', 'she', 'hers', 'him'],
-      correctAnswer: 'her',
-      explanation: '"Her" is the indirect object of "lent", referring back to Sofia.',
-      hint: 'Liam is lending paper to Sofia.',
-      learningObjective: 'Track feminine singular antecedents across dependent and independent clauses.'
-    },
-    {
-      question: 'Complete the sentence: If you see the delivery driver, please hand this signed receipt to ______.',
-      options: ['him or her', 'he or she', 'his or her', 'they'],
-      correctAnswer: 'him or her',
-      explanation: 'Following the preposition "to", the compound pronoun must be in the objective case ("him or her").',
-      hint: 'The phrase follows the preposition "to".',
-      learningObjective: 'Use objective case pronouns in coordinated singular expressions.'
-    },
-    {
-      question: 'Select the accurate option: The symphony moved the audience so deeply that everyone applauded ______ for ten minutes.',
+      question: 'The math puzzle was hard, but Mia finished ____ on time.',
       options: ['it', 'them', 'they', 'its'],
       correctAnswer: 'it',
-      explanation: '"It" refers to the singular noun "the symphony" as the direct object of "applauded".',
-      hint: '"The symphony" is a singular noun.',
-      learningObjective: 'Match singular collective/event nouns with the object pronoun "it".'
+      explanation: '"Puzzle" is one thing, so we use "it" after "finished".',
+      hint: 'Check if "puzzle" means one thing or many things.',
+      learningObjective: 'Match one thing with "it" in a two-part sentence.'
     },
     {
-      question: 'Choose the correct completion: Our coach reminded Leo and ______ to bring extra water bottles.',
-      options: ['us', 'we', 'our', 'ours'],
-      correctAnswer: 'us',
-      explanation: '"Us" is part of the compound direct object of the verb "reminded".',
-      hint: 'Remove "Leo and" to test: "Our coach reminded ___".',
-      learningObjective: 'Select the plural object pronoun "us" in a compound direct object.'
+      question: 'The teacher explained the game to Maya and ____.',
+      options: ['me', 'I', 'my', 'mine'],
+      correctAnswer: 'me',
+      explanation: 'Try removing "Maya and": "explained the game to me" sounds right, not "to I".',
+      hint: 'Say the sentence without "Maya and".',
+      learningObjective: 'Use "me" with another name after "to".'
+    },
+    {
+      question: 'Tom asks: "Did you call Lucas?" Lily says: "Yes, I texted ____."',
+      options: ['him', 'he', 'his', 'they'],
+      correctAnswer: 'him',
+      explanation: 'Lucas is one boy, so Lily texted "him", not "he".',
+      hint: 'Who did Lily text?',
+      learningObjective: 'Use object pronouns naturally in a short conversation.'
+    },
+    {
+      question: 'Choose the correct sentence.',
+      options: [
+        'The coach thanked us after the match.',
+        'The coach thanked we after the match.',
+        'Us thanked the coach after the match.',
+        'The coach thanked our after the match.'
+      ],
+      correctAnswer: 'The coach thanked us after the match.',
+      explanation: '"Us" goes after the action word "thanked", while "we" goes before a verb.',
+      hint: 'Check which word comes right after "thanked".',
+      learningObjective: 'Spot correct pronoun order in a sentence.'
+    },
+    {
+      question: 'Both sisters forgot lunch, so Mom shared snacks with ____.',
+      options: ['them', 'her', 'they', 'their'],
+      correctAnswer: 'them',
+      explanation: '"Both sisters" is two people, so we use "them" after "with".',
+      hint: 'How many sisters are there?',
+      learningObjective: 'Use "them" after "with" for two people.'
+    },
+    {
+      question: 'Choose the correct word: Ms. Kim asked Elena and ____ to clean.',
+      options: ['me', 'I', 'my', 'mine'],
+      correctAnswer: 'me',
+      explanation: 'Say "Ms. Kim asked me to clean". That shows "me" is right after "asked".',
+      hint: 'Test the sentence without "Elena and".',
+      learningObjective: 'Use "me" in compound pairs after a verb.'
+    },
+    {
+      question: 'Sofia lost her eraser, so Leo lent ____ an extra one.',
+      options: ['her', 'she', 'hers', 'him'],
+      correctAnswer: 'her',
+      explanation: 'Leo lent the eraser to Sofia, so we use "her".',
+      hint: 'Who received the eraser from Leo?',
+      learningObjective: 'Choose "her" for a girl receiving something.'
+    },
+    {
+      question: 'The school song was great, so everyone clapped for ____.',
+      options: ['it', 'them', 'they', 'its'],
+      correctAnswer: 'it',
+      explanation: '"The school song" is one thing, so we use "it" after "for".',
+      hint: '"Song" is singular.',
+      learningObjective: 'Match singular events and things with "it".'
     }
   ],
   Hard: [
     {
-      question: 'Identify the grammatical error: In "Just between you and I, the committee should award her and them the grant," which pronoun is incorrect?',
+      question: 'Choose the correct sentence.',
       options: [
-        '"I" should be the object pronoun "me"',
-        '"you" should be the possessive "your"',
-        '"her" should be the subject pronoun "she"',
-        '"them" should be the subject pronoun "they"'
+        'Between you and me, this science project looks great.',
+        'Between you and I, this science project looks great.',
+        'Between your and me, this science project looks great.',
+        'Between you and mine, this science project looks great.'
       ],
-      correctAnswer: '"I" should be the object pronoun "me"',
-      explanation: 'Prepositions such as "between" govern the objective case, so the compound object must be "between you and me".',
-      hint: 'Check the compound phrase following the preposition "between".',
-      learningObjective: 'Identify and correct hypercorrection of "I" vs "me" in compound prepositional phrases.'
+      correctAnswer: 'Between you and me, this science project looks great.',
+      explanation: 'After "between", always use object pronouns: "between you and me".',
+      hint: 'Check the words right after "between".',
+      learningObjective: 'Avoid using "I" after prepositions like "between".'
     },
     {
-      question: 'Analyze and select the grammatically sound sentence: Which complex sentence uses object pronouns without case errors?',
+      question: 'Which sentence sounds completely right?',
       options: [
-        'The director whom the critics praised invited Clara and me to the premiere.',
-        'The director who the critics praised invited Clara and I to the premiere.',
-        'The director whom the critics praised invited she and me to the premiere.',
-        'The director praised he and I before inviting them to the premiere.'
+        'The principal invited Sara and me to speak on stage.',
+        'The principal invited Sara and I to speak on stage.',
+        'The principal invited she and me to speak on stage.',
+        'The principal invited Sara and my to speak on stage.'
       ],
-      correctAnswer: 'The director whom the critics praised invited Clara and me to the premiere.',
-      explanation: '"Whom" is the object of "praised" in the relative clause, and "Clara and me" is the compound direct object of "invited".',
-      hint: 'Check both the relative clause object ("whom") and the compound object after "invited".',
-      learningObjective: 'Apply objective case rules simultaneously to relative clauses and compound direct objects.'
+      correctAnswer: 'The principal invited Sara and me to speak on stage.',
+      explanation: 'Both people follow "invited", so we say "invited Sara and me".',
+      hint: 'Drop "Sara and" to hear which pronoun sounds right.',
+      learningObjective: 'Choose the right pronoun pair after a verb.'
     },
     {
-      question: 'Choose the correct form in anappositive object structure: The scholarship board selected two finalists, namely Marcus and ______.',
-      options: ['her', 'she', 'hers', 'herself'],
-      correctAnswer: 'her',
-      explanation: 'An appositive ("Marcus and her") takes the same grammatical case as the noun phrase it renames ("two finalists", which is the direct object of "selected").',
-      hint: '"Two finalists" is the direct object of "selected", so the appositive must also be in the objective case.',
-      learningObjective: 'Determine objective case agreement in appositive phrases renaming a direct object.'
-    },
-    {
-      question: 'Select the correct pronoun after a gerund: The team appreciated ______ helping ______ revise the technical report.',
+      question: 'Which sentence has NO pronoun mistake?',
       options: [
-        'his / them',
-        'him / they',
-        'he / them',
-        'his / they'
+        'She gave the extra tickets to Ben and him.',
+        'She gave the extra tickets to Ben and he.',
+        'Her gave the extra tickets to Ben and him.',
+        'She gave the extra tickets to Ben and his.'
       ],
-      correctAnswer: 'his / them',
-      explanation: 'While "his" modifies the gerund "helping", the gerund itself is transitive and takes the object pronoun "them" as its direct object.',
-      hint: 'What pronoun is required as the direct object of the verb form "helping"?',
-      learningObjective: 'Select an object pronoun as the direct object of a transitive gerund.'
+      correctAnswer: 'She gave the extra tickets to Ben and him.',
+      explanation: '"She" does the action, and "Ben and him" come after "to".',
+      hint: 'Look at the word after "to Ben and".',
+      learningObjective: 'Check both the doer and receiver in a sentence.'
     },
     {
-      question: 'Evaluate the sentence with an infinitive clause: The mentor expected ______ to brief ______ before the panel convened.',
-      options: [
-        'him / us',
-        'he / us',
-        'him / we',
-        'he / we'
-      ],
-      correctAnswer: 'him / us',
-      explanation: 'The subject of an infinitive ("to brief") takes the objective case ("him"), and the direct object of the infinitive also takes the objective case ("us").',
-      hint: 'Both the subject of an infinitive and the object of an infinitive take the objective case in English.',
-      learningObjective: 'Apply objective case to both the subject and object of an infinitive clause.'
-    },
-    {
-      question: 'Spot the case error: Which underlined pronoun in "Although the manager praised [them], she assigned [he] and [me] the hardest shift with [her]" is ungrammatical?',
-      options: ['he (should be "him")', 'them (should be "they")', 'me (should be "I")', 'her (should be "she")'],
-      correctAnswer: 'he (should be "him")',
-      explanation: 'As the indirect object of the verb "assigned", both coordinated pronouns must be in the objective case: "assigned him and me".',
-      hint: 'Check the coordinated indirect objects following the verb "assigned".',
-      learningObjective: 'Detect subject-pronoun intrusion inside a coordinated indirect object.'
-    },
-    {
-      question: 'Distinguish object vs. reflexive usage: Because the auditors didn’t know Nadia or ______, they asked ______ for identification.',
-      options: [
-        'me / us',
-        'myself / ourselves',
-        'I / we',
-        'me / ourselves'
-      ],
-      correctAnswer: 'me / us',
-      explanation: 'Reflexive pronouns ("myself", "ourselves") are only valid when the subject and object are the same entity; here the subject is "the auditors", requiring standard object pronouns "me" and "us".',
-      hint: 'The subject of both clauses is "the auditors/they", not the speaker.',
-      learningObjective: 'Avoid non-standard reflexive substitution when standard object pronouns "me" and "us" are required.'
-    },
-    {
-      question: 'Analyze the elliptical comparison: The sudden policy change affected my colleagues far more than ______ (meaning: more than it affected me).',
-      options: ['me', 'I', 'mine', 'my'],
+      question: 'Nobody heard the loud thunder except Leo and ____.',
+      options: ['me', 'I', 'my', 'mine'],
       correctAnswer: 'me',
-      explanation: 'When the intended meaning is "...more than [it affected] me", the pronoun functions as the object of the elided verb "affected", requiring the object pronoun "me".',
-      hint: 'Mentally supply the omitted words: "more than it affected ___".',
-      learningObjective: 'Resolve pronoun case in elliptical clauses where the pronoun is the understood direct object.'
+      explanation: 'After "except", we use the object pronoun "me", not "I".',
+      hint: 'Test the sentence without "Leo and".',
+      learningObjective: 'Use object pronouns after "except".'
     },
     {
-      question: 'Select the correct prepositional construction: Everyone except ______ and ______ had already submitted the lab findings to ______.',
+      question: 'Pick the sentence that fixes "Please tell Mark and I the time".',
       options: [
-        'her / me / them',
-        'she / I / they',
-        'her / I / them',
-        'she / me / their'
+        'Please tell Mark and me the time.',
+        'Please tell Mark and my the time.',
+        'Please tell he and I the time.',
+        'Please tell we the time.'
       ],
-      correctAnswer: 'her / me / them',
-      explanation: '"Except" functions as a preposition ("except her and me"), and "to" also governs the objective case ("to them").',
-      hint: 'Remember that "except" and "to" are both prepositions requiring object pronouns.',
-      learningObjective: 'Apply objective case after the preposition "except" and in subsequent prepositional phrases.'
+      correctAnswer: 'Please tell Mark and me the time.',
+      explanation: 'After "tell", use "me" instead of "I": "Please tell Mark and me."',
+      hint: 'Say "Please tell ___ the time" without "Mark and".',
+      learningObjective: 'Fix common mistakes with "I" and "me" in everyday requests.'
     },
     {
-      question: 'Choose the grammatically accurate revision: How should "Let he and I review the contract before sending it to she" be corrected?',
-      options: [
-        'Let him and me review the contract before sending it to her.',
-        'Let he and me review the contract before sending it to her.',
-        'Let him and I review the contract before sending it to she.',
-        'Let him and myself review the contract before sending it to hers.'
-      ],
-      correctAnswer: 'Let him and me review the contract before sending it to her.',
-      explanation: 'The verb "let" takes an objective-case compound object ("him and me"), and the preposition "to" requires the object pronoun "her".',
-      hint: 'Both the verb "let" and the preposition "to" require object pronouns.',
-      learningObjective: 'Correct multiple objective-case errors following "let" and prepositions.'
+      question: 'Maya waited outside with Carlos and ____ for ten minutes.',
+      options: ['him', 'he', 'his', 'they'],
+      correctAnswer: 'him',
+      explanation: 'After "with", we use the object pronoun "him", not "he".',
+      hint: 'Remove "Carlos and" to check which word sounds natural.',
+      learningObjective: 'Use object pronouns in pairs after "with".'
+    },
+    {
+      question: 'Those noisy birds woke both my sister and ____ early today.',
+      options: ['us', 'we', 'our', 'ours'],
+      correctAnswer: 'us',
+      explanation: '"Us" comes after the action verb "woke", not "we".',
+      hint: 'Pick the word that receives the action.',
+      learningObjective: 'Use "us" correctly after action verbs.'
     }
   ]
 };
 
 /**
- * Generates topic-accurate, difficulty-calibrated fallback questions when needed,
- * avoiding any overlap with existingQuestions.
+ * Provides strictly curated, topic-accurate beginner-friendly fallback items ONLY for
+ * supported curated banks (never synthetic generic boilerplate). Returns [] otherwise.
  */
 export function buildTopicAccurateFallbackQuestions({
   subject = 'English Grammar',
@@ -1175,180 +1225,50 @@ export function buildTopicAccurateFallbackQuestions({
   const diffKey = ['Easy', 'Medium', 'Hard'].includes(difficulty) ? difficulty : 'Medium';
   const results = [];
 
-  if (normTopic.includes('object pronoun')) {
-    const primaryPool = OBJECT_PRONOUN_CURATED_BANK[diffKey] || OBJECT_PRONOUN_CURATED_BANK.Easy;
-    const secondaryPool = [
-      ...primaryPool,
-      ...OBJECT_PRONOUN_CURATED_BANK.Easy,
-      ...OBJECT_PRONOUN_CURATED_BANK.Medium,
-      ...OBJECT_PRONOUN_CURATED_BANK.Hard
-    ];
-
-    for (const item of secondaryPool) {
-      if (results.length >= count) break;
-      const alreadyUsed =
-        results.some((r) => areQuestionsSemanticallyDuplicate(item.question, r.question, item.options, r.options)) ||
-        existingQuestions.some((eq) => areQuestionsSemanticallyDuplicate(item.question, String(eq), item.options, []));
-      if (alreadyUsed) continue;
-
-      const idx = results.length;
-      const desiredSlot = idx % 4;
-      const opts = [...item.options];
-      const origCorrectIdx = opts.findIndex((o) => o === item.correctAnswer);
-      if (origCorrectIdx !== -1 && origCorrectIdx !== desiredSlot) {
-        const tmp = opts[desiredSlot];
-        opts[desiredSlot] = opts[origCorrectIdx];
-        opts[origCorrectIdx] = tmp;
-      }
-
-      results.push({
-        id: `ai_q_${Date.now()}_${idx + 1}`,
-        question: item.question,
-        options: opts,
-        correctIndex: desiredSlot,
-        correctAnswer: item.correctAnswer,
-        explanation: item.explanation,
-        hint: item.hint,
-        difficulty: diffKey,
-        topic,
-        learningObjective: item.learningObjective,
-        questionType: 'multiple_choice',
-        durationSec,
-        points: pointsPerQuestion
-      });
-    }
+  if (!normTopic.includes('object pronoun')) {
+    return [];
   }
 
-  // If more questions are needed (e.g. 20 questions or another topic), generate distinct topic-specific items
-  const pronounCases = [
-    { subj: 'I', obj: 'me', poss: 'my', refl: 'myself', noun: 'the speaker', context: 'after the action verb' },
-    { subj: 'he', obj: 'him', poss: 'his', refl: 'himself', noun: 'Daniel', context: 'as the direct object' },
-    { subj: 'she', obj: 'her', poss: 'hers', refl: 'herself', noun: 'Elena', context: 'after the preposition' },
-    { subj: 'we', obj: 'us', poss: 'our', refl: 'ourselves', noun: 'our group', context: 'as the indirect object' },
-    { subj: 'they', obj: 'them', poss: 'their', refl: 'themselves', noun: 'the students', context: 'receiving the action' },
-    { subj: 'it', obj: 'it', poss: 'its', refl: 'itself', noun: 'the telescope', context: 'replacing the singular noun' },
-    { subj: 'you', obj: 'you', poss: 'yours', refl: 'yourself', noun: 'the listener', context: 'following the preposition' }
+  const primaryPool = OBJECT_PRONOUN_CURATED_BANK[diffKey] || OBJECT_PRONOUN_CURATED_BANK.Easy;
+  const secondaryPool = [
+    ...primaryPool,
+    ...OBJECT_PRONOUN_CURATED_BANK.Easy,
+    ...OBJECT_PRONOUN_CURATED_BANK.Medium,
+    ...OBJECT_PRONOUN_CURATED_BANK.Hard
   ];
 
-  const diverseScenarios = [
-    { actor: 'The librarian', verb: 'reserved the quiet study room for', setting: 'before the afternoon exam' },
-    { actor: 'Coach Ramirez', verb: 'awarded the sportsmanship trophy to', setting: 'at the end of the tournament' },
-    { actor: 'The museum curator', verb: 'guided', setting: 'through the ancient Egyptian gallery' },
-    { actor: 'Dr. Patel', verb: 'emailed the laboratory safety instructions to', setting: 'on Monday morning' },
-    { actor: 'The orchestra conductor', verb: 'praised', setting: 'after the winter concert rehearsal' },
-    { actor: 'Our robotics mentor', verb: 'lent the voltage meter to', setting: 'during the regional qualifiers' },
-    { actor: 'The school principal', verb: 'welcomed', setting: 'at the main auditorium entrance' },
-    { actor: 'Chef Antonio', verb: 'prepared a vegetarian pasta dish for', setting: 'in the culinary workshop' },
-    { actor: 'The astronomy club president', verb: 'showed the lunar eclipse photos to', setting: 'on the rooftop deck' },
-    { actor: 'Ms. Jenkins', verb: 'assigned the documentary editing task to', setting: 'for the history project' },
-    { actor: 'The botanical garden ranger', verb: 'handed the trail map to', setting: 'near the greenhouse gate' },
-    { actor: 'Captain Morales', verb: 'briefed', setting: 'before the coastal rescue drill began' },
-    { actor: 'The debate moderator', verb: 'granted two extra minutes to', setting: 'for the closing rebuttal' },
-    { actor: 'Aunt Clara', verb: 'knitted a warm wool scarf for', setting: 'before the December snowfall' },
-    { actor: 'The theater director', verb: 'cast', setting: 'in the opening scene of the festival play' },
-    { actor: 'Professor Lin', verb: 'recommended three archival journals to', setting: 'for the capstone essay' },
-    { actor: 'The wildlife photographer', verb: 'spotted', setting: 'across the misty meadow at dawn' },
-    { actor: 'Our student council treasurer', verb: 'reimbursed', setting: 'for the art fairposter supplies' },
-    { actor: 'Thechess grandmaster', verb: 'congratulated', setting: 'after the thirty-move endgame' },
-    { actor: 'Paramedic Davis', verb: 'wrapped a thermal blanket around', setting: 'beside the marathon finish line' },
-    { actor: 'The flight attendant', verb: 'offered a cup of herbal tea to', setting: 'during the transatlantic flight' },
-    { actor: 'Architect Gomez', verb: 'presented the bridge blueprints to', setting: 'at the city planning meeting' },
-    { actor: 'The marine biologist', verb: 'ferried', setting: 'across the coral lagoon by boat' },
-    { actor: 'Grandma', verb: 'mailed a handwritten birthday card to', setting: 'from her cottage in Vermont' },
-    { actor: 'The sound engineer', verb: 'adjusted the wireless microphone for', setting: 'backstage before the keynote' },
-    { actor: 'Detective Brooks', verb: 'interviewed', setting: 'about the missing museum painting' },
-    { actor: 'The camp counselor', verb: 'taught', setting: 'how to navigate with a compass' },
-    { actor: 'Mr. Okafor', verb: 'drove', setting: 'to the regional spelling bee finals' },
-    { actor: 'The receptionist', verb: 'scheduled a follow-up appointment for', setting: 'next Wednesday at noon' },
-    { actor: 'Our chemistry partner', verb: 'shared the titration data with', setting: 'after the third trial' }
-  ];
+  for (const item of secondaryPool) {
+    if (results.length >= count) break;
+    const alreadyUsed =
+      results.some((r) => areQuestionsSemanticallyDuplicate(item.question, r.question, item.options, r.options)) ||
+      existingQuestions.some((eq) => areQuestionsSemanticallyDuplicate(item.question, String(eq), item.options, []));
+    if (alreadyUsed) continue;
 
-  let scenarioIdx = 0;
-  let safetyCounter = 0;
-  while (results.length < count && safetyCounter < 150) {
-    safetyCounter++;
     const idx = results.length;
-    if (normTopic.includes('object pronoun')) {
-      const pCase = pronounCases[(idx + scenarioIdx) % pronounCases.length];
-      const scen = diverseScenarios[scenarioIdx % diverseScenarios.length];
-      scenarioIdx++;
-
-      const qText =
-        diffKey === 'Easy'
-          ? `Select the object pronoun for [${pCase.noun}]: ${scen.actor} ${scen.verb} ______ ${scen.setting}.`
-          : diffKey === 'Hard'
-          ? `Analyze the clause and select the objective-case pronoun for [${pCase.noun}]: ${scen.actor} ${scen.verb} ______ ${scen.setting}.`
-          : `Complete the sentence for [${pCase.noun}]: ${scen.actor} ${scen.verb} ______ ${scen.setting}.`;
-
-      const alreadyUsed =
-        results.some((r) => areQuestionsSemanticallyDuplicate(qText, r.question, [], [])) ||
-        existingQuestions.some((eq) => areQuestionsSemanticallyDuplicate(qText, String(eq), [], []));
-      if (alreadyUsed) continue;
-
-      const distractors = [pCase.subj, pCase.poss, pCase.refl].map((d) =>
-        d === pCase.obj ? (pCase.obj === 'it' ? 'they' : 'theirs') : d
-      );
-      const rawOpts = [pCase.obj, ...distractors];
-      const desiredSlot = idx % 4;
-      const tmp = rawOpts[desiredSlot];
-      rawOpts[desiredSlot] = rawOpts[0];
-      rawOpts[0] = tmp;
-
-      results.push({
-        id: `ai_q_${Date.now()}_${idx + 1}`,
-        question: qText,
-        options: rawOpts,
-        correctIndex: desiredSlot,
-        correctAnswer: pCase.obj,
-        explanation: `"${pCase.obj}" is the correct object pronoun for ${pCase.noun} (${pCase.context}).`,
-        hint: `Choose the objective-case pronoun that corresponds to ${pCase.noun}.`,
-        difficulty: diffKey,
-        topic,
-        learningObjective: `Use the object pronoun "${pCase.obj}" accurately ${pCase.context}.`,
-        questionType: 'multiple_choice',
-        durationSec,
-        points: pointsPerQuestion
-      });
-    } else {
-      const subSkills = [
-        'core definition and identification',
-        'contextual sentence application',
-        'distinguishing correct usage from common misconceptions',
-        'analyzing structure and rules',
-        'practical real-world example',
-        'evaluating accuracy in context',
-        'recognizing key patterns',
-        'applying rules in compound contexts'
-      ];
-      const skill = subSkills[idx % subSkills.length];
-      const desiredSlot = idx % 4;
-      const correctOpt = `Accurate ${topic} application (${skill.split(' ')[0]})`;
-      const rawOpts = [
-        correctOpt,
-        `Unrelated tense shift outside ${topic}`,
-        `Misapplied rule contradicting ${topic}`,
-        `Incomplete fragment lacking ${topic}`
-      ];
-      const tmp = rawOpts[desiredSlot];
-      rawOpts[desiredSlot] = rawOpts[0];
-      rawOpts[0] = tmp;
-
-      results.push({
-        id: `ai_q_${Date.now()}_${idx + 1}`,
-        question: `Assess ${topic} (${diffKey}): Which statement or example accurately demonstrates ${skill} in ${topic}?`,
-        options: rawOpts,
-        correctIndex: desiredSlot,
-        correctAnswer: correctOpt,
-        explanation: `This option directly and accurately applies the rules of ${topic} in ${subject}.`,
-        hint: `Look for the choice that directly addresses ${topic}.`,
-        difficulty: diffKey,
-        topic,
-        learningObjective: `Demonstrate mastery of ${skill} within ${topic}.`,
-        questionType: 'multiple_choice',
-        durationSec,
-        points: pointsPerQuestion
-      });
+    const desiredSlot = idx % 4;
+    const opts = [...item.options];
+    const origCorrectIdx = opts.findIndex((o) => o === item.correctAnswer);
+    if (origCorrectIdx !== -1 && origCorrectIdx !== desiredSlot) {
+      const tmp = opts[desiredSlot];
+      opts[desiredSlot] = opts[origCorrectIdx];
+      opts[origCorrectIdx] = tmp;
     }
+
+    results.push({
+      id: `ai_q_${Date.now()}_${idx + 1}`,
+      question: item.question,
+      options: opts,
+      correctIndex: desiredSlot,
+      correctAnswer: item.correctAnswer,
+      explanation: item.explanation,
+      hint: item.hint,
+      difficulty: diffKey,
+      topic,
+      learningObjective: item.learningObjective,
+      questionType: 'multiple_choice',
+      durationSec,
+      points: pointsPerQuestion
+    });
   }
 
   return results;

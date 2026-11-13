@@ -79,13 +79,14 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
   const [isPaused, setIsPaused] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
   const [hostMenuOpen, setHostMenuOpen] = useState(false);
-  const [isMusicMuted, setIsMusicMuted] = useState(() => quizAudioService.isMusicMuted());
+  const [isMusicMuted, setIsMusicMuted] = useState(() => quizAudioService.isMuted());
   const [quickTipsOpen, setQuickTipsOpen] = useState(false);
 
   // Transition & idempotency lock
   const isAdvancingRef = useRef(false);
   const revealTimerRef = useRef<NodeJS.Timeout | null>(null);
   const advancedQuestionsRef = useRef<Set<number>>(new Set());
+  const lastAudioQuestionRef = useRef<number | null>(null);
 
   // Channel management & subscription tracking
   const channelRef = useRef<any>(null);
@@ -158,16 +159,22 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     [session.id, session.teacher_id, applyAnsweredMapState]
   );
 
-  // Background music lifecycle: start on mount when quiz is active, stop on unmount
+  // Background music lifecycle & asset preloading: start on mount when quiz is active, stop on unmount
   useEffect(() => {
+    quizAudioService.resetSessionAudio(session.id);
+    quizAudioService.preloadQuizAudio();
     quizAudioService.startBackgroundMusic();
+    const unsubscribe = quizAudioService.subscribe((muted) => {
+      setIsMusicMuted(muted);
+    });
     return () => {
+      unsubscribe();
       quizAudioService.stopBackgroundMusic();
       if (revealTimerRef.current) {
         clearTimeout(revealTimerRef.current);
       }
     };
-  }, []);
+  }, [session.id]);
 
   // Safe broadcast helper that awaits channel subscription
   const safeBroadcast = useCallback((message: any) => {
@@ -347,11 +354,14 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     // Sync any already-submitted answers or joined students for this question index
     syncParticipationFromDatabase(currentQIndex);
 
-    // Play start fanfare on Q0, or transition chime on subsequent questions
-    if (currentQIndex === 0) {
-      quizAudioService.playQuizStart();
-    } else {
-      quizAudioService.playQuestionTransition();
+    // Play start fanfare on Q0, or subtle transition chime once per new question
+    if (lastAudioQuestionRef.current !== currentQIndex) {
+      lastAudioQuestionRef.current = currentQIndex;
+      if (currentQIndex === 0) {
+        quizAudioService.playQuizStart();
+      } else {
+        quizAudioService.playQuestionTransition();
+      }
     }
 
     const broadcastPayload = {
@@ -432,7 +442,7 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     advancedQuestionsRef.current.add(currentQIndex);
 
     setPhase('reveal');
-    quizAudioService.playCorrect();
+    // Answer correctness sounds belong strictly on each student's device (Part 1), never on the host.
 
     const correctIdx = activeQuestion?.correctIndex ?? 0;
 
@@ -558,7 +568,6 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     setIsFinishing(true);
     quizAudioService.setQuizFinished(true);
     quizAudioService.stopBackgroundMusic();
-    quizAudioService.playQuizComplete(session.id);
 
     try {
       const res = await liveQuizService.finishQuiz(session.id);
@@ -582,9 +591,12 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
   };
 
   const toggleMusic = () => {
-    quizAudioService.playClick();
-    const nextMuted = quizAudioService.toggleMusicMute();
+    quizAudioService.unlockAudio();
+    const nextMuted = quizAudioService.toggleMute();
     setIsMusicMuted(nextMuted);
+    if (!nextMuted) {
+      quizAudioService.playClick();
+    }
   };
 
   if (!activeQuestion) {

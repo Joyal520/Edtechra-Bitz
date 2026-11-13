@@ -161,9 +161,10 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   const [streak, setStreak] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const [isMusicMuted, setIsMusicMuted] = useState(() => quizAudioService.isMusicMuted());
+  const [isMusicMuted, setIsMusicMuted] = useState(() => quizAudioService.isMuted());
   const [showConfetti, setShowConfetti] = useState(false);
   const hasTriggeredFeedbackRef = useRef<number | null>(null);
+  const liveSubmittedQRef = useRef<number | null>(null);
 
   const [studentQuestions, setStudentQuestions] = useState<any[]>(() => session.quiz?.questions || []);
 
@@ -202,8 +203,19 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     }
   }, [session.quiz_id, session.quiz?.id, session.quiz?.questions]);
 
-  // ---- audio lifecycle: one owner, stopped on unmount ------------------------
+  // ---- audio lifecycle: preload real MP3s early, keep mute synced, stop cleanly on unmount ----
   const hasQuestion = Boolean(questionData);
+  useEffect(() => {
+    quizAudioService.resetSessionAudio(session.id);
+    quizAudioService.preloadQuizAudio();
+    const unsubscribe = quizAudioService.subscribe((muted) => {
+      setIsMusicMuted(muted);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [session.id]);
+
   useEffect(() => {
     if (hasQuestion && !finishedRef.current) {
       quizAudioService.startBackgroundMusic();
@@ -311,6 +323,8 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     const durationSec = state.question_duration_sec || q.durationSec || session.quiz?.timer_seconds || 20;
     if (isNewQuestion) {
       activeQIndexRef.current = idx;
+      liveSubmittedQRef.current = null;
+      quizAudioService.stopAnswerEffects();
       setSelectedIndex(null);
       setSelectedDisplayIndex(null);
       setIsLocked(false);
@@ -489,21 +503,37 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     };
   }, [syncWithDatabase]);
 
-  // ---- feedback audio/visual: driven by the SERVER-graded result ------------------
+  // ---- feedback audio/visual: strictly once per live submitted answer on this device ----
+  // Never replays on component re-renders, page refreshes, or duplicate Realtime snapshots.
   useEffect(() => {
     if (!answerResult || !questionData) return;
-    if (hasTriggeredFeedbackRef.current === questionData.qIndex) return;
-    hasTriggeredFeedbackRef.current = questionData.qIndex;
+    const qIdx = questionData.qIndex;
+    if (hasTriggeredFeedbackRef.current === qIdx) return;
 
-    if (answerResult.isCorrect) {
-      quizAudioService.playCorrect();
-      setShowConfetti(true);
-      setStreak((prev) => prev + 1);
-    } else {
-      quizAudioService.playIncorrect();
-      setStreak(0);
+    // Only play audio for an answer submitted live during this visit (never on reload hydration)
+    const wasSubmittedInThisVisit = liveSubmittedQRef.current === qIdx;
+    const alreadyHeardOnDevice = quizAudioService.hasPlayedAnswerFeedback(session.id, qIdx);
+
+    hasTriggeredFeedbackRef.current = qIdx;
+
+    if (wasSubmittedInThisVisit && !alreadyHeardOnDevice) {
+      if (answerResult.isCorrect) {
+        quizAudioService.playCorrect({
+          withPartyPopperBurst: true,
+          sessionId: session.id,
+          questionIndex: qIdx
+        });
+        setShowConfetti(true);
+        setStreak((prev) => prev + 1);
+      } else {
+        quizAudioService.playIncorrect({
+          sessionId: session.id,
+          questionIndex: qIdx
+        });
+        setStreak(0);
+      }
     }
-  }, [questionData, answerResult]);
+  }, [questionData, answerResult, session.id]);
 
   // ---- Per-Question Countdown: locks answer on 0 and auto-advances to next question ----
   const deadlineMs = questionData?.deadlineMs;
@@ -604,9 +634,10 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       return;
     }
 
-    quizAudioService.playClick();
     quizAudioService.unlockAudio();
+    quizAudioService.playClick();
 
+    liveSubmittedQRef.current = submittedForIndex;
     submittingRef.current = true;
     setIsSubmitting(true);
     setSubmitError(null);
@@ -732,9 +763,12 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   }, [isQuestionTimed, questionTimeLeft, selectedDisplayIndex, isLocked, isSubmitting, revealData]);
 
   const handleToggleSound = () => {
-    quizAudioService.playClick();
-    const nextMuted = quizAudioService.toggleMusicMute();
+    quizAudioService.unlockAudio();
+    const nextMuted = quizAudioService.toggleMute();
     setIsMusicMuted(nextMuted);
+    if (!nextMuted) {
+      quizAudioService.playClick();
+    }
   };
 
   // Fallback Loading / Rehydration View
@@ -775,9 +809,13 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
 
   return (
     <div className="relative w-full max-w-[460px] mx-auto my-auto">
-      {/* Confetti Celebration Particle Layer */}
+      {/* Confetti Celebration Particle Layer (short party-popper burst strictly for correct answers) */}
       {showConfetti && (
-        <ConfettiCelebration onComplete={() => setShowConfetti(false)} durationMs={1500} />
+        <ConfettiCelebration
+          variant="answer_correct"
+          onComplete={() => setShowConfetti(false)}
+          durationMs={1500}
+        />
       )}
 
       {/* Main White Rounded Quiz Card Shell */}
@@ -845,11 +883,11 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
           {/* Reveal / Feedback Banner */}
           {(revealData || answerResult) && (
             <div
-              className={`py-2.5 px-4 rounded-2xl text-center font-extrabold text-xs sm:text-sm animate-in fade-in zoom-in-95 duration-200 ${
+              className={`py-2.5 px-4 rounded-2xl text-center font-extrabold text-xs sm:text-sm ${
                 isSelectedCorrect
-                  ? 'bg-[#ECFDF5] border border-[#18B981]/40 text-[#065F46]'
+                  ? 'bg-[#ECFDF5] border-2 border-[#18B981]/50 text-[#065F46] shadow-[0_6px_18px_rgba(24,185,129,0.16)] animate-lq-success-pop'
                   : isSelectedIncorrect
-                  ? 'bg-[#FFF1F5] border border-[#F43F7A]/40 text-[#9F1239]'
+                  ? 'bg-[#FFF1F5] border-2 border-[#F43F7A]/40 text-[#9F1239] shadow-[0_4px_12px_rgba(244,63,122,0.10)] animate-lq-gentle-nudge'
                   : 'bg-[#EEF5FC] border border-[#DCEBFA] text-[#10245A]'
               }`}
             >
@@ -857,7 +895,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
                 {isSelectedCorrect ? (
                   <>
                     <CheckCircle2 className="w-4 h-4 text-[#18B981] shrink-0" />
-                    <span>Correct! +{pointsEarned.toLocaleString()} points</span>
+                    <span>Correct! +{pointsEarned.toLocaleString()} pts</span>
                     {typeof answerResult?.speedBonus === 'number' && answerResult.speedBonus > 0 && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#18B981]/15 text-[#047857] text-[10px] font-black">
                         <Zap className="w-3 h-3 text-[#F59E0B]" />
@@ -868,7 +906,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
                 ) : isSelectedIncorrect ? (
                   <>
                     <XCircle className="w-4 h-4 text-[#F43F7A] shrink-0" />
-                    <span>Incorrect</span>
+                    <span>Not quite — keep going! The answer will appear soon.</span>
                   </>
                 ) : (
                   <span>Time&apos;s Up</span>
@@ -897,6 +935,12 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
               const isThisOptionIncorrectSelection = Boolean(
                 isRevealed && isSelected && !isThisOptionCorrect
               );
+              const preRevealFeedback =
+                !isRevealed && isSelected && answerResult
+                  ? answerResult.isCorrect
+                    ? 'correct'
+                    : 'incorrect'
+                  : null;
 
               return (
                 <AnswerOption
@@ -908,6 +952,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
                   isRevealed={isRevealed}
                   isCorrectOption={isThisOptionCorrect}
                   isIncorrectSelection={isThisOptionIncorrectSelection}
+                  feedbackState={preRevealFeedback}
                   onSelect={() => handlePickOption(displayIdx)}
                 />
               );

@@ -86,7 +86,13 @@ self.addEventListener('fetch', (event) => {
     parsedUrl.searchParams.has('error') ||
     parsedUrl.searchParams.has('error_code') ||
     parsedUrl.pathname.endsWith('.mp4') ||
-    parsedUrl.pathname.endsWith('.webm')
+    parsedUrl.pathname.endsWith('.webm') ||
+    parsedUrl.pathname.endsWith('.mp3') ||
+    parsedUrl.pathname.endsWith('.wav') ||
+    parsedUrl.pathname.endsWith('.ogg') ||
+    event.request.destination === 'audio' ||
+    event.request.destination === 'video' ||
+    event.request.headers.has('range')
   ) {
     return;
   }

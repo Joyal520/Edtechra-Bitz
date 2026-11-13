@@ -5,6 +5,8 @@
 
 import dotenv from 'dotenv';
 import sharp from 'sharp';
+import OpenAI from 'openai';
+import { createClient } from '@supabase/supabase-js';
 import { putBinaryContent, buildReadingCoverKey } from './r2Service.mjs';
 
 dotenv.config({ path: '.env.local' });
@@ -259,93 +261,249 @@ export async function generateArticleCoverImage(article, options = {}) {
   }
 }
 
+export const LIVE_QUIZ_COVERS_BUCKET = 'quiz-covers';
+
+function getCoverSupabaseClient(explicitClient = null) {
+  if (explicitClient) return explicitClient;
+  const url = (
+    process.env.VITE_SUPABASE_URL ||
+    process.env.SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    ''
+  ).trim();
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  if (!url || !key) return null;
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+}
+
+function getTopicVisualCue(topic = '', category = '') {
+  const text = `${topic} ${category}`.toLowerCase();
+  if (text.includes('pronoun')) {
+    return 'Sculpted speech bubbles, open storybooks, character silhouettes, connecting paper ribbons, and classroom notebooks illustrating communication between people.';
+  }
+  if (text.includes('tense') || text.includes('verb') || text.includes('past') || text.includes('future')) {
+    return 'Clockwork hourglass, timeline ribbon, open journal pages, and directional arrows in tactile layered paper.';
+  }
+  if (text.includes('grammar') || text.includes('english') || text.includes('writing') || text.includes('vocabulary')) {
+    return 'Layered open books, fountain pen nib, floating speech bubbles, library arches, and warm lamp light.';
+  }
+  if (text.includes('microcontroller') || text.includes('circuit') || text.includes('electronics') || text.includes('robotics')) {
+    return 'Cut-paper microchip board with glowing gold traces, sensor modules, LED beacons, and blueprint grid waves.';
+  }
+  if (text.includes('math') || text.includes('algebra') || text.includes('geometry')) {
+    return 'Geometric polyhedrons, compass divider, layered graph curves, and precision ruler shapes in vibrant paper planes.';
+  }
+  if (text.includes('science') || text.includes('biology') || text.includes('chemistry') || text.includes('physics')) {
+    return 'Layered laboratory glassware, orbital atom rings, botanical leaves, and prismatic light beams in crisp paper craft.';
+  }
+  if (text.includes('history') || text.includes('geography')) {
+    return 'Layered topographic globe contours, compass rose, classical columns, and parchment scroll ribbons.';
+  }
+  return `Symbolic educational objects, open books, glowing lightbulb inspiration, and dynamic geometric paper depth representing "${topic || category}".`;
+}
+
 /**
- * Builds a 16:9 layered paper-cut prompt for a Live Quiz cover image
+ * Builds a colourful, topic-connected 16:9 layered paper-cut prompt for a Live Quiz cover image
  */
 export function buildQuizCoverPrompt({ title, topic, category, difficulty }) {
   const cleanTitle = String(title || topic || 'Live Quiz Challenge').trim();
   const cleanTopic = String(topic || title || 'General Knowledge').trim();
   const cleanCategory = String(category || 'General').trim();
   const cleanDifficulty = String(difficulty || 'Medium').trim();
+  const visualCue = getTopicVisualCue(cleanTopic, cleanCategory);
 
   return `
-${EDTECHRA_BITZ_MASTER_VISUAL_STYLE}
-
-QUIZ TITLE:
-"${cleanTitle}"
-
-SUBJECT / CATEGORY:
-${cleanCategory} (${cleanDifficulty} Level)
-
-QUIZ TOPIC:
-${cleanTopic}
-
-VISUAL CONCEPT:
-Create an iconic, visually striking 16:9 layered paper-cut illustration representing the educational topic "${cleanTopic}" within the field of ${cleanCategory}.
-Use dimensional cut-paper layers, warm tactile paper textures, crisp cast shadows, and a vibrant academic palette (#087CF5 electric blue, #10245A deep navy, #FFC83D golden amber, #16A34A emerald).
-Strictly NO text, NO letters, NO words, NO numbers, and NO watermarks inside the artwork so the UI card title overlay remains crystal clear.
+Modern 3D layered paper-cut educational editorial illustration in widescreen 16:9 composition.
+SUBJECT: ${cleanCategory} — Topic: "${cleanTopic}" (${cleanDifficulty} difficulty, inspired by "${cleanTitle}").
+VISUAL MOTIF: ${visualCue}
+ART DIRECTION:
+- Colourful, bright, engaging, high-contrast academic palette combining vibrant cobalt blue (#087CF5), sunlit golden amber (#F7B928), fresh emerald (#18B981), warm coral accents, and deep indigo shadows.
+- Crisp tactile cut-paper relief layers with foreground, mid-ground, and softly backlit background depth.
+- Clean, joyful classroom-ready competition aesthetic suitable for students and teachers.
+CRITICAL CONSTRAINTS:
+- Strictly NO text, NO words, NO letters, NO numbers, NO labels, NO gibberish, and NO watermarks anywhere inside the image so the quiz title overlay stays sharp and readable.
 `.trim();
 }
 
-function buildFallbackQuizCoverSvg({ title, topic, category }) {
-  const seedText = `${title || ''}-${topic || ''}-${category || ''}`;
-  let hash = 0;
-  for (let i = 0; i < seedText.length; i++) {
-    hash = ((hash << 5) - hash) + seedText.charCodeAt(i);
-    hash |= 0;
+/**
+ * Uploads any raw cover buffer (AI-generated or teacher custom upload) into Supabase Storage ('quiz-covers'),
+ * converting it to optimized 16:9 1024x576 WebP.
+ */
+export async function uploadCustomQuizCoverToSupabase({
+  buffer,
+  contentType = 'image/png',
+  userId = 'teacher',
+  filename = 'cover',
+  prefix = 'custom',
+  supabaseClient = null
+}) {
+  if (!buffer || !Buffer.isBuffer(buffer) || buffer.length === 0) {
+    return {
+      success: false,
+      publicUrl: null,
+      error: 'Cover image buffer is empty.'
+    };
   }
-  const palettes = [
-    ['#0A1E5E', '#087CF5', '#38BDF8', '#FFC83D'],
-    ['#10245A', '#4F46E5', '#818CF8', '#F59E0B'],
-    ['#064E3B', '#059669', '#34D399', '#FBBF24'],
-    ['#3B0764', '#7C3AED', '#C084FC', '#38BDF8'],
-    ['#1E293B', '#0284C7', '#22D3EE', '#FB923C']
-  ];
-  const pal = palettes[Math.abs(hash) % palettes.length];
-  const offset = (Math.abs(hash) % 120) - 60;
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="576" viewBox="0 0 1024 576">
-    <defs>
-      <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="${pal[0]}"/>
-        <stop offset="60%" stop-color="${pal[1]}"/>
-        <stop offset="100%" stop-color="${pal[2]}"/>
-      </linearGradient>
-      <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
-        <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000000" flood-opacity="0.28"/>
-      </filter>
-    </defs>
-    <rect width="1024" height="576" fill="url(#bg)"/>
-    <circle cx="${820 + offset}" cy="140" r="210" fill="${pal[2]}" fill-opacity="0.25" filter="url(#shadow)"/>
-    <circle cx="${200 - offset}" cy="480" r="260" fill="${pal[0]}" fill-opacity="0.35" filter="url(#shadow)"/>
-    <path d="M0,410 C240,${340 + offset} 460,${470 - offset} 720,390 C860,350 950,380 1024,340 L1024,576 L0,576 Z" fill="${pal[0]}" fill-opacity="0.45" filter="url(#shadow)"/>
-    <path d="M0,470 C280,${430 - offset} 540,${510 + offset} 810,440 C910,415 980,440 1024,420 L1024,576 L0,576 Z" fill="${pal[1]}" fill-opacity="0.55" filter="url(#shadow)"/>
-    <g filter="url(#shadow)" transform="translate(${512 + offset * 0.5}, 250)">
-      <rect x="-110" y="-110" width="220" height="220" rx="44" transform="rotate(12)" fill="#FFFFFF" fill-opacity="0.14" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="3"/>
-      <rect x="-85" y="-85" width="170" height="170" rx="34" transform="rotate(-8)" fill="${pal[3]}" fill-opacity="0.88"/>
-      <circle cx="0" cy="0" r="46" fill="#FFFFFF" fill-opacity="0.95"/>
-      <polygon points="-14,-20 22,0 -14,20" fill="${pal[0]}"/>
-    </g>
-  </svg>`;
+  const sb = getCoverSupabaseClient(supabaseClient);
+  if (!sb) {
+    return {
+      success: false,
+      publicUrl: null,
+      error: 'Supabase Storage client is not configured on the server (missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY).'
+    };
+  }
+
+  let optimizedBuffer = buffer;
+  let finalMime = 'image/webp';
+  let ext = 'webp';
+
+  try {
+    optimizedBuffer = await sharp(buffer)
+      .resize({ width: 1024, height: 576, fit: 'cover', position: 'center' })
+      .webp({ quality: 88, effort: 4 })
+      .toBuffer();
+  } catch (sharpErr) {
+    finalMime = contentType && contentType.startsWith('image/') ? contentType : 'image/png';
+    ext = finalMime.includes('jpeg') || finalMime.includes('jpg') ? 'jpg' : 'png';
+    console.warn('[QuizCoverStorage] Sharp WebP conversion skipped, storing original format:', sharpErr.message);
+  }
+
+  const safeFolder = String(userId || 'teacher').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'teacher';
+  const safeBase = String(filename || 'cover')
+    .replace(/\.[^/.]+$/, '')
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .slice(0, 36) || 'quiz_cover';
+  const storagePath = `${safeFolder}/${prefix}_${safeBase}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
+
+  try {
+    const { error: uploadError } = await sb.storage
+      .from(LIVE_QUIZ_COVERS_BUCKET)
+      .upload(storagePath, optimizedBuffer, {
+        contentType: finalMime,
+        cacheControl: '31536000',
+        upsert: false
+      });
+
+    if (uploadError) {
+      return {
+        success: false,
+        publicUrl: null,
+        error: `Supabase Storage upload failed: ${uploadError.message}`
+      };
+    }
+
+    const { data: urlData } = sb.storage
+      .from(LIVE_QUIZ_COVERS_BUCKET)
+      .getPublicUrl(storagePath);
+
+    const publicUrl = urlData?.publicUrl || null;
+    if (!publicUrl) {
+      return {
+        success: false,
+        publicUrl: null,
+        error: 'Supabase Storage did not return a public cover URL.'
+      };
+    }
+
+    return {
+      success: true,
+      publicUrl,
+      storagePath,
+      bucket: LIVE_QUIZ_COVERS_BUCKET,
+      error: null
+    };
+  } catch (err) {
+    return {
+      success: false,
+      publicUrl: null,
+      error: `Supabase Storage error: ${err.message || 'Unknown upload failure'}`
+    };
+  }
 }
 
 /**
- * Generates an AI Cover Image for a Live Quiz and uploads it to Cloudflare R2
+ * Generates an AI Cover Image for a Live Quiz using configured image providers
+ * (OpenAI primary: gpt-image-1-mini / gpt-image-1 / dall-e-3; Gemini fallback)
+ * and stores the 16:9 WebP result strictly in Supabase Storage ('quiz-covers').
+ * Never returns fake SVGs or data URIs as success.
  */
 export async function generateQuizCoverImage(quizMeta = {}, options = {}) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const openaiKey = (process.env.OPENAI_API_KEY || '').trim();
+  const geminiKey = (process.env.GEMINI_API_KEY || '').trim();
   const quizId = String(quizMeta.id || `quiz_${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
+  const userId = String(quizMeta.userId || options.userId || 'teacher');
   const prompt = options.customPrompt || buildQuizCoverPrompt(quizMeta);
 
   let rawImageBuffer = null;
-  let usedModel = 'gemini-2.5-flash-image';
-  let lastErrorMsg = '';
+  let usedModel = '';
+  const providerErrors = [];
 
-  if (apiKey && apiKey.trim() !== '') {
+  // 1. Primary: OpenAI Image API (fast, reliable 16:9-compatible landscape output)
+  const startedAt = Date.now();
+  if (openaiKey) {
+    const openai = new OpenAI({ apiKey: openaiKey, timeout: 55000, maxRetries: 0 });
+    const openaiCandidates = [
+      { model: process.env.OPENAI_IMAGE_MODEL?.trim() || 'gpt-image-1.5', size: '1536x1024', quality: 'low', output_format: 'webp' },
+      { model: 'gpt-image-2.6-flare', size: '1536x1024', quality: 'low', output_format: 'webp' },
+      { model: 'gpt-image-1-mini', size: '1536x1024', quality: 'low', output_format: 'webp' }
+    ];
+
+    // Deduplicate in case env overrides to one of the defaults
+    const seen = new Set();
+    for (const candidate of openaiCandidates) {
+      if (seen.has(candidate.model)) continue;
+      seen.add(candidate.model);
+      if (Date.now() - startedAt > 56000) {
+        providerErrors.push(`${candidate.model}: skipped (time budget reached)`);
+        break;
+      }
+      try {
+        const reqPayload = {
+          model: candidate.model,
+          prompt,
+          n: 1,
+          size: candidate.size
+        };
+        if (candidate.quality && candidate.model.startsWith('gpt-image')) {
+          reqPayload.quality = candidate.quality;
+        }
+        if (candidate.output_format && candidate.model.startsWith('gpt-image')) {
+          reqPayload.output_format = candidate.output_format;
+        }
+
+        const imgRes = await openai.images.generate(reqPayload);
+        const item = imgRes?.data?.[0];
+        if (item?.b64_json) {
+          rawImageBuffer = Buffer.from(item.b64_json, 'base64');
+          usedModel = candidate.model;
+          break;
+        }
+        if (item?.url) {
+          const dl = await fetch(item.url);
+          if (dl.ok) {
+            rawImageBuffer = Buffer.from(await dl.arrayBuffer());
+            usedModel = candidate.model;
+            break;
+          }
+        }
+        providerErrors.push(`${candidate.model}: response contained no image payload`);
+      } catch (err) {
+        providerErrors.push(`${candidate.model}: ${err?.message || 'request failed'}`);
+      }
+    }
+  } else {
+    providerErrors.push('OPENAI_API_KEY is not configured');
+  }
+
+  // 2. Fallback: Gemini Image API if OpenAI did not produce an image
+  if (!rawImageBuffer && geminiKey) {
     const candidateModels = getCandidateImageModels();
     for (const modelName of candidateModels) {
       try {
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiKey}`;
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -360,7 +518,7 @@ export async function generateQuizCoverImage(quizMeta = {}, options = {}) {
 
         const json = await response.json().catch(() => ({}));
         if (!response.ok) {
-          lastErrorMsg = json.error?.message || `HTTP ${response.status} from ${modelName}`;
+          providerErrors.push(`${modelName}: ${json.error?.message || `HTTP ${response.status}`}`);
           continue;
         }
 
@@ -374,64 +532,48 @@ export async function generateQuizCoverImage(quizMeta = {}, options = {}) {
         }
         if (rawImageBuffer && rawImageBuffer.length > 0) break;
       } catch (err) {
-        lastErrorMsg = err.message || `Error calling ${modelName}`;
+        providerErrors.push(`${modelName}: ${err.message || 'request error'}`);
       }
     }
   }
 
-  let optimizedBuffer = null;
-  let mimeType = 'image/webp';
-  let ext = 'webp';
-
-  if (rawImageBuffer && rawImageBuffer.length > 0) {
-    try {
-      optimizedBuffer = await sharp(rawImageBuffer)
-        .resize({ width: 1024, height: 576, fit: 'cover', position: 'center' })
-        .webp({ quality: 88, effort: 4 })
-        .toBuffer();
-    } catch {
-      optimizedBuffer = rawImageBuffer;
-      mimeType = 'image/png';
-      ext = 'png';
-    }
-  } else {
-    // Render high-craft layered SVG illustration via Sharp -> WebP
-    usedModel = 'edtechra-papercut-illustrator';
-    const svgBuffer = Buffer.from(buildFallbackQuizCoverSvg(quizMeta), 'utf-8');
-    try {
-      optimizedBuffer = await sharp(svgBuffer)
-        .resize({ width: 1024, height: 576, fit: 'cover' })
-        .webp({ quality: 90 })
-        .toBuffer();
-    } catch {
-      optimizedBuffer = svgBuffer;
-      mimeType = 'image/svg+xml';
-      ext = 'svg';
-    }
-  }
-
-  const objectKey = `quiz-covers/ai_${quizId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
-
-  try {
-    const uploadResult = await putBinaryContent(objectKey, optimizedBuffer, mimeType);
+  if (!rawImageBuffer || rawImageBuffer.length === 0) {
     return {
-      success: true,
-      publicUrl: uploadResult.publicUrl,
-      objectKey,
+      success: false,
+      publicUrl: null,
       prompt,
-      model: usedModel,
-      error: null
-    };
-  } catch (r2Err) {
-    // Fallback to inline data URI only if R2 is unreachable
-    const base64Data = optimizedBuffer.toString('base64');
-    return {
-      success: true,
-      publicUrl: `data:${mimeType};base64,${base64Data}`,
-      objectKey,
-      prompt,
-      model: usedModel,
-      warning: lastErrorMsg || r2Err.message
+      model: usedModel || 'none',
+      error: `AI cover generation failed (${providerErrors.slice(0, 2).join('; ') || 'No image provider available'}). You can retry or upload a custom cover.`
     };
   }
+
+  // 3. Optimize to 16:9 WebP and upload strictly to Supabase Storage ('quiz-covers')
+  const uploadRes = await uploadCustomQuizCoverToSupabase({
+    buffer: rawImageBuffer,
+    contentType: 'image/png',
+    userId,
+    filename: quizId,
+    prefix: 'ai',
+    supabaseClient: options.supabaseClient || null
+  });
+
+  if (!uploadRes.success || !uploadRes.publicUrl) {
+    return {
+      success: false,
+      publicUrl: null,
+      prompt,
+      model: usedModel,
+      error: uploadRes.error || 'Cover generated but failed to upload to Supabase Storage.'
+    };
+  }
+
+  return {
+    success: true,
+    publicUrl: uploadRes.publicUrl,
+    storagePath: uploadRes.storagePath,
+    bucket: uploadRes.bucket,
+    prompt,
+    model: usedModel,
+    error: null
+  };
 }

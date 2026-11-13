@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowRight, AlertCircle } from 'lucide-react';
 import { liveQuizService } from '@/services/liveQuizService';
+import { quizAudioService } from '@/services/quizAudioService';
 import { useAuth } from '@/context/AuthContext';
 
 export const LiveQuizJoinPage: React.FC = () => {
@@ -12,6 +13,10 @@ export const LiveQuizJoinPage: React.FC = () => {
   const [inputPin, setInputPin] = useState(pin || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void quizAudioService.preloadQuizAudio();
+  }, []);
 
   useEffect(() => {
     if (pin && isAuthenticated) {
@@ -80,6 +85,8 @@ export const LiveQuizJoinPage: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    quizAudioService.unlockAudio();
+    quizAudioService.playClick();
     handleJoin(inputPin);
   };
 

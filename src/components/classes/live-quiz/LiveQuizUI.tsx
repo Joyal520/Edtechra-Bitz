@@ -427,6 +427,7 @@ export interface AnswerOptionProps {
   isRevealed?: boolean;
   isCorrectOption?: boolean;
   isIncorrectSelection?: boolean;
+  feedbackState?: 'correct' | 'incorrect' | null;
   onSelect: () => void;
 }
 
@@ -438,6 +439,7 @@ export const AnswerOption: React.FC<AnswerOptionProps> = ({
   isRevealed = false,
   isCorrectOption = false,
   isIncorrectSelection = false,
+  feedbackState = null,
   onSelect
 }) => {
   const badge = ANSWER_BADGE_STYLES[index] || ANSWER_BADGE_STYLES[0];
@@ -456,6 +458,12 @@ export const AnswerOption: React.FC<AnswerOptionProps> = ({
       containerStyle =
         'bg-[#F8FAFC] border border-[#E2EDF8] text-[#64748B] opacity-65';
     }
+  } else if (feedbackState === 'correct' && selected) {
+    containerStyle =
+      'bg-[#ECFDF5] border-2 border-[#18B981] text-[#065F46] shadow-[0_6px_20px_rgba(24,185,129,0.20)] scale-[1.015] animate-lq-success-pop';
+  } else if (feedbackState === 'incorrect' && selected) {
+    containerStyle =
+      'bg-[#FFF1F5] border-2 border-[#F43F7A] text-[#9F1239] shadow-[0_4px_14px_rgba(244,63,122,0.14)] animate-lq-gentle-nudge';
   } else if (selected) {
     containerStyle =
       'bg-[#EDF8FF] border-2 border-[#0884F7] text-[#10245A] shadow-[0_6px_20px_rgba(8,132,247,0.14)] scale-[1.01]';
@@ -491,11 +499,11 @@ export const AnswerOption: React.FC<AnswerOptionProps> = ({
 
       {/* Right Radio / Status Indicator */}
       <div className="shrink-0 flex items-center justify-center">
-        {isRevealed && isCorrectOption ? (
+        {(isRevealed && isCorrectOption) || (!isRevealed && feedbackState === 'correct' && selected) ? (
           <div className="w-6 h-6 rounded-full bg-[#18B981] text-white flex items-center justify-center shadow-xs">
             <Check className="w-3.5 h-3.5 stroke-[3]" />
           </div>
-        ) : isRevealed && isIncorrectSelection ? (
+        ) : (isRevealed && isIncorrectSelection) || (!isRevealed && feedbackState === 'incorrect' && selected) ? (
           <div className="w-6 h-6 rounded-full bg-[#F43F7A] text-white flex items-center justify-center shadow-xs">
             <XCircle className="w-4 h-4 stroke-[2.5]" />
           </div>
@@ -670,41 +678,44 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
 };
 
 // ----------------------------------------------------------------------------
-// 9. Podium & PodiumPlayer Components
+// 9. Podium & PodiumPlayer Components (Tournament Stage Finale)
 // ----------------------------------------------------------------------------
-const CrownIcon: React.FC<{ rank: 1 | 2 | 3 }> = ({ rank }) => {
+const CrownIcon: React.FC<{ rank: 1 | 2 | 3; animated?: boolean }> = ({ rank, animated = false }) => {
   const colors = {
     1: {
       fill: 'url(#goldCrownGrad)',
-      stroke: '#E09600',
-      size: 'w-9 h-9 sm:w-11 sm:h-11 drop-shadow-[0_4px_10px_rgba(247,185,40,0.45)]'
+      stroke: '#D97706',
+      size: `w-10 h-10 sm:w-12 sm:h-12 drop-shadow-[0_6px_16px_rgba(250,204,21,0.65)] ${
+        animated ? 'animate-lq-crown' : ''
+      }`
     },
     2: {
       fill: 'url(#silverCrownGrad)',
-      stroke: '#8DA4BF',
-      size: 'w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_3px_8px_rgba(148,169,196,0.35)]'
+      stroke: '#94A3B8',
+      size: 'w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_4px_10px_rgba(148,163,184,0.45)]'
     },
     3: {
       fill: 'url(#bronzeCrownGrad)',
-      stroke: '#C06C34',
-      size: 'w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_3px_8px_rgba(217,130,75,0.35)]'
+      stroke: '#B45309',
+      size: 'w-7 h-7 sm:w-8 sm:h-8 drop-shadow-[0_4px_10px_rgba(234,88,12,0.45)]'
     }
   }[rank];
 
   return (
-    <svg viewBox="0 0 32 26" className={colors.size} fill="none">
+    <svg viewBox="0 0 32 26" className={colors.size} fill="none" aria-hidden="true">
       <defs>
         <linearGradient id="goldCrownGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#FFE875" />
-          <stop offset="100%" stopColor="#F5A600" />
+          <stop offset="0%" stopColor="#FEF08A" />
+          <stop offset="50%" stopColor="#FACC15" />
+          <stop offset="100%" stopColor="#D97706" />
         </linearGradient>
         <linearGradient id="silverCrownGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#E2ECF7" />
-          <stop offset="100%" stopColor="#94ACC6" />
+          <stop offset="0%" stopColor="#F8FAFC" />
+          <stop offset="100%" stopColor="#94A3B8" />
         </linearGradient>
         <linearGradient id="bronzeCrownGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#F8C291" />
-          <stop offset="100%" stopColor="#D3753B" />
+          <stop offset="0%" stopColor="#FED7AA" />
+          <stop offset="100%" stopColor="#C2410C" />
         </linearGradient>
       </defs>
       <path
@@ -714,6 +725,7 @@ const CrownIcon: React.FC<{ rank: 1 | 2 | 3 }> = ({ rank }) => {
         strokeWidth="1.2"
         strokeLinejoin="round"
       />
+      <circle cx="16" cy="11.5" r="2" fill="#FFFBEB" opacity="0.9" />
       <rect
         x="3"
         y="21.5"
@@ -728,6 +740,55 @@ const CrownIcon: React.FC<{ rank: 1 | 2 | 3 }> = ({ rank }) => {
   );
 };
 
+const ChampionTrophySvg: React.FC<{ className?: string }> = ({ className = 'w-6 h-6 sm:w-7 sm:h-7' }) => (
+  <svg viewBox="0 0 36 36" className={className} fill="none" aria-hidden="true">
+    <defs>
+      <linearGradient id="goldTrophyCup" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#FEF08A" />
+        <stop offset="55%" stopColor="#FACC15" />
+        <stop offset="100%" stopColor="#CA8A04" />
+      </linearGradient>
+    </defs>
+    <path
+      d="M10 6H26V14C26 18.4183 22.4183 22 18 22C13.5817 22 10 18.4183 10 14V6Z"
+      fill="url(#goldTrophyCup)"
+      stroke="#92400E"
+      strokeWidth="1.4"
+    />
+    <path
+      d="M10 9H6.5C5.1 9 4 10.1 4 11.5C4 14 5.8 16 8.5 16.5L10 16.7"
+      stroke="#D97706"
+      strokeWidth="2"
+      strokeLinecap="round"
+    />
+    <path
+      d="M26 9H29.5C30.9 9 32 10.1 32 11.5C32 14 30.2 16 27.5 16.5L26 16.7"
+      stroke="#D97706"
+      strokeWidth="2"
+      strokeLinecap="round"
+    />
+    <rect x="16" y="22" width="4" height="5.5" fill="#B45309" />
+    <rect x="11.5" y="27.5" width="13" height="3.5" rx="1.5" fill="#92400E" stroke="#FDE047" strokeWidth="0.9" />
+    <circle cx="18" cy="13" r="2.2" fill="#FFFBEB" opacity="0.85" />
+  </svg>
+);
+
+const SilverBronzeMedalCrest: React.FC<{ rank: 2 | 3 }> = ({ rank }) => {
+  const isSilver = rank === 2;
+  return (
+    <span
+      className={`inline-flex items-center justify-center w-6 h-6 rounded-full shadow-sm border ${
+        isSilver
+          ? 'bg-gradient-to-b from-[#F8FAFC] to-[#CBD5E1] border-white text-[#334155]'
+          : 'bg-gradient-to-b from-[#FFEDD5] to-[#EA580C] border-[#FED7AA] text-white'
+      } text-[10px] font-black mb-1`}
+      aria-hidden="true"
+    >
+      {isSilver ? 'II' : 'III'}
+    </span>
+  );
+};
+
 export interface PodiumPlayerData {
   id: string;
   name: string;
@@ -739,58 +800,97 @@ export interface PodiumPlayerData {
 export interface PodiumPlayerProps {
   player: PodiumPlayerData;
   rank: 1 | 2 | 3;
+  revealStage?: number;
 }
 
-export const PodiumPlayer: React.FC<PodiumPlayerProps> = ({ player, rank }) => {
+export const PodiumPlayer: React.FC<PodiumPlayerProps> = ({
+  player,
+  rank,
+  revealStage = 3
+}) => {
   const isFirst = rank === 1;
   const isSecond = rank === 2;
 
-  const animClass = isFirst
-    ? 'animate-lq-podium-1 z-20'
+  const isRevealed =
+    rank === 3 ? revealStage >= 1 : rank === 2 ? revealStage >= 2 : revealStage >= 3;
+
+  const avatarGlow = isFirst
+    ? 'bg-[#FACC15]/45'
     : isSecond
-    ? 'animate-lq-podium-2 z-10'
-    : 'animate-lq-podium-3 z-10';
+    ? 'bg-[#93C5FD]/30'
+    : 'bg-[#FB923C]/30';
 
   const avatarRing = isFirst
-    ? 'border-4 border-[#F7B928] ring-4 ring-[#FDE68A]/70 shadow-[0_8px_24px_rgba(247,185,40,0.35)]'
+    ? 'border-4 border-[#FDE047] ring-4 ring-[#FACC15]/75 shadow-[0_0_28px_rgba(250,204,21,0.6)]'
     : isSecond
-    ? 'border-4 border-[#E2EEF9] ring-4 ring-[#AFC2D8]/50 shadow-[0_6px_18px_rgba(148,169,196,0.28)]'
-    : 'border-4 border-[#F5C6A5] ring-4 ring-[#E99A62]/45 shadow-[0_6px_18px_rgba(233,154,98,0.28)]';
+    ? 'border-4 border-[#F1F5F9] ring-4 ring-[#93C5FD]/55 shadow-[0_0_20px_rgba(147,197,253,0.4)]'
+    : 'border-4 border-[#FED7AA] ring-4 ring-[#FB923C]/50 shadow-[0_0_20px_rgba(251,146,60,0.4)]';
 
   const badgeStyle = isFirst
-    ? 'bg-gradient-to-b from-[#FFE566] to-[#F7B928] border border-[#FFF6B3] text-[#10245A] text-xs sm:text-sm px-3 py-0.5'
+    ? 'bg-gradient-to-b from-[#FEF08A] via-[#FACC15] to-[#EAB308] border border-[#FFFBEB] text-[#10245A] text-xs sm:text-sm px-3 py-0.5'
     : isSecond
-    ? 'bg-gradient-to-b from-[#E6F4FF] to-[#BFE0FF] border border-white text-[#10245A] text-[11px] sm:text-xs px-2.5 py-0.5'
-    : 'bg-gradient-to-b from-[#FFD099] to-[#E99A62] border border-[#FFE8CC] text-[#10245A] text-[11px] sm:text-xs px-2.5 py-0.5';
+    ? 'bg-gradient-to-b from-[#F8FAFC] to-[#CBD5E1] border border-white text-[#10245A] text-[11px] sm:text-xs px-2.5 py-0.5'
+    : 'bg-gradient-to-b from-[#FED7AA] to-[#EA580C] border border-[#FFEDD5] text-white text-[11px] sm:text-xs px-2.5 py-0.5';
 
-  // 3D tiered pedestal styling matching reference image
   const upperPedestalStyle = isFirst
-    ? 'bg-gradient-to-b from-[#FFF3B0] via-[#FFE066] to-[#F7B928] border-t-2 border-x border-[#FFF9DB] shadow-[0_-4px_20px_rgba(247,185,40,0.2)] pt-4 pb-2.5 sm:pt-5 sm:pb-3'
+    ? 'bg-gradient-to-b from-[#FEF9C3] via-[#FDE047] to-[#EAB308] border-t-2 border-x border-[#FEFCE8] shadow-[0_-10px_30px_rgba(250,204,21,0.38)] pt-3.5 pb-2.5 sm:pt-4 sm:pb-3'
     : isSecond
-    ? 'bg-gradient-to-b from-[#F0F7FF] via-[#DCEBFA] to-[#C2D6EC] border-t-2 border-x border-white shadow-[0_-4px_15px_rgba(175,194,216,0.2)] pt-3.5 pb-2 sm:pt-4 sm:pb-2.5'
-    : 'bg-gradient-to-b from-[#FDE8D7] via-[#F5C6A5] to-[#E99A62] border-t-2 border-x border-[#FFF3E8] shadow-[0_-4px_15px_rgba(233,154,98,0.2)] pt-3.5 pb-2 sm:pt-4 sm:pb-2.5';
+    ? 'bg-gradient-to-b from-[#F8FAFC] via-[#E2E8F0] to-[#94A3B8] border-t-2 border-x border-white shadow-[0_-6px_20px_rgba(148,163,184,0.28)] pt-3 pb-2 sm:pt-3.5 sm:pb-2.5'
+    : 'bg-gradient-to-b from-[#FFEDD5] via-[#FDBA74] to-[#C2410C] border-t-2 border-x border-[#FFF7ED] shadow-[0_-6px_20px_rgba(234,88,12,0.28)] pt-3 pb-2 sm:pt-3.5 sm:pb-2.5';
 
   const lowerPedestalStyle = isFirst
-    ? 'h-9 sm:h-11 bg-gradient-to-r from-[#E5980B] via-[#FCD34D] to-[#D97706] border-t border-[#FFF3B0]/80'
+    ? 'h-10 sm:h-12 bg-gradient-to-r from-[#CA8A04] via-[#FACC15] to-[#A16207] border-t border-[#FEF08A]/90'
     : isSecond
-    ? 'h-5 sm:h-6 bg-gradient-to-r from-[#9EB5CE] via-[#D5E4F2] to-[#8DA6C2] border-t border-white/80'
-    : 'h-4 sm:h-5 bg-gradient-to-r from-[#C8763E] via-[#F0B892] to-[#B8652E] border-t border-[#FDE8D7]/80';
+    ? 'h-5 sm:h-6 bg-gradient-to-r from-[#64748B] via-[#CBD5E1] to-[#475569] border-t border-white/80'
+    : 'h-4 sm:h-5 bg-gradient-to-r from-[#9A3412] via-[#FB923C] to-[#7C2D12] border-t border-[#FFEDD5]/80';
 
   const colorIndex = isFirst ? 3 : isSecond ? 1 : 6;
 
   return (
     <div
-      className={`flex-1 flex flex-col items-center ${
-        isFirst ? 'max-w-[155px] sm:max-w-[175px] -mx-1' : 'max-w-[130px] sm:max-w-[150px]'
-      } ${animClass}`}
+      data-podium-rank={rank}
+      data-revealed={isRevealed ? 'true' : 'false'}
+      className={`flex-1 flex flex-col items-center transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+        isFirst ? 'max-w-[162px] sm:max-w-[184px] -mx-1 z-20' : 'max-w-[132px] sm:max-w-[152px] z-10'
+      } ${
+        isRevealed
+          ? 'opacity-100 translate-y-0 scale-100'
+          : 'opacity-0 translate-y-12 scale-90 pointer-events-none'
+      }`}
     >
       {/* Crown */}
-      <div className="mb-1.5 animate-lq-float">
-        <CrownIcon rank={rank} />
+      <div className={`mb-1.5 ${isRevealed ? 'animate-lq-float' : ''}`}>
+        <CrownIcon rank={rank} animated={isFirst && isRevealed} />
       </div>
 
-      {/* Circular Avatar + Overlapping #Rank Pill (Gold / Silver / Bronze) */}
-      <div className="relative mb-2 animate-lq-avatar">
+      {/* Circular Avatar + Spotlight Aura + Orbiting Sparkles (Champion) + Overlapping Rank Pill */}
+      <div className="relative mb-2.5">
+        <div
+          className={`absolute -inset-3 rounded-full blur-lg pointer-events-none transition-opacity duration-500 ${avatarGlow} ${
+            isRevealed ? 'opacity-100' : 'opacity-0'
+          }`}
+          aria-hidden="true"
+        />
+
+        {/* Celebratory Golden Sparkles Orbiting Champion Avatar */}
+        {isFirst && isRevealed && (
+          <div className="absolute -inset-4 pointer-events-none" aria-hidden="true">
+            <span className="absolute top-0 left-1 w-2 h-2 rounded-full bg-[#FEF08A] shadow-[0_0_8px_#FACC15] animate-lq-gold-sparkle" />
+            <span
+              className="absolute top-2 right-0 w-2.5 h-2.5 rounded-full bg-[#FACC15] shadow-[0_0_10px_#FACC15] animate-lq-gold-sparkle"
+              style={{ animationDelay: '0.45s' }}
+            />
+            <span
+              className="absolute bottom-3 -left-1 w-1.5 h-1.5 rounded-full bg-[#FDE047] shadow-[0_0_8px_#FEF08A] animate-lq-gold-sparkle"
+              style={{ animationDelay: '0.9s' }}
+            />
+            <span
+              className="absolute bottom-1 right-1 w-2 h-2 rounded-full bg-[#FEF9C3] shadow-[0_0_8px_#FACC15] animate-lq-gold-sparkle"
+              style={{ animationDelay: '1.25s' }}
+            />
+          </div>
+        )}
+
         <PlayerAvatar
           name={player.name}
           avatarUrl={player.avatarUrl}
@@ -798,45 +898,57 @@ export const PodiumPlayer: React.FC<PodiumPlayerProps> = ({ player, rank }) => {
           size={isFirst ? 'xl' : 'lg'}
           ringClassName={avatarRing}
         />
+
         <span
-          className={`absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full font-black shadow-md whitespace-nowrap ${badgeStyle}`}
+          className={`absolute -bottom-2.5 left-1/2 -translate-x-1/2 rounded-full font-black shadow-lg whitespace-nowrap ${badgeStyle}`}
         >
-          #{rank} • {rank === 1 ? 'Gold' : rank === 2 ? 'Silver' : 'Bronze'}
+          #{rank} • {rank === 1 ? 'Champion' : rank === 2 ? 'Silver' : 'Bronze'}
         </span>
       </div>
 
-      {/* 3D Pedestal Upper Tier (Name + Score) */}
+      {/* 3D Metallic Pedestal Upper Tier (Trophy/Medal + Name + Final Score) */}
       <div
         className={`w-full rounded-t-[18px] sm:rounded-t-[22px] text-center px-1.5 flex flex-col items-center justify-center ${upperPedestalStyle}`}
       >
+        {isFirst ? (
+          <ChampionTrophySvg className="w-6 h-6 sm:w-7 sm:h-7 mb-1 drop-shadow-sm" />
+        ) : (
+          <SilverBronzeMedalCrest rank={rank as 2 | 3} />
+        )}
+
         <div
-          className={`font-extrabold text-[#10245A] truncate w-full leading-tight ${
-            isFirst ? 'text-xs sm:text-sm' : 'text-[11px] sm:text-xs'
+          className={`font-black truncate w-full leading-tight ${
+            isFirst ? 'text-xs sm:text-sm text-[#10245A]' : 'text-[11px] sm:text-xs text-[#0F172A]'
           }`}
           title={player.name}
         >
           {player.name}
         </div>
         <div
-          className={`font-black text-[#10245A] tabular-nums mt-0.5 ${
-            isFirst ? 'text-sm sm:text-base' : 'text-xs sm:text-sm'
+          className={`font-black tabular-nums mt-0.5 ${
+            isFirst
+              ? 'text-sm sm:text-base text-[#10245A]'
+              : rank === 3
+              ? 'text-xs sm:text-sm text-[#10245A]'
+              : 'text-xs sm:text-sm text-[#0F172A]'
           }`}
         >
           {player.score.toLocaleString()} pts
         </div>
       </div>
 
-      {/* 3D Pedestal Stepped Base */}
-      <div className={`w-[104%] rounded-t-md shadow-inner ${lowerPedestalStyle}`} />
+      {/* 3D Pedestal Stepped Metallic Base */}
+      <div className={`w-[105%] rounded-t-md shadow-inner ${lowerPedestalStyle}`} />
     </div>
   );
 };
 
 export interface PodiumProps {
   players: PodiumPlayerData[];
+  revealStage?: number;
 }
 
-export const Podium: React.FC<PodiumProps> = ({ players }) => {
+export const Podium: React.FC<PodiumProps> = ({ players, revealStage = 3 }) => {
   const first = players[0];
   const second = players[1];
   const third = players[2];
@@ -844,40 +956,25 @@ export const Podium: React.FC<PodiumProps> = ({ players }) => {
   if (!first) {
     return (
       <div className="py-10 text-center space-y-2">
-        <Users className="w-8 h-8 text-[#087CF5] mx-auto animate-pulse" />
-        <h3 className="text-sm font-extrabold text-[#10245A]">No Participant Scores Recorded</h3>
-        <p className="text-xs text-[#64748B]">Quiz session completed without active submissions.</p>
+        <Users className="w-8 h-8 text-[#38BDF8] mx-auto animate-pulse" />
+        <h3 className="text-sm font-extrabold text-white">No Participant Scores Recorded</h3>
+        <p className="text-xs text-[#93C5FD]">Quiz session completed without active submissions.</p>
       </div>
     );
   }
 
   return (
     <div className="relative w-full pt-3 sm:pt-4 pb-0 overflow-hidden">
-      {/* Decorative Static Confetti Accents in Podium Hero (Matching Reference) */}
+      {/* Stage Floor Reflection Glow */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-        {/* Soft Sunburst Glow Behind #1 */}
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full bg-gradient-to-b from-[#FFF3B0]/50 via-[#BAE6FD]/30 to-transparent blur-2xl" />
-        {/* Left Confetti Pieces */}
-        <span className="absolute top-6 left-[8%] w-3.5 h-2 bg-[#087CF5] rounded-xs -rotate-25 opacity-85" />
-        <span className="absolute top-14 left-[5%] w-4 h-2 bg-[#08AEEF] rounded-xs rotate-15 opacity-90" />
-        <span className="absolute top-24 left-[7%] w-3.5 h-2 bg-[#F7B928] rounded-xs -rotate-40 opacity-90" />
-        <span className="absolute top-34 left-[4%] w-3.5 h-2 bg-[#8B5CF6] rounded-xs rotate-30 opacity-85" />
-        <span className="absolute top-8 left-[22%] w-3 h-1.5 bg-[#18B981] rounded-xs rotate-45 opacity-85" />
-        <span className="absolute top-18 left-[32%] w-2.5 h-1.5 bg-[#F7B928] rounded-xs -rotate-15 opacity-90" />
-        {/* Right Confetti Pieces */}
-        <span className="absolute top-7 right-[10%] w-4 h-2 bg-[#F7B928] rounded-xs rotate-25 opacity-90" />
-        <span className="absolute top-15 right-[6%] w-4 h-2 bg-[#F43F7A] rounded-xs -rotate-30 opacity-85" />
-        <span className="absolute top-26 right-[7%] w-3.5 h-2 bg-[#18B981] rounded-xs rotate-35 opacity-85" />
-        <span className="absolute top-36 right-[5%] w-3.5 h-2 bg-[#087CF5] rounded-xs -rotate-20 opacity-90" />
-        <span className="absolute top-10 right-[25%] w-3 h-1.5 bg-[#F43F7A] rounded-xs -rotate-35 opacity-85" />
-        <span className="absolute top-20 right-[30%] w-2.5 h-1.5 bg-[#087CF5] rounded-xs rotate-12 opacity-85" />
+        <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 w-80 h-24 rounded-full bg-gradient-to-t from-[#FACC15]/25 via-[#38BDF8]/10 to-transparent blur-2xl" />
       </div>
 
-      {/* Podium Columns: #2 (Left), #1 (Center), #3 (Right) */}
-      <div className="relative z-10 flex items-end justify-center gap-1.5 sm:gap-2.5 max-w-md mx-auto px-2">
-        {second && <PodiumPlayer player={second} rank={2} />}
-        <PodiumPlayer player={first} rank={1} />
-        {third && <PodiumPlayer player={third} rank={3} />}
+      {/* Podium Columns: #2 Silver (Left), #1 Champion (Center), #3 Bronze (Right) */}
+      <div className="relative z-10 flex items-end justify-center gap-1.5 sm:gap-3 max-w-md mx-auto px-2">
+        {second && <PodiumPlayer player={second} rank={2} revealStage={revealStage} />}
+        <PodiumPlayer player={first} rank={1} revealStage={revealStage} />
+        {third && <PodiumPlayer player={third} rank={3} revealStage={revealStage} />}
       </div>
     </div>
   );
