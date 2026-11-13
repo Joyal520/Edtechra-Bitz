@@ -31,6 +31,7 @@ import type {
   MemoryMatchConfig,
   SaveTheBalloonConfig
 } from '@/types/gameLibrary';
+import { BulkContentUploader, type ParsedBulkRow } from './BulkContentUploader';
 
 interface GameLibraryModalProps {
   isOpen: boolean;
@@ -39,6 +40,7 @@ interface GameLibraryModalProps {
   classroomName: string;
   isTeacher: boolean;
   assignments: Assignment[];
+  initialGameId?: GameId | null;
   onPlayAssignment: (assignment: Assignment) => void;
   onPreviewGame: (gameId: GameId, title: string, config: GameConfig) => void;
   onPublished: (targetClassroomId: string) => void;
@@ -46,109 +48,11 @@ interface GameLibraryModalProps {
 
 type TeacherStep = 'select' | 'configure' | 'assign';
 
-function renderGameThumbnail(gameId: GameId) {
-  switch (gameId) {
-    case 'liquid-sentences':
-      return (
-        <div className="w-full h-32 rounded-xl bg-gradient-to-br from-cyan-500 via-sky-600 to-blue-700 p-3 flex flex-col justify-between text-white relative overflow-hidden">
-          <div className="absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-white/15 blur-sm" />
-          <span className="text-[10px] font-extrabold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full w-fit">
-            Sentence Builder
-          </span>
-          <div className="flex flex-wrap gap-1.5 z-10">
-            {['Water', 'flows', 'into', 'sentences'].map((w) => (
-              <span
-                key={w}
-                className="px-2 py-1 rounded-lg bg-white/90 text-sky-900 text-[11px] font-bold shadow-sm"
-              >
-                {w}
-              </span>
-            ))}
-          </div>
-        </div>
-      );
-    case 'save-the-balloon':
-      return (
-        <div className="w-full h-32 rounded-xl bg-gradient-to-br from-rose-500 via-orange-500 to-amber-500 p-3 flex items-center justify-between text-white relative overflow-hidden">
-          <div className="flex flex-col justify-between h-full z-10">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full w-fit">
-              Word Rescue
-            </span>
-            <div className="flex gap-1 font-mono text-sm font-black tracking-widest">
-              <span className="bg-white/25 px-1.5 py-0.5 rounded">G</span>
-              <span className="bg-white/25 px-1.5 py-0.5 rounded">R</span>
-              <span className="bg-white/25 px-1.5 py-0.5 rounded">_</span>
-              <span className="bg-white/25 px-1.5 py-0.5 rounded">V</span>
-            </div>
-          </div>
-          <svg viewBox="0 0 64 80" className="w-16 h-24 drop-shadow-md shrink-0" aria-hidden="true">
-            <ellipse cx="32" cy="28" rx="20" ry="24" fill="#fff" fillOpacity="0.92" />
-            <ellipse cx="25" cy="20" rx="5" ry="9" fill="#fb7185" fillOpacity="0.35" />
-            <path d="M32 52 Q30 62 34 74" stroke="#fff" strokeWidth="2" fill="none" />
-          </svg>
-        </div>
-      );
-    case 'memory-match':
-      return (
-        <div className="w-full h-32 rounded-xl bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-600 p-3 flex flex-col justify-between text-white relative overflow-hidden">
-          <span className="text-[10px] font-extrabold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full w-fit">
-            Card Pairs
-          </span>
-          <div className="grid grid-cols-4 gap-1.5">
-            {['?', 'A', '?', 'A'].map((label, idx) => (
-              <div
-                key={idx}
-                className={`h-11 rounded-lg flex items-center justify-center font-black text-xs shadow-sm ${
-                  label === '?'
-                    ? 'bg-white/20 border border-white/30 text-white'
-                    : 'bg-white text-purple-700'
-                }`}
-              >
-                {label}
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    case 'classroom-jigsaw':
-      return (
-        <div className="w-full h-32 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-700 p-3 flex items-center justify-between text-white relative overflow-hidden">
-          <div className="flex flex-col justify-between h-full">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full w-fit">
-              Visual Puzzle
-            </span>
-            <span className="text-xs font-bold text-emerald-50">3x3 • 4x4 • 5x5</span>
-          </div>
-          <div className="grid grid-cols-2 gap-1 w-16 h-16 p-1 bg-white/20 rounded-xl">
-            <div className="rounded bg-white/90" />
-            <div className="rounded bg-emerald-200/80" />
-            <div className="rounded bg-teal-200/80" />
-            <div className="rounded bg-white/50 border border-dashed border-white" />
-          </div>
-        </div>
-      );
-    case 'lumina-words':
-      return (
-        <div className="w-full h-32 rounded-xl bg-gradient-to-br from-indigo-600 via-violet-700 to-slate-900 p-3 flex items-center justify-between text-white relative overflow-hidden">
-          <div className="flex flex-col justify-between h-full">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full w-fit">
-              Word Wheel
-            </span>
-            <span className="text-xs font-bold text-indigo-100">Auto Crossword</span>
-          </div>
-          <div className="w-16 h-16 rounded-full border-2 border-indigo-300/70 bg-white/10 relative flex items-center justify-center">
-            <span className="absolute top-1 text-[10px] font-black">L</span>
-            <span className="absolute right-2 text-[10px] font-black">U</span>
-            <span className="absolute bottom-1 text-[10px] font-black">M</span>
-            <span className="absolute left-2 text-[10px] font-black">A</span>
-            <div className="w-3 h-3 rounded-full bg-amber-400 shadow" />
-          </div>
-        </div>
-      );
-  }
-}
-
-async function compressImageToDataUrl(file: File, maxDimension = 800, quality = 0.85): Promise<string> {
+async function compressImageToDataUrl(
+  file: File,
+  maxDimension = 800,
+  quality = 0.85
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -183,6 +87,7 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
   classroomName,
   isTeacher,
   assignments,
+  initialGameId = null,
   onPlayAssignment,
   onPreviewGame,
   onPublished
@@ -203,10 +108,20 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    setStep('select');
     setConfigError(null);
     setPublishError(null);
     setTargetClassroomId(classroomId);
+
+    if (isTeacher && initialGameId) {
+      const item = getGameCatalogItem(initialGameId);
+      setSelectedGameId(initialGameId);
+      setConfig(getDefaultConfigForGame(initialGameId));
+      setGameTitle(`${item.name} Challenge`);
+      setAvailablePoints(item.defaultPoints);
+      setStep('configure');
+    } else {
+      setStep('select');
+    }
 
     const defaultDue = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -223,7 +138,7 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
         }
       });
     }
-  }, [isOpen, classroomId, classroomName, isTeacher]);
+  }, [isOpen, classroomId, classroomName, isTeacher, initialGameId]);
 
   if (!isOpen) return null;
 
@@ -240,7 +155,7 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
                 <Gamepad2 className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-lg font-extrabold text-slate-900">Classroom Game Library</h2>
+                <h2 className="text-lg font-extrabold text-slate-900">Educational Games</h2>
                 <p className="text-xs text-slate-500">
                   Play assigned games to earn points on the {classroomName} leaderboard
                 </p>
@@ -270,33 +185,41 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
                 const sub = a.my_submission;
                 const completed = Boolean(sub);
                 const gameName = String(a.settings?.game_name || 'Classroom Game');
+                const cat = getGameCatalogItem((a.settings?.game_id as GameId) || 'liquid-sentences');
                 return (
                   <div
                     key={a.id}
-                    className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-sky-300 transition flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    className="p-3.5 rounded-2xl border border-slate-200 bg-white hover:border-sky-300 transition flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                          {gameName}
-                        </span>
-                        {completed ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <CheckCircle2 className="w-3 h-3" />
-                            Completed ({sub?.final_score ?? sub?.points_awarded ?? 0}/{a.points} pts)
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <img
+                        src={cat.thumbnailUrl}
+                        alt={cat.name}
+                        className="w-14 h-14 rounded-xl object-cover shrink-0 border border-slate-200"
+                      />
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            {gameName}
                           </span>
-                        ) : (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                            Up to {a.points} pts
-                          </span>
+                          {completed ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3" />
+                              Completed ({sub?.final_score ?? sub?.points_awarded ?? 0}/{a.points} pts)
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                              Up to {a.points} pts
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="text-sm font-bold text-slate-900 truncate">{a.title}</h3>
+                        {a.due_date && (
+                          <p className="text-[11px] text-slate-500">
+                            Due {new Date(a.due_date).toLocaleString()}
+                          </p>
                         )}
                       </div>
-                      <h3 className="text-sm font-bold text-slate-900">{a.title}</h3>
-                      {a.due_date && (
-                        <p className="text-[11px] text-slate-500">
-                          Due {new Date(a.due_date).toLocaleString()}
-                        </p>
-                      )}
                     </div>
                     <button
                       type="button"
@@ -326,6 +249,69 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
     setStep('configure');
   };
 
+  const handleBulkImport = (rows: ParsedBulkRow[], mode: 'append' | 'replace') => {
+    if (selectedGameId === 'liquid-sentences') {
+      const incoming = rows.map((r) => ({ text: r.primary, hint: r.secondary }));
+      const cur = (config as LiquidSentencesConfig).sentences;
+      const base = mode === 'replace' ? [] : cur.filter((s) => s.text.trim().length > 0);
+      setConfig({ sentences: [...base, ...incoming] });
+    } else if (selectedGameId === 'save-the-balloon') {
+      const c = config as SaveTheBalloonConfig;
+      const incoming = rows.map((r) => ({ word: r.primary, hint: r.secondary }));
+      const base = mode === 'replace' ? [] : c.words.filter((w) => w.word.trim().length > 0);
+      setConfig({ ...c, words: [...base, ...incoming] });
+    } else if (selectedGameId === 'memory-match') {
+      const c = config as MemoryMatchConfig;
+      const incoming = rows.map((r) => ({ term: r.primary, definition: r.secondary }));
+      const base = mode === 'replace' ? [] : c.pairs.filter((p) => p.term.trim().length > 0);
+      setConfig({ ...c, pairs: [...base, ...incoming] });
+    } else if (selectedGameId === 'lumina-words') {
+      const c = config as LuminaWordsConfig;
+      const incoming = rows.map((r) => ({ word: r.primary, clue: r.secondary }));
+      const base = mode === 'replace' ? [] : c.words.filter((w) => w.word.trim().length > 0);
+      setConfig({ ...c, words: [...base, ...incoming] });
+    }
+  };
+
+  const handleJigsawMultiUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setConfigError(null);
+    const validImages: string[] = [];
+    const errors: string[] = [];
+
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('image/')) {
+        errors.push(`"${file.name}" is not a supported image file.`);
+        continue;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        errors.push(`"${file.name}" exceeds 10 MB.`);
+        continue;
+      }
+      try {
+        const dataUrl = await compressImageToDataUrl(file, 900, 0.85);
+        validImages.push(dataUrl);
+      } catch {
+        errors.push(`Could not process "${file.name}".`);
+      }
+    }
+
+    if (errors.length > 0) {
+      setConfigError(errors.join(' '));
+    }
+
+    if (validImages.length > 0) {
+      const c = config as ClassroomJigsawConfig;
+      const existing = c.images && c.images.length > 0 ? c.images : c.imageDataUrl ? [c.imageDataUrl] : [];
+      const merged = [...existing, ...validImages];
+      setConfig({
+        ...c,
+        images: merged,
+        imageDataUrl: merged[0]
+      });
+    }
+  };
+
   const validateAndSanitizeConfig = (): GameConfig | null => {
     setConfigError(null);
     switch (selectedGameId) {
@@ -352,7 +338,13 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
           setConfigError('Please enter at least 1 word (letters A-Z, minimum 2 characters).');
           return null;
         }
-        return { difficulty: c.difficulty || 'medium', words: clean };
+        return {
+          difficulty: c.difficulty || 'medium',
+          lives: c.lives || (c.difficulty === 'easy' ? 8 : c.difficulty === 'hard' ? 5 : 6),
+          showTimer: c.showTimer !== false,
+          allowHints: c.allowHints !== false,
+          words: clean
+        };
       }
       case 'memory-match': {
         const c = config as MemoryMatchConfig;
@@ -371,13 +363,16 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
       }
       case 'classroom-jigsaw': {
         const c = config as ClassroomJigsawConfig;
-        if (!c.imageDataUrl) {
-          setConfigError('Please upload a picture for the Classroom Jigsaw puzzle.');
+        const imgs =
+          c.images && c.images.length > 0 ? c.images : c.imageDataUrl ? [c.imageDataUrl] : [];
+        if (imgs.length === 0) {
+          setConfigError('Please upload at least one picture for the Classroom Jigsaw puzzle.');
           return null;
         }
         return {
-          imageDataUrl: c.imageDataUrl,
-          gridSize: c.gridSize || 3,
+          imageDataUrl: imgs[0],
+          images: imgs,
+          gridSize: ([2, 3, 4].includes(c.gridSize) ? c.gridSize : 3) as 2 | 3 | 4,
           title: (c.title || '').trim() || 'Classroom Jigsaw'
         };
       }
@@ -449,6 +444,14 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
   };
 
   const currentCatalog = getGameCatalogItem(selectedGameId);
+  const jigsawImages =
+    selectedGameId === 'classroom-jigsaw'
+      ? (config as ClassroomJigsawConfig).images?.length
+        ? (config as ClassroomJigsawConfig).images!
+        : (config as ClassroomJigsawConfig).imageDataUrl
+        ? [(config as ClassroomJigsawConfig).imageDataUrl!]
+        : []
+      : [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm">
@@ -476,8 +479,8 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
                 {step === 'assign' && `Assign ${currentCatalog.name}`}
               </h2>
               <p className="text-xs text-slate-500 truncate">
-                {step === 'select' && 'Choose a template, add your classroom content, and assign it.'}
-                {step === 'configure' && 'Enter your custom words, sentences, or images below.'}
+                {step === 'select' && 'Choose a game, add or bulk-upload content, preview, and assign.'}
+                {step === 'configure' && currentCatalog.shortDescription}
                 {step === 'assign' && 'Publish to a classroom and announce it automatically.'}
               </p>
             </div>
@@ -502,8 +505,18 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
                   className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-col justify-between gap-4 hover:border-sky-300 hover:shadow-md transition"
                 >
                   <div className="space-y-3">
-                    {renderGameThumbnail(game.id)}
+                    <div className="w-full aspect-square rounded-2xl overflow-hidden bg-slate-100 border border-slate-100">
+                      <img
+                        src={game.thumbnailUrl}
+                        alt={game.name}
+                        loading="lazy"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
                     <div>
+                      <span className="inline-block text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 mb-1.5">
+                        {game.category}
+                      </span>
                       <h3 className="text-base font-extrabold text-slate-900">{game.name}</h3>
                       <p className="text-xs text-slate-600 mt-1 leading-relaxed">
                         {game.shortDescription}
@@ -534,23 +547,29 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
               {/* 1. Liquid Sentences Config */}
               {selectedGameId === 'liquid-sentences' && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h3 className="text-sm font-bold text-slate-900">Sentences & Optional Hints</h3>
                       <p className="text-xs text-slate-500">
-                        Each sentence will be scrambled into interactive floating word pills.
+                        Each sentence is scrambled into floating word tiles.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const c = config as LiquidSentencesConfig;
-                        setConfig({ sentences: [...c.sentences, { text: '', hint: '' }] });
-                      }}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-bold"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Add Sentence
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <BulkContentUploader
+                        gameId="liquid-sentences"
+                        onConfirmImport={handleBulkImport}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const c = config as LiquidSentencesConfig;
+                          setConfig({ sentences: [...c.sentences, { text: '', hint: '' }] });
+                        }}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-bold"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Sentence
+                      </button>
+                    </div>
                   </div>
                   {(config as LiquidSentencesConfig).sentences.map((item, idx) => (
                     <div
@@ -609,45 +628,87 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
               {/* 2. Save the Balloon Config */}
               {selectedGameId === 'save-the-balloon' && (
                 <div className="space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <h3 className="text-sm font-bold text-slate-900">Difficulty Level</h3>
-                      <p className="text-xs text-slate-500">
-                        Controls balloon lives (Easy: 8, Medium: 6, Hard: 5 guesses).
-                      </p>
+                      <h3 className="text-xs font-bold text-slate-700 mb-2">Difficulty & Lives</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {([
+                          { diff: 'easy' as const, lives: 8 as const, label: 'Easy (8 lives)' },
+                          { diff: 'medium' as const, lives: 6 as const, label: 'Medium (6 lives)' },
+                          { diff: 'hard' as const, lives: 5 as const, label: 'Hard (5 lives)' }
+                        ]).map((opt) => (
+                          <button
+                            key={opt.diff}
+                            type="button"
+                            onClick={() =>
+                              setConfig({
+                                ...(config as SaveTheBalloonConfig),
+                                difficulty: opt.diff,
+                                lives: opt.lives
+                              })
+                            }
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${
+                              (config as SaveTheBalloonConfig).difficulty === opt.diff
+                                ? 'bg-sky-600 text-white border-sky-600'
+                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      {(['easy', 'medium', 'hard'] as const).map((diff) => (
-                        <button
-                          key={diff}
-                          type="button"
-                          onClick={() =>
-                            setConfig({ ...(config as SaveTheBalloonConfig), difficulty: diff })
+
+                    <div className="flex flex-wrap items-center gap-4">
+                      <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={(config as SaveTheBalloonConfig).showTimer !== false}
+                          onChange={(e) =>
+                            setConfig({
+                              ...(config as SaveTheBalloonConfig),
+                              showTimer: e.target.checked
+                            })
                           }
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize border transition ${
-                            (config as SaveTheBalloonConfig).difficulty === diff
-                              ? 'bg-sky-600 text-white border-sky-600'
-                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
-                          }`}
-                        >
-                          {diff}
-                        </button>
-                      ))}
+                          className="rounded border-slate-300"
+                        />
+                        Show Timer
+                      </label>
+                      <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={(config as SaveTheBalloonConfig).allowHints !== false}
+                          onChange={(e) =>
+                            setConfig({
+                              ...(config as SaveTheBalloonConfig),
+                              allowHints: e.target.checked
+                            })
+                          }
+                          className="rounded border-slate-300"
+                        />
+                        Enable Hints
+                      </label>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-sm font-bold text-slate-900">Words & Optional Clues</h3>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const c = config as SaveTheBalloonConfig;
-                        setConfig({ ...c, words: [...c.words, { word: '', hint: '' }] });
-                      }}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-bold"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Add Word
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <BulkContentUploader
+                        gameId="save-the-balloon"
+                        onConfirmImport={handleBulkImport}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const c = config as SaveTheBalloonConfig;
+                          setConfig({ ...c, words: [...c.words, { word: '', hint: '' }] });
+                        }}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-bold"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Word
+                      </button>
+                    </div>
                   </div>
 
                   {(config as SaveTheBalloonConfig).words.map((item, idx) => (
@@ -706,8 +767,8 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
               {/* 3. Memory Match Config */}
               {selectedGameId === 'memory-match' && (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex-1">
+                  <div className="flex flex-wrap items-end justify-between gap-3">
+                    <div className="flex-1 min-w-[200px]">
                       <label className="block text-xs font-bold text-slate-600 mb-1">
                         Deck Theme Name
                       </label>
@@ -721,16 +782,22 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
                         className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm"
                       />
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const c = config as MemoryMatchConfig;
-                        setConfig({ ...c, pairs: [...c.pairs, { term: '', definition: '' }] });
-                      }}
-                      className="mt-5 inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-bold shrink-0"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Add Pair
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <BulkContentUploader
+                        gameId="memory-match"
+                        onConfirmImport={handleBulkImport}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const c = config as MemoryMatchConfig;
+                          setConfig({ ...c, pairs: [...c.pairs, { term: '', definition: '' }] });
+                        }}
+                        className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-bold shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Pair
+                      </button>
+                    </div>
                   </div>
 
                   {(config as MemoryMatchConfig).pairs.map((pair, idx) => (
@@ -764,7 +831,7 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
                             next[idx] = { ...next[idx], term: e.target.value };
                             setConfig({ ...c, pairs: next });
                           }}
-                          placeholder="Word / Term"
+                          placeholder="First item (word / term)"
                           className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm"
                         />
                         <input
@@ -776,7 +843,7 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
                             next[idx] = { ...next[idx], definition: e.target.value };
                             setConfig({ ...c, pairs: next });
                           }}
-                          placeholder="Definition (or upload picture below)"
+                          placeholder="Matching item (or upload picture below)"
                           className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm"
                         />
                       </div>
@@ -826,67 +893,78 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
                 </div>
               )}
 
-              {/* 4. Classroom Jigsaw Config */}
+              {/* 4. Classroom Jigsaw Config (supports multiple images + 2x2, 3x3, 4x4) */}
               {selectedGameId === 'classroom-jigsaw' && (
                 <div className="space-y-4">
                   <div className="p-4 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 text-center space-y-3">
-                    {(config as ClassroomJigsawConfig).imageDataUrl ? (
-                      <div className="space-y-3">
-                        <img
-                          src={(config as ClassroomJigsawConfig).imageDataUrl}
-                          alt="Jigsaw preview"
-                          className="max-h-56 mx-auto rounded-xl shadow-sm border border-slate-200 object-contain"
-                        />
-                        <label className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer">
-                          <ImagePlus className="w-4 h-4 text-emerald-600" />
-                          Choose Different Picture
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              const dataUrl = await compressImageToDataUrl(file, 900, 0.85);
-                              setConfig({ ...(config as ClassroomJigsawConfig), imageDataUrl: dataUrl });
-                            }}
-                          />
-                        </label>
+                    <label className="block py-4 cursor-pointer space-y-2">
+                      <ImagePlus className="w-9 h-9 text-emerald-600 mx-auto" />
+                      <p className="text-sm font-bold text-slate-800">
+                        Upload Puzzle Image(s) — Single or Bulk Multi-Image Upload
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Select one or multiple PNG/JPG/WebP images (max 10 MB each). Each image becomes a puzzle round.
+                      </p>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => {
+                          handleJigsawMultiUpload(e.target.files);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+
+                    {jigsawImages.length > 0 && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-left">
+                        {jigsawImages.map((src, idx) => (
+                          <div
+                            key={idx}
+                            className="relative group rounded-xl overflow-hidden border border-slate-200 bg-white aspect-square"
+                          >
+                            <img
+                              src={src}
+                              alt={`Puzzle ${idx + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                            <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-slate-900/75 text-white text-[10px] font-bold">
+                              #{idx + 1}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = jigsawImages.filter((_, i) => i !== idx);
+                                setConfig({
+                                  ...(config as ClassroomJigsawConfig),
+                                  images: next,
+                                  imageDataUrl: next[0] || ''
+                                });
+                              }}
+                              className="absolute top-1.5 right-1.5 p-1 rounded-full bg-rose-600 text-white shadow hover:bg-rose-700"
+                              aria-label="Remove puzzle image"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                    ) : (
-                      <label className="block py-8 cursor-pointer space-y-2">
-                        <ImagePlus className="w-10 h-10 text-emerald-600 mx-auto" />
-                        <p className="text-sm font-bold text-slate-800">
-                          Upload a Picture for Your Jigsaw Puzzle
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          PNG, JPG, or WebP — automatically sized for smooth desktop & mobile play
-                        </p>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            const dataUrl = await compressImageToDataUrl(file, 900, 0.85);
-                            setConfig({ ...(config as ClassroomJigsawConfig), imageDataUrl: dataUrl });
-                          }}
-                        />
-                      </label>
                     )}
                   </div>
 
                   <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-bold text-slate-900">Puzzle Difficulty</h3>
-                      <p className="text-xs text-slate-500">Choose how many pieces to slice the image into.</p>
+                      <p className="text-xs text-slate-500">
+                        Available grid sizes: 2×2, 3×3, and 4×4.
+                      </p>
                     </div>
                     <div className="flex gap-2">
                       {([
-                        { size: 3 as const, label: 'Easy (3x3)' },
-                        { size: 4 as const, label: 'Medium (4x4)' },
-                        { size: 5 as const, label: 'Hard (5x5)' }
+                        { size: 2 as const, label: 'Easy (2×2)' },
+                        { size: 3 as const, label: 'Medium (3×3)' },
+                        { size: 4 as const, label: 'Hard (4×4)' }
                       ]).map((opt) => (
                         <button
                           key={opt.size}
@@ -911,23 +989,29 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
               {/* 5. Lumina Words Config */}
               {selectedGameId === 'lumina-words' && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h3 className="text-sm font-bold text-slate-900">Words & Relevant Clues</h3>
                       <p className="text-xs text-slate-500">
                         Lumina Words automatically builds a crossword grid and letter wheel from your list.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const c = config as LuminaWordsConfig;
-                        setConfig({ ...c, words: [...c.words, { word: '', clue: '' }] });
-                      }}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-bold"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Add Word
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <BulkContentUploader
+                        gameId="lumina-words"
+                        onConfirmImport={handleBulkImport}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const c = config as LuminaWordsConfig;
+                          setConfig({ ...c, words: [...c.words, { word: '', clue: '' }] });
+                        }}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-bold"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Word
+                      </button>
+                    </div>
                   </div>
 
                   {(config as LuminaWordsConfig).words.map((item, idx) => (
@@ -995,7 +1079,7 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Classroom
+                  Target Classroom
                 </label>
                 <select
                   value={targetClassroomId}
@@ -1013,7 +1097,7 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Game Title
+                  Assignment Title
                 </label>
                 <input
                   type="text"
@@ -1045,7 +1129,7 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
                 <div>
                   <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mb-1.5">
                     <Calendar className="w-3.5 h-3.5 text-sky-600" />
-                    Assignment Deadline
+                    Optional Deadline
                   </label>
                   <input
                     type="datetime-local"

@@ -24,8 +24,7 @@ import {
   Trophy,
   Flame,
   Pencil,
-  Camera,
-  Gamepad2
+  Camera
 } from 'lucide-react';
 import { GameLibraryModal } from '@/components/classes/games/GameLibraryModal';
 import { GamePlayerModal } from '@/components/classes/games/GamePlayerModal';
@@ -169,6 +168,7 @@ export const ClassroomDetailPage: React.FC = () => {
 
   // Game Library Phase 1 State
   const [gameLibraryModalOpen, setGameLibraryModalOpen] = useState(false);
+  const [initialGameIdForLibrary, setInitialGameIdForLibrary] = useState<GameId | null>(null);
   const [activeGamePlay, setActiveGamePlay] = useState<{
     gameId: GameId;
     title: string;
@@ -1541,20 +1541,31 @@ export const ClassroomDetailPage: React.FC = () => {
               if (isTeacher) {
                 setActiveReviewAssignment(task);
                 setTaskWorkspaceOpen(true);
-              } else if (task.settings?.is_game_library && task.settings?.game_id && task.settings?.game_config) {
-                setActiveGamePlay({
-                  gameId: task.settings.game_id as GameId,
-                  title: task.title,
-                  config: task.settings.game_config as GameConfig,
-                  assignmentId: task.id,
-                  maxPoints: task.points || 100,
-                  isPreview: false,
-                  alreadyCompletedScore: task.my_submission
-                    ? (task.my_submission.final_score ?? task.my_submission.points_awarded ?? 0)
-                    : null
-                });
               } else {
                 setActiveSubmitAssignment(task);
+              }
+            }}
+            onOpenGame={(gameAssignment) => {
+              if (isTeacher) {
+                setActiveReviewAssignment(gameAssignment);
+              } else if (
+                gameAssignment.settings?.is_game_library &&
+                gameAssignment.settings?.game_id &&
+                gameAssignment.settings?.game_config
+              ) {
+                setActiveGamePlay({
+                  gameId: gameAssignment.settings.game_id as GameId,
+                  title: gameAssignment.title,
+                  config: gameAssignment.settings.game_config as GameConfig,
+                  assignmentId: gameAssignment.id,
+                  maxPoints: gameAssignment.points || 100,
+                  isPreview: false,
+                  alreadyCompletedScore: gameAssignment.my_submission
+                    ? (gameAssignment.my_submission.final_score ??
+                      gameAssignment.my_submission.points_awarded ??
+                      0)
+                    : null
+                });
               }
             }}
             onOpenExam={(exam) => {
@@ -1599,7 +1610,7 @@ export const ClassroomDetailPage: React.FC = () => {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
             
             {/* Card 1: Tasks / My Tasks (Blue identity) */}
             <div className="bg-gradient-to-b from-sky-50/80 via-white to-blue-50/40 rounded-2xl sm:rounded-[26px] p-5 border border-sky-200/80 shadow-[0_4px_16px_-2px_rgba(2,111,195,0.06)] hover:shadow-[0_12px_28px_-4px_rgba(2,111,195,0.16)] hover:-translate-y-1 transition-all duration-200 flex flex-col justify-between space-y-4 group relative overflow-hidden">
@@ -1788,30 +1799,6 @@ export const ClassroomDetailPage: React.FC = () => {
                 className="btn-liquid-amber w-full py-2.5 px-4 text-xs font-bold"
               >
                 {isTeacher ? 'Challenge Dashboard' : 'Open Challenges'}
-              </button>
-            </div>
-
-            {/* Card 5: Game Library */}
-            <div className="glass-card p-6 flex flex-col justify-between gap-4 hover:-translate-y-0.5 transition-transform">
-              <div className="space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-600 text-white flex items-center justify-center shadow-sm">
-                  <Gamepad2 className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-slate-900">Game Library</h3>
-                  <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                    {isTeacher
-                      ? 'Create custom educational HTML games and assign them to your classroom.'
-                      : 'Play teacher-created classroom games and earn leaderboard points.'}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setGameLibraryModalOpen(true)}
-                className="btn-liquid-blue w-full py-2.5 px-4 text-xs font-bold"
-              >
-                {isTeacher ? 'Open Game Library' : 'Play Games'}
               </button>
             </div>
 
@@ -2658,6 +2645,25 @@ export const ClassroomDetailPage: React.FC = () => {
         isTeacher={isTeacher}
         onClose={() => setChallengeListModalOpen(false)}
         onUpdated={loadAllClassroomData}
+        gameAssignments={assignments.filter((a) => Boolean(a.settings?.is_game_library))}
+        onOpenGameLibrary={(gameId) => {
+          setInitialGameIdForLibrary(gameId || null);
+          setGameLibraryModalOpen(true);
+        }}
+        onPlayGameAssignment={(a) => {
+          if (!a.settings?.game_id || !a.settings?.game_config) return;
+          setActiveGamePlay({
+            gameId: a.settings.game_id as GameId,
+            title: a.title,
+            config: a.settings.game_config as GameConfig,
+            assignmentId: a.id,
+            maxPoints: a.points || 100,
+            isPreview: false,
+            alreadyCompletedScore: a.my_submission
+              ? (a.my_submission.final_score ?? a.my_submission.points_awarded ?? 0)
+              : null
+          });
+        }}
       />
 
       <TaskWorkspaceModal
@@ -2760,11 +2766,15 @@ export const ClassroomDetailPage: React.FC = () => {
       {classroom && (
         <GameLibraryModal
           isOpen={gameLibraryModalOpen}
-          onClose={() => setGameLibraryModalOpen(false)}
+          onClose={() => {
+            setGameLibraryModalOpen(false);
+            setInitialGameIdForLibrary(null);
+          }}
           classroomId={classroom.id}
           classroomName={classroom.title}
           isTeacher={isTeacher}
           assignments={assignments}
+          initialGameId={initialGameIdForLibrary}
           onPlayAssignment={(a) => {
             if (!a.settings?.game_id || !a.settings?.game_config) return;
             setGameLibraryModalOpen(false);

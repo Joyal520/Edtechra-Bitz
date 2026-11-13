@@ -16,6 +16,8 @@ export const GAME_CATALOG: GameCatalogItem[] = [
     name: 'Liquid Sentences',
     shortDescription:
       'Students arrange scrambled words into meaningful sentences with optional hints and fluid animations.',
+    category: 'Grammar & Syntax',
+    thumbnailUrl: '/games/thumbnails/Gemini_Generated_Image_6i2hc86i2hc86i2h.jpg',
     accentColor: 'from-cyan-500 to-blue-600',
     badgeLabel: 'Sentence Builder',
     htmlPath: '/games/liquid-sentences.html',
@@ -26,6 +28,8 @@ export const GAME_CATALOG: GameCatalogItem[] = [
     name: 'Save the Balloon',
     shortDescription:
       'Guess letters to uncover each secret word before the balloon floats away, with custom clues and difficulty.',
+    category: 'Vocabulary & Spelling',
+    thumbnailUrl: '/games/thumbnails/Gemini_Generated_Image_41exj441exj441ex.jpg',
     accentColor: 'from-rose-500 to-amber-500',
     badgeLabel: 'Word Rescue',
     htmlPath: '/games/save-the-balloon.html',
@@ -36,6 +40,8 @@ export const GAME_CATALOG: GameCatalogItem[] = [
     name: 'Memory Match',
     shortDescription:
       'Flip cards to pair vocabulary terms with definitions or uploaded pictures in a timed matching challenge.',
+    category: 'Recall & Matching',
+    thumbnailUrl: '/games/thumbnails/Gemini_Generated_Image_ezubsaezubsaezub.jpg',
     accentColor: 'from-violet-500 to-fuchsia-600',
     badgeLabel: 'Card Pairs',
     htmlPath: '/games/memory-match.html',
@@ -45,7 +51,9 @@ export const GAME_CATALOG: GameCatalogItem[] = [
     id: 'classroom-jigsaw',
     name: 'Classroom Jigsaw',
     shortDescription:
-      'Upload any classroom image and turn it into an interactive jigsaw puzzle at your chosen grid difficulty.',
+      'Upload one or more classroom images and turn them into interactive jigsaw puzzles at your chosen grid size.',
+    category: 'Visual & Spatial',
+    thumbnailUrl: '/games/thumbnails/Gemini_Generated_Image_oocop3oocop3ooco.jpg',
     accentColor: 'from-emerald-500 to-teal-600',
     badgeLabel: 'Visual Puzzle',
     htmlPath: '/games/classroom-jigsaw.html',
@@ -56,6 +64,8 @@ export const GAME_CATALOG: GameCatalogItem[] = [
     name: 'Lumina Words',
     shortDescription:
       'Swipe connected letters on the glowing wheel to solve a custom crossword generated from your words and clues.',
+    category: 'Spelling & Wordplay',
+    thumbnailUrl: '/games/thumbnails/Gemini_Generated_Image_8kpi9b8kpi9b8kpi.jpg',
     accentColor: 'from-indigo-500 to-purple-600',
     badgeLabel: 'Word Wheel',
     htmlPath: '/games/lumina-words.html',
@@ -80,6 +90,9 @@ export function getDefaultConfigForGame(gameId: GameId): GameConfig {
     case 'save-the-balloon':
       return {
         difficulty: 'medium',
+        lives: 6,
+        showTimer: true,
+        allowHints: true,
         words: [
           { word: 'GRAVITY', hint: 'Force that keeps planets in orbit' },
           { word: 'FRACTION', hint: 'Part of a whole number' },
@@ -99,6 +112,7 @@ export function getDefaultConfigForGame(gameId: GameId): GameConfig {
     case 'classroom-jigsaw':
       return {
         imageDataUrl: '',
+        images: [],
         gridSize: 3,
         title: 'Classroom Picture Puzzle'
       };

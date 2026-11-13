@@ -21,6 +21,9 @@ export interface BalloonWordItem {
 
 export interface SaveTheBalloonConfig {
   difficulty: 'easy' | 'medium' | 'hard';
+  lives?: 5 | 6 | 8;
+  showTimer?: boolean;
+  allowHints?: boolean;
   words: BalloonWordItem[];
 }
 
@@ -36,8 +39,9 @@ export interface MemoryMatchConfig {
 }
 
 export interface ClassroomJigsawConfig {
-  imageDataUrl: string;
-  gridSize: 3 | 4 | 5;
+  imageDataUrl?: string;
+  images?: string[];
+  gridSize: 2 | 3 | 4;
   title?: string;
 }
 
@@ -62,6 +66,8 @@ export interface GameCatalogItem {
   id: GameId;
   name: string;
   shortDescription: string;
+  category: string;
+  thumbnailUrl: string;
   accentColor: string;
   badgeLabel: string;
   htmlPath: string;

@@ -249,7 +249,7 @@ let lastF=0;(function loop(now){requestAnimationFrame(loop);now=now||performance
 window.addEventListener("message",ev=>{
   const msg=ev.data;
   if(!msg||msg.type!=="EDTECHRA_INIT_GAME")return;
-  const p=msg.payload||{},cfg=p.config||{};
+  const p=msg.payload||msg||{},cfg=p.config||{};
   edtechraBridge.active=true;
   edtechraBridge.maxPoints=Number(p.maxPoints)||100;
   edtechraBridge.reported=false;
@@ -261,15 +261,17 @@ window.addEventListener("message",ev=>{
   const items=Array.isArray(cfg.words)?cfg.words:[];
   const parsed=items.map(it=>{
     const w=(typeof it==="string"?it:(it.word||"")).replace(/\s+/g," ").trim();
-    const c=typeof it==="string"?"":(it.clue||"").trim();
+    const c=typeof it==="string"?"":((it.clue||it.hint||"")).trim();
     return w&&split(w).some(isL)?{w,c}:null;
   }).filter(Boolean);
   if(!parsed.length)return;
   S.set=parsed;
   S.topic=(cfg.topic||"").trim();
-  S.max=[5,6,8].includes(Number(cfg.maxBalloons))?Number(cfg.maxBalloons):6;
+  const diffLives=cfg.difficulty==="easy"?8:cfg.difficulty==="hard"?5:6;
+  const rawLives=Number(cfg.lives||cfg.maxBalloons||diffLives);
+  S.max=[5,6,8].includes(rawLives)?rawLives:diffLives;
   S.timer=cfg.showTimer!==false;
-  S.hints=cfg.allowHints!==false;
+  S.hints=cfg.allowHints!==false&&cfg.hintsEnabled!==false;
   begin();
 });
 window.parent.postMessage({type:"EDTECHRA_GAME_READY",gameId:"save-the-balloon"},"*");

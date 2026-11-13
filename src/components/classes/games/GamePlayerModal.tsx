@@ -64,13 +64,17 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
       if (!data || typeof data !== 'object') return;
 
       if (data.type === 'EDTECHRA_GAME_READY') {
+        const initPayload = {
+          mode: isPreview ? 'preview' : 'student',
+          title,
+          maxPoints,
+          config
+        };
         iframeRef.current.contentWindow?.postMessage(
           {
             type: 'EDTECHRA_INIT_GAME',
-            mode: isPreview ? 'preview' : 'student',
-            title,
-            maxPoints,
-            config
+            payload: initPayload,
+            ...initPayload
           },
           '*'
         );
@@ -78,13 +82,14 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
       }
 
       if (data.type === 'EDTECHRA_GAME_COMPLETE') {
+        const raw = data.payload && typeof data.payload === 'object' ? data.payload : data;
         const payload: GameCompletionPayload = {
-          gameId: (data.gameId as GameId) || gameId,
-          scoreEarned: Number(data.scoreEarned ?? 0),
-          maxPoints: Number(data.maxPoints ?? maxPoints),
-          completed: Boolean(data.completed ?? true),
-          timeTakenSeconds: Number(data.timeTakenSeconds ?? 0),
-          details: data.details && typeof data.details === 'object' ? data.details : undefined
+          gameId: (raw.gameId as GameId) || gameId,
+          scoreEarned: Number(raw.scoreEarned ?? 0),
+          maxPoints: Number(raw.maxAvailablePoints ?? raw.maxPoints ?? maxPoints),
+          completed: raw.completionStatus ? raw.completionStatus === 'completed' : Boolean(raw.completed ?? true),
+          timeTakenSeconds: Number(raw.timeTakenSeconds ?? 0),
+          details: raw.details && typeof raw.details === 'object' ? raw.details : undefined
         };
 
         if (isPreview || !assignmentId) {

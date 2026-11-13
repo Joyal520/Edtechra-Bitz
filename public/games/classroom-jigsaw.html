@@ -210,10 +210,16 @@ const prog=()=>g.pieces.filter(p=>p.locked).length/g.pieces.length;
 function hint(){if(g.solved)return;const l=g.pieces.filter(p=>!p.locked);if(!l.length)return;const e=l.filter(p=>p.edge),pool=e.length?e:l,c=pool[Math.random()*pool.length|0];
   const mem=g.clusters.get(c.cid);lockCluster(mem);mem.forEach(p=>spark(p.tx+g.s/2,p.ty+g.s/2,14));g.hint=c;g.hintA=1;audio.snap(prog(),true);updHud();win()}
 function win(){if(g.pieces.some(p=>!p.locked))return;g.solved=true;clearInterval(g.tick);audio.win();
-  if(edtechraBridge.active&&!edtechraBridge.reported){edtechraBridge.reported=true;
-    window.parent.postMessage({type:"EDTECHRA_GAME_COMPLETE",payload:{gameId:"classroom-jigsaw",scoreEarned:edtechraBridge.maxPoints,maxAvailablePoints:edtechraBridge.maxPoints,completionStatus:"completed",timeTakenSeconds:g.sec,details:{gridSize:g.N,pieces:g.N*g.N}}},"*")}
+  const multi=edtechraBridge.images&&edtechraBridge.images.length>1;
+  const hasNext=multi&&edtechraBridge.index+1<edtechraBridge.images.length;
+  if(edtechraBridge.active&&!edtechraBridge.reported&&!hasNext){edtechraBridge.reported=true;
+    const totalSec=(edtechraBridge.totalSec||0)+g.sec;
+    window.parent.postMessage({type:"EDTECHRA_GAME_COMPLETE",payload:{gameId:"classroom-jigsaw",scoreEarned:edtechraBridge.maxPoints,maxAvailablePoints:edtechraBridge.maxPoints,completionStatus:"completed",timeTakenSeconds:totalSec,details:{gridSize:g.N,pieces:g.N*g.N,puzzlesCompleted:multi?edtechraBridge.images.length:1}}},"*")}
   for(let i=0;i<6;i++)setTimeout(()=>spark(g.board.x+Math.random()*g.board.size,g.board.y+Math.random()*g.board.size,26),i*150);
-  setTimeout(()=>{$("winTime").textContent=fmt(g.sec);$("winTimeBox").classList.toggle("hidden",!g.timer);$("winGrid").textContent=`${g.N}×${g.N} (${g.N*g.N})`;$("win").classList.remove("hidden")},700)}
+  setTimeout(()=>{$("winTime").textContent=fmt(g.sec);$("winTimeBox").classList.toggle("hidden",!g.timer);$("winGrid").textContent=`${g.N}×${g.N} (${g.N*g.N})`;
+    const bAgain=$("bAgain");
+    if(hasNext){bAgain.textContent=`Next Puzzle (${edtechraBridge.index+2}/${edtechraBridge.images.length}) →`}else{bAgain.textContent="Play Again"}
+    $("win").classList.remove("hidden")},700)}
 function updHud(){$("hProg").textContent=`${g.pieces.filter(p=>p.locked).length} / ${g.pieces.length}`}
 const fmt=s=>String(s/60|0).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
 function startTimer(){clearInterval(g.tick);g.sec=0;$("hTime").textContent="00:00";$("hTimerWrap").classList.toggle("hidden",!g.timer);
@@ -253,37 +259,57 @@ document.querySelectorAll(".grid-btn").forEach(b=>b.onclick=()=>{document.queryS
 $("timerSw").onclick=e=>{g.timer=!g.timer;e.currentTarget.classList.toggle("on",g.timer)};
 $("start").onclick=startGame;
 $("bNew").onclick=()=>{$("setup").classList.remove("hidden")};
-$("bAgain").onclick=startGame;$("bAdmire").onclick=()=>$("win").classList.add("hidden");
+$("bAgain").onclick=()=>{
+  if(edtechraBridge.images&&edtechraBridge.images.length>1&&edtechraBridge.index+1<edtechraBridge.images.length){
+    edtechraBridge.totalSec=(edtechraBridge.totalSec||0)+g.sec;
+    edtechraBridge.index++;
+    loadBridgePuzzle(edtechraBridge.index);
+  }else{
+    startGame();
+  }
+};$("bAdmire").onclick=()=>$("win").classList.add("hidden");
 $("bGhost").onclick=e=>{g.ghost=!g.ghost;e.currentTarget.classList.toggle("on",g.ghost)};
 $("bRef").onclick=()=>$("ref").classList.toggle("hidden");
 $("bTidy").onclick=()=>scatter(true);$("bHint").onclick=hint;
 $("bMute").onclick=e=>{audio.muted=!audio.muted;e.currentTarget.textContent=audio.muted?"🔇":"🔊"};
 resize();frame();
 
+function loadBridgePuzzle(idx){
+  const list=edtechraBridge.images||[];
+  const src=list[idx];
+  const baseTitle=edtechraBridge.baseTitle||"Classroom Jigsaw";
+  $("titleIn").value=list.length>1?`${baseTitle} (${idx+1}/${list.length})`:baseTitle;
+  if(src){
+    const im=new Image();
+    im.onload=()=>{setupImg=prepImage(im);startGame()};
+    im.onerror=()=>{samplePicture();startGame()};
+    im.src=src;
+  }else{
+    samplePicture();
+    startGame();
+  }
+}
+
 /* ---------- EDTECHRA INTEGRATION BRIDGE ---------- */
 window.addEventListener("message",ev=>{
   const msg=ev.data;
   if(!msg||msg.type!=="EDTECHRA_INIT_GAME")return;
-  const p=msg.payload||{},cfg=p.config||{};
+  const p=msg.payload||msg||{},cfg=p.config||{};
   edtechraBridge.active=true;
   edtechraBridge.maxPoints=Number(p.maxPoints)||100;
   edtechraBridge.reported=false;
+  edtechraBridge.index=0;
+  edtechraBridge.totalSec=0;
+  edtechraBridge.baseTitle=cfg.title||p.title||"Classroom Jigsaw";
   if(p.mode==="student"||p.mode==="preview"){
     $("setup").classList.add("hidden");
     $("bNew").classList.add("hidden");
   }
   g.N=[2,3,4].includes(Number(cfg.gridSize))?Number(cfg.gridSize):3;
   g.timer=cfg.showTimer!==false;
-  $("titleIn").value=cfg.title||p.title||"";
-  if(cfg.imageDataUrl){
-    const im=new Image();
-    im.onload=()=>{setupImg=prepImage(im);startGame()};
-    im.onerror=()=>{samplePicture();startGame()};
-    im.src=cfg.imageDataUrl;
-  }else{
-    samplePicture();
-    startGame();
-  }
+  const imgs=Array.isArray(cfg.images)&&cfg.images.length?cfg.images:(cfg.imageDataUrl?[cfg.imageDataUrl]:[]);
+  edtechraBridge.images=imgs;
+  loadBridgePuzzle(0);
 });
 window.parent.postMessage({type:"EDTECHRA_GAME_READY",gameId:"classroom-jigsaw"},"*");
 </script>
