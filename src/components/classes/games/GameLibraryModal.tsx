@@ -21,6 +21,10 @@ import {
   type TeacherClassroomOption
 } from '@/services/gameLibraryService';
 import { isAssignmentPublished } from '@/utils/gameLevelUtils';
+import {
+  generateLuminaPuzzles,
+  validateLuminaWords
+} from '@/utils/luminaPuzzleGenerator';
 import type { Assignment } from '@/types/classroom';
 import type {
   ClassroomJigsawConfig,
@@ -137,16 +141,44 @@ function sanitizeLevelConfig(
     }
     case 'lumina-words': {
       const c = cfg as LuminaWordsConfig;
-      const clean = c.words
-        .map((w) => ({
-          word: w.word.replace(/[^a-zA-Z]/g, '').toUpperCase(),
-          clue: w.clue.trim()
-        }))
-        .filter((w) => w.word.length >= 3 && w.word.length <= 12);
-      if (clean.length < 2) {
-        return { error: `${levelLabel}: Please enter at least 2 words (3 to 12 letters each, A-Z).` };
+      const nonEmpty = c.words.filter((w) => w.word.trim().length > 0);
+      const validation = validateLuminaWords(nonEmpty);
+      if (validation.tooLongWords.length > 0) {
+        const examples = validation.tooLongWords
+          .slice(0, 3)
+          .map((w) => `"${w.clean}" (${w.length} chars)`)
+          .join(', ');
+        return {
+          error: `${levelLabel}: Target words must be 8 characters or fewer. Please shorten or replace: ${examples}.`
+        };
       }
-      return { config: { title: (c.title || '').trim() || 'Lumina Words', words: clean } };
+      if (validation.tooShortWords.length > 0) {
+        const examples = validation.tooShortWords
+          .slice(0, 3)
+          .map((w) => `"${w}"`)
+          .join(', ');
+        return {
+          error: `${levelLabel}: Each target word must have at least 2 letters (A–Z): ${examples}.`
+        };
+      }
+      if (validation.validWords.length < 2) {
+        return {
+          error: `${levelLabel}: Please enter at least 2 words (2 to 8 letters each, A–Z).`
+        };
+      }
+      const generatedPuzzles = generateLuminaPuzzles(validation.validWords);
+      if (generatedPuzzles.length === 0) {
+        return {
+          error: `${levelLabel}: Could not organize words into valid puzzles (max 8 unique letters per puzzle).`
+        };
+      }
+      return {
+        config: {
+          title: (c.title || '').trim() || 'Lumina Words',
+          words: validation.validWords,
+          puzzles: generatedPuzzles
+        }
+      };
     }
   }
 }

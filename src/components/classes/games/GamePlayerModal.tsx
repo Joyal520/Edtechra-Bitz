@@ -132,6 +132,8 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
         const initPayload = {
           mode: isPreview ? 'preview' : 'student',
           title,
+          levelNumber,
+          levelTitle,
           maxPoints,
           config
         };

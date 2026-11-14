@@ -1,1446 +1,1669 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lumina Words — Word Swipe Puzzle</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Lumina Words</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@700;800;900&display=swap" rel="stylesheet" />
     <style>
         :root {
-            --bg-deep: #0b0e1c;
-            --bg-mid: #141933;
-            --glass-bg: rgba(255, 255, 255, 0.06);
-            --glass-border: rgba(255, 255, 255, 0.14);
-            --gold-primary: #fbbf24;
-            --gold-glow: rgba(251, 191, 36, 0.45);
-            --emerald-primary: #10b981;
-            --emerald-glow: rgba(16, 185, 129, 0.45);
-            --indigo-accent: #6366f1;
+            --bg-crimson-top: #6e101d;
+            --bg-crimson-mid: #4d0914;
+            --bg-crimson-deep: #2b040a;
+            --wood-frame: #6a2f0e;
+            --wood-board-top: #ebb267;
+            --wood-board-bot: #d38737;
+            --wood-pill-top: #8f4719;
+            --wood-pill-bot: #652d0b;
+            --tile-gold-top: #ffe082;
+            --tile-gold-mid: #f7b73b;
+            --tile-gold-bot: #d98218;
+            --tile-edge: #914709;
+            --ink-brown: #4f2005;
+            --orange-btn-top: #ffaa2b;
+            --orange-btn-bot: #df6309;
+            --orange-btn-edge: #8a3603;
+            --shelf-top: #cf722c;
+            --shelf-bot: #7d360d;
         }
 
         * {
             box-sizing: border-box;
-            user-select: none;
-            -webkit-user-select: none;
+            margin: 0;
+            padding: 0;
             -webkit-tap-highlight-color: transparent;
         }
 
         html, body {
-            margin: 0;
-            padding: 0;
             width: 100%;
-            height: 100%;
-            overflow: hidden;
-            font-family: 'Outfit', sans-serif;
-            background: radial-gradient(circle at 50% 15%, #1e254d 0%, #0e1226 55%, #070913 100%);
-            color: #f8fafc;
+            min-height: 100dvh;
+            overflow-x: hidden;
+            font-family: "Nunito", "Segoe UI", system-ui, -apple-system, sans-serif;
+            background: radial-gradient(circle at 50% 30%, var(--bg-crimson-top) 0%, var(--bg-crimson-mid) 56%, var(--bg-crimson-deep) 100%);
+            color: #fff8eb;
         }
 
-        /* Subtle animated ambient orbs */
-        .ambient-orb {
+        /* Ambient vignette & subtle warm spotlight behind wheel */
+        body::before {
+            content: "";
             position: fixed;
-            border-radius: 50%;
-            filter: blur(80px);
+            inset: 0;
             pointer-events: none;
+            background:
+                radial-gradient(circle at 50% 62%, rgba(255, 190, 88, 0.16) 0%, rgba(255, 190, 88, 0) 48%),
+                radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(16, 1, 4, 0.55) 100%);
             z-index: 0;
-            opacity: 0.45;
-            animation: floatOrb 14s ease-in-out infinite alternate;
-        }
-        .orb-1 {
-            width: 320px;
-            height: 320px;
-            background: #4f46e5;
-            top: -80px;
-            left: -60px;
-        }
-        .orb-2 {
-            width: 280px;
-            height: 280px;
-            background: #d97706;
-            bottom: -60px;
-            right: -60px;
-            animation-delay: -5s;
-        }
-        .orb-3 {
-            width: 220px;
-            height: 220px;
-            background: #059669;
-            top: 40%;
-            left: 55%;
-            opacity: 0.25;
-            animation-delay: -9s;
         }
 
-        @keyframes floatOrb {
-            0% { transform: translate(0, 0) scale(1); }
-            100% { transform: translate(25px, -25px) scale(1.1); }
+        .hidden {
+            display: none !important;
         }
 
-        /* Glass panels */
-        .glass-panel {
-            background: var(--glass-bg);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid var(--glass-border);
-            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
-        }
-
-        .glass-pill {
-            background: rgba(15, 20, 42, 0.65);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.14);
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-        }
-
-        /* Crossword / Word Slot Grid */
-        .board-cell {
+        .game-shell {
             position: relative;
-            border-radius: 10px;
+            z-index: 2;
+            width: 100%;
+            max-width: 440px;
+            min-height: 100dvh;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding-top: max(10px, env(safe-area-inset-top));
+        }
+
+        /* Decorative corner botanical foliage (pointer-events: none) */
+        .foliage-bottom-left,
+        .foliage-bottom-right {
+            position: fixed;
+            bottom: 58px;
+            width: clamp(92px, 24vw, 138px);
+            height: auto;
+            pointer-events: none;
+            z-index: 1;
+            opacity: 0.96;
+            filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.45));
+        }
+        .foliage-bottom-left { left: -10px; }
+        .foliage-bottom-right { right: -10px; transform: scaleX(-1); }
+
+        @media (min-width: 520px) {
+            .foliage-bottom-left { left: calc(50% - 236px); }
+            .foliage-bottom-right { right: calc(50% - 236px); }
+        }
+
+        /* ---------- TOP STATUS BAR ---------- */
+        .top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            padding: 2px 12px 8px;
+            z-index: 6;
+        }
+
+        .orange-orb-btn {
+            position: relative;
+            border: 2.5px solid #ffd573;
+            background: linear-gradient(180deg, var(--orange-btn-top) 0%, var(--orange-btn-bot) 100%);
+            box-shadow: 0 4px 0 var(--orange-btn-edge), 0 6px 12px rgba(0, 0, 0, 0.35), inset 0 2px 3px rgba(255, 255, 255, 0.5);
+            color: #ffffff;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.12s ease, box-shadow 0.12s ease;
+            user-select: none;
+            flex-shrink: 0;
+        }
+
+        .orange-orb-btn:active {
+            transform: translateY(3px) scale(0.97);
+            box-shadow: 0 1px 0 var(--orange-btn-edge), 0 3px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .pause-btn {
+            width: 38px;
+            height: 38px;
+        }
+
+        .wood-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            height: 34px;
+            padding: 0 11px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, var(--wood-pill-top) 0%, var(--wood-pill-bot) 100%);
+            border: 2px solid #e7a94e;
+            box-shadow: 0 3px 0 #421b05, 0 5px 10px rgba(0, 0, 0, 0.35), inset 0 1px 2px rgba(255, 224, 150, 0.3);
+            color: #fff6de;
+            font-weight: 800;
+            font-size: clamp(11px, 2.9vw, 13px);
+            line-height: 1;
+            white-space: nowrap;
+            text-shadow: 0 1px 2px rgba(35, 10, 0, 0.7);
+        }
+
+        .level-pill {
+            flex: 1 1 auto;
+            min-width: 0;
+            max-width: 158px;
+        }
+        .level-pill span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .puzzle-pill {
+            flex: 0 0 auto;
+        }
+
+        .coin-pill {
+            padding: 0 5px 0 6px;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .coin-star-badge {
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            background: radial-gradient(circle at 35% 30%, #fff4b2, #f5a618 70%, #b46404 100%);
+            border: 1.5px solid #fff2a6;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+            color: #fff8d6;
+            font-size: 12px;
+        }
+
+        .coin-plus-badge {
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, #5be349 0%, #249e1d 100%);
+            border: 1.5px solid #c7ffbd;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            font-weight: 900;
+            font-size: 14px;
+            line-height: 1;
+            cursor: pointer;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+        }
+
+        /* ---------- WOODEN WORD BOARD ---------- */
+        .board-wrap {
+            position: relative;
+            padding: 0 14px;
+            z-index: 4;
+        }
+
+        .board-vine-left,
+        .board-vine-right {
+            position: absolute;
+            top: -8px;
+            width: 72px;
+            height: auto;
+            pointer-events: none;
+            z-index: 6;
+            filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.3));
+        }
+        .board-vine-left { left: 6px; }
+        .board-vine-right { right: 6px; transform: scaleX(-1); }
+
+        .wooden-board {
+            position: relative;
+            border-radius: 24px;
+            padding: 14px 12px 15px;
+            background:
+                repeating-linear-gradient(
+                    3deg,
+                    rgba(145, 72, 18, 0.06) 0px,
+                    rgba(145, 72, 18, 0.06) 2px,
+                    transparent 2px,
+                    transparent 12px
+                ),
+                linear-gradient(180deg, #f3c47f 0%, var(--wood-board-top) 22%, var(--wood-board-bot) 100%);
+            border: 4px solid var(--wood-frame);
+            box-shadow:
+                0 7px 0 #4a1e06,
+                0 14px 26px rgba(0, 0, 0, 0.45),
+                inset 0 2px 3px rgba(255, 241, 204, 0.72),
+                inset 0 -4px 8px rgba(130, 56, 12, 0.32);
+        }
+
+        /* Active traced word slots at top of wooden board */
+        .active-slots-row {
             display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: 800;
-            text-transform: uppercase;
-            transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .board-cell.hidden-slot {
-            background: rgba(255, 255, 255, 0.08);
-            border: 1.5px solid rgba(255, 255, 255, 0.16);
-            box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35);
-            color: transparent;
-        }
-
-        .board-cell.hinted-slot {
-            background: rgba(251, 191, 36, 0.2);
-            border: 1.5px solid rgba(251, 191, 36, 0.65);
-            color: #fde68a;
-            text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
-            animation: popIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-
-        .board-cell.revealed-slot {
-            background: linear-gradient(145deg, #10b981, #059669);
-            border: 1.5px solid #6ee7b7;
-            color: #ffffff;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-            box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4);
-            animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-
-        .board-cell.flash-duplicate {
-            animation: pulseEmerald 0.55s ease;
-        }
-
-        @keyframes popIn {
-            0% { transform: scale(0.45) rotate(-8deg); opacity: 0.4; }
-            70% { transform: scale(1.12) rotate(2deg); }
-            100% { transform: scale(1) rotate(0deg); opacity: 1; }
-        }
-
-        @keyframes pulseEmerald {
-            0%, 100% { transform: scale(1); filter: brightness(1); }
-            50% { transform: scale(1.15); filter: brightness(1.45); }
-        }
-
-        /* Current Swiped Word Preview Pill */
-        #word-preview-container {
+            gap: 6px;
+            margin-bottom: 10px;
             min-height: 44px;
-            transition: transform 0.2s ease, opacity 0.2s ease;
         }
 
-        #word-preview {
-            letter-spacing: 0.14em;
-            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        .preview-slot {
+            width: clamp(32px, 9vw, 42px);
+            height: clamp(34px, 9.5vw, 44px);
+            border-radius: 10px;
+            background: linear-gradient(180deg, #ebb25f 0%, #cf8433 100%);
+            border: 2.5px solid #4c2108;
+            box-shadow:
+                inset 0 2px 3px rgba(255, 232, 178, 0.5),
+                inset 0 -3px 0 rgba(122, 56, 12, 0.45),
+                0 2px 0 rgba(76, 33, 8, 0.35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: "Fredoka", "Nunito", sans-serif;
+            font-weight: 700;
+            font-size: clamp(17px, 4.8vw, 22px);
+            color: var(--ink-brown);
+            text-shadow: 0 1px 0 rgba(255, 236, 188, 0.7);
+            transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease;
         }
 
-        .shake-invalid {
-            animation: shakeHorizontal 0.42s cubic-bezier(.36,.07,.19,.97) both;
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.85), rgba(185, 28, 28, 0.9)) !important;
-            border-color: #fca5a5 !important;
+        .preview-slot.filled {
+            background: linear-gradient(180deg, #ffe594 0%, #f7b83c 100%);
+            border-color: #5c2809;
+            transform: translateY(-1px) scale(1.04);
+            box-shadow: 0 3px 0 #70330b, inset 0 2px 3px rgba(255, 255, 255, 0.65);
         }
 
-        .pop-valid {
-            background: linear-gradient(135deg, rgba(16, 185, 129, 0.9), rgba(5, 150, 105, 0.95)) !important;
-            border-color: #6ee7b7 !important;
-            transform: scale(1.12);
+        .preview-slot.pop-success {
+            background: linear-gradient(180deg, #98f593 0%, #3ec44e 100%);
+            border-color: #165e1f;
+            color: #0e3d14;
+            transform: scale(1.08);
         }
 
-        .pop-bonus {
-            background: linear-gradient(135deg, rgba(245, 158, 11, 0.9), rgba(217, 119, 6, 0.95)) !important;
-            border-color: #fde68a !important;
+        .preview-slot.pop-already {
+            background: linear-gradient(180deg, #fff0a8 0%, #facc15 100%);
+            border-color: #854d0e;
+        }
+
+        .active-slots-row.shake {
+            animation: slotShake 0.32s ease;
+        }
+
+        @keyframes slotShake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-7px); }
+            45% { transform: translateX(7px); }
+            70% { transform: translateX(-5px); }
+        }
+
+        /* Star progress indicators */
+        .stars-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .progress-star {
+            width: clamp(26px, 7.2vw, 34px);
+            height: clamp(26px, 7.2vw, 34px);
+            transition: transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+            filter: drop-shadow(0 2px 2px rgba(74, 30, 6, 0.42));
+        }
+
+        .progress-star.earned {
             transform: scale(1.1);
+            animation: starEarn 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
-        @keyframes shakeHorizontal {
-            10%, 90% { transform: translate3d(-3px, 0, 0); }
-            20%, 80% { transform: translate3d(5px, 0, 0); }
-            30%, 50%, 70% { transform: translate3d(-7px, 0, 0); }
-            40%, 60% { transform: translate3d(7px, 0, 0); }
+        @keyframes starEarn {
+            0% { transform: scale(0.6) rotate(-18deg); }
+            60% { transform: scale(1.28) rotate(8deg); }
+            100% { transform: scale(1.1) rotate(0deg); }
         }
 
-        /* Letter Wheel */
+        /* Word cards grid (max 5 words -> clean 2-col centered cards like reference) */
+        .word-pills-grid {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .word-card-pill {
+            width: calc(50% - 4px);
+            min-height: 35px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            cursor: pointer;
+            transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.2s ease;
+        }
+
+        .word-card-pill.unfound {
+            background: rgba(255, 236, 198, 0.54);
+            border: 1.5px solid rgba(110, 50, 14, 0.28);
+            box-shadow: inset 0 2px 4px rgba(102, 46, 10, 0.14);
+        }
+
+        .word-card-pill.unfound:hover {
+            background: rgba(255, 241, 212, 0.72);
+        }
+
+        .word-card-pill.found {
+            background: linear-gradient(180deg, #fff6de 0%, #f5deb0 100%);
+            border: 1.5px solid #d49642;
+            box-shadow: 0 2px 0 rgba(106, 47, 14, 0.35), 0 3px 6px rgba(60, 22, 4, 0.18);
+            animation: wordFoundPop 0.36s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .word-card-pill.pulse-highlight {
+            box-shadow: 0 0 0 3px #fde047, 0 4px 10px rgba(0, 0, 0, 0.25);
+        }
+
+        @keyframes wordFoundPop {
+            0% { transform: scale(0.84); }
+            60% { transform: scale(1.07); }
+            100% { transform: scale(1); }
+        }
+
+        .word-card-letters {
+            font-family: "Fredoka", "Nunito", sans-serif;
+            font-weight: 700;
+            font-size: clamp(14px, 3.8vw, 17px);
+            letter-spacing: 0.08em;
+            color: #4f2106;
+            line-height: 1;
+        }
+
+        .word-mask-slots {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .word-mask-char {
+            width: 15px;
+            height: 20px;
+            border-radius: 5px;
+            background: rgba(114, 52, 16, 0.16);
+            border-bottom: 2px solid rgba(114, 52, 16, 0.35);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-family: "Fredoka", "Nunito", sans-serif;
+            font-weight: 700;
+            font-size: 12px;
+            color: #6a2f0e;
+        }
+
+        .word-mask-char.hinted {
+            background: #ffe8a3;
+            border-color: #b45309;
+            color: #4f2005;
+        }
+
+        .word-check-icon {
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+            color: #16a34a;
+        }
+
+        /* Optional feedback / clue banner tucked smoothly beneath word pills */
+        .board-feedback {
+            margin-top: 8px;
+            min-height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .feedback-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 12px;
+            border-radius: 999px;
+            font-size: 11.5px;
+            font-weight: 800;
+            color: #4a1e06;
+            background: rgba(255, 246, 224, 0.85);
+            border: 1px solid rgba(133, 62, 14, 0.3);
+            box-shadow: 0 2px 5px rgba(74, 30, 6, 0.14);
+            max-width: 100%;
+            text-align: center;
+        }
+
+        .feedback-chip.success {
+            background: #dcfce7;
+            border-color: #4ade80;
+            color: #14532d;
+        }
+
+        .feedback-chip.error {
+            background: #fee2e2;
+            border-color: #f87171;
+            color: #7f1d1d;
+        }
+
+        /* ---------- CENTER CIRCULAR LETTER WHEEL ---------- */
+        .wheel-stage {
+            flex: 1 1 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 16px;
+            min-height: 228px;
+            z-index: 4;
+        }
+
         #wheel-wrapper {
             position: relative;
+            width: clamp(224px, 64vw, 276px);
+            height: clamp(224px, 64vw, 276px);
+            border-radius: 999px;
             touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        .wheel-ring {
+        /* Subtle translucent circular ring hint behind the wooden tiles */
+        .wheel-ring-backdrop {
+            position: absolute;
+            inset: 14px;
+            border-radius: 999px;
+            border: 2px solid rgba(255, 214, 130, 0.13);
+            background: radial-gradient(circle, rgba(255, 200, 110, 0.07) 0%, rgba(0, 0, 0, 0) 70%);
+            pointer-events: none;
+        }
+
+        #swipe-canvas-svg {
             position: absolute;
             inset: 0;
-            border-radius: 50%;
-            background: radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.11), rgba(15, 23, 42, 0.72) 75%);
-            backdrop-filter: blur(18px);
-            -webkit-backdrop-filter: blur(18px);
-            border: 2px solid rgba(255, 255, 255, 0.15);
-            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55), inset 0 2px 12px rgba(255, 255, 255, 0.08);
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: visible;
+            z-index: 8;
         }
 
-        .letter-node {
+        .wheel-tile {
             position: absolute;
-            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            border-radius: 17px;
+            background: linear-gradient(180deg, var(--tile-gold-top) 0%, var(--tile-gold-mid) 58%, var(--tile-gold-bot) 100%);
+            border: 2.5px solid #fff1b8;
+            box-shadow:
+                0 6px 0 var(--tile-edge),
+                0 10px 18px rgba(0, 0, 0, 0.45),
+                inset 0 2px 3px rgba(255, 255, 255, 0.65);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: 800;
-            color: #f8fafc;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1.5px solid rgba(255, 255, 255, 0.16);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
-                        left 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
-                        top 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
-                        background 0.18s ease,
-                        box-shadow 0.18s ease;
+            font-family: "Fredoka", "Nunito", sans-serif;
+            font-weight: 700;
+            color: var(--ink-brown);
+            text-shadow: 0 1.5px 0 rgba(255, 240, 194, 0.72);
             cursor: pointer;
             z-index: 10;
+            transition: transform 0.14s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.14s ease, filter 0.14s ease;
         }
 
-        .letter-node.selected {
-            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-            color: #1e1b4b;
-            border-color: #fef3c7;
-            transform: translate(-50%, -50%) scale(1.18);
-            box-shadow: 0 0 22px rgba(251, 191, 36, 0.8), 0 4px 12px rgba(0, 0, 0, 0.4);
-            z-index: 15;
+        .wheel-tile.selected {
+            transform: translate(-50%, -50%) scale(1.1);
+            background: linear-gradient(180deg, #fff6c9 0%, #ffd457 60%, #ee981c 100%);
+            border-color: #ffffff;
+            box-shadow:
+                0 0 18px rgba(255, 238, 168, 0.9),
+                0 5px 0 #9f4f09,
+                0 12px 22px rgba(0, 0, 0, 0.48);
+            z-index: 14;
         }
 
-        .letter-node:not(.selected) {
-            transform: translate(-50%, -50%) scale(1);
+        /* ---------- BOTTOM CONTROLS & WOODEN SHELF ---------- */
+        .bottom-shelf {
+            position: relative;
+            z-index: 6;
+            padding: 10px 18px max(12px, env(safe-area-inset-bottom));
+            background:
+                repeating-linear-gradient(
+                    0deg,
+                    rgba(90, 32, 6, 0.08) 0px,
+                    rgba(90, 32, 6, 0.08) 2px,
+                    transparent 2px,
+                    transparent 11px
+                ),
+                linear-gradient(180deg, #dd853a 0%, var(--shelf-top) 14%, var(--shelf-bot) 100%);
+            border-top: 3px solid #f0a75b;
+            box-shadow:
+                0 -8px 20px rgba(0, 0, 0, 0.42),
+                inset 0 2px 3px rgba(255, 230, 180, 0.55);
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            gap: 12px;
         }
 
-        /* Flying Letter Animation */
-        .flying-letter {
-            position: fixed;
-            z-index: 60;
-            pointer-events: none;
+        .control-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            color: #fff6e0;
+            font-family: inherit;
+        }
+
+        .control-orb {
+            width: clamp(50px, 14vw, 58px);
+            height: clamp(50px, 14vw, 58px);
+        }
+
+        .control-label {
+            font-size: 12.5px;
             font-weight: 900;
-            color: #fef08a;
-            text-shadow: 0 0 12px rgba(251, 191, 36, 0.9);
+            letter-spacing: 0.02em;
+            color: #fff6e0;
+            text-shadow: 0 2px 3px rgba(45, 14, 2, 0.9);
+        }
+
+        .hint-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            min-width: 22px;
+            height: 22px;
+            padding: 0 5px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, #ff4b4b 0%, #c81414 100%);
+            border: 2px solid #ffffff;
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: 900;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: transform 0.48s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.48s ease;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
         }
 
-        /* Custom Scrollbar for Modals */
-        ::-webkit-scrollbar {
-            width: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.04);
-            border-radius: 8px;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
-        }
-
-        /* Action button tactile press */
-        .btn-tactile {
-            transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.2s ease;
-        }
-        .btn-tactile:active {
-            transform: scale(0.92);
+        /* ---------- MODALS (PAUSE / PUZZLE COMPLETE / LEVEL COMPLETE / CLUES) ---------- */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            background: rgba(24, 3, 7, 0.78);
+            backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
         }
 
-        /* Toast feedback */
-        @keyframes floatUpFade {
-            0% { opacity: 0; transform: translate(-50%, 10px) scale(0.9); }
-            15% { opacity: 1; transform: translate(-50%, 0) scale(1); }
-            80% { opacity: 1; transform: translate(-50%, -14px) scale(1); }
-            100% { opacity: 0; transform: translate(-50%, -26px) scale(0.95); }
+        .wood-modal {
+            width: 100%;
+            max-width: 360px;
+            border-radius: 26px;
+            padding: 20px 18px;
+            background: linear-gradient(180deg, #f3c681 0%, #dc9441 100%);
+            border: 4px solid #6a2f0e;
+            box-shadow: 0 10px 0 #421b05, 0 22px 44px rgba(0, 0, 0, 0.65), inset 0 2px 4px rgba(255, 245, 215, 0.75);
+            color: #4f2005;
+            text-align: center;
         }
-        .toast-badge {
-            animation: floatUpFade 1.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+
+        .modal-badge-star {
+            width: 58px;
+            height: 58px;
+            margin: -42px auto 10px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, #ffe270 0%, #f59e0b 100%);
+            border: 3px solid #fff8d6;
+            box-shadow: 0 4px 0 #92400e, 0 8px 16px rgba(0, 0, 0, 0.35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            color: #78350f;
+        }
+
+        .modal-title {
+            font-family: "Fredoka", "Nunito", sans-serif;
+            font-size: 23px;
+            font-weight: 700;
+            color: #4a1c04;
+            margin-bottom: 4px;
+        }
+
+        .modal-sub {
+            font-size: 13px;
+            font-weight: 700;
+            color: #74340e;
+            margin-bottom: 14px;
+        }
+
+        .modal-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .modal-stat-card {
+            background: rgba(255, 246, 224, 0.78);
+            border: 1.5px solid rgba(114, 52, 16, 0.25);
+            border-radius: 14px;
+            padding: 8px 10px;
+        }
+
+        .modal-stat-label {
+            font-size: 10.5px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #8a4318;
+        }
+
+        .modal-stat-val {
+            font-family: "Fredoka", "Nunito", sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+            color: #4a1c04;
+        }
+
+        .modal-words-tags {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 6px;
+            margin-bottom: 16px;
+        }
+
+        .modal-word-tag {
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: #fff6de;
+            border: 1px solid #d49642;
+            font-weight: 800;
+            font-size: 12px;
+            color: #4f2005;
+        }
+
+        .modal-btn-primary {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 16px;
+            border: 2.5px solid #ffd87d;
+            background: linear-gradient(180deg, #ffa726 0%, #e16207 100%);
+            box-shadow: 0 4px 0 #8a3603, 0 6px 14px rgba(0, 0, 0, 0.3);
+            color: #ffffff;
+            font-family: inherit;
+            font-size: 15px;
+            font-weight: 900;
+            cursor: pointer;
+            transition: transform 0.12s ease;
+        }
+
+        .modal-btn-primary:active {
+            transform: translateY(3px);
+            box-shadow: 0 1px 0 #8a3603;
+        }
+
+        .modal-btn-secondary {
+            width: 100%;
+            margin-top: 8px;
+            padding: 10px 14px;
+            border-radius: 14px;
+            border: 2px solid rgba(106, 47, 14, 0.35);
+            background: rgba(255, 246, 224, 0.72);
+            color: #5a2608;
+            font-family: inherit;
+            font-size: 13.5px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        #fx-canvas {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 60;
         }
     </style>
 </head>
-<body class="flex flex-col items-center justify-between h-full w-full relative">
+<body>
+    <canvas id="fx-canvas"></canvas>
 
-    <!-- Ambient Background Glow Orbs -->
-    <div class="ambient-orb orb-1"></div>
-    <div class="ambient-orb orb-2"></div>
-    <div class="ambient-orb orb-3"></div>
+    <!-- Tropical decorative corner foliage (non-interactive) -->
+    <svg class="foliage-bottom-left" viewBox="0 0 140 160" fill="none" aria-hidden="true">
+        <path d="M12 155 C20 110, 48 84, 96 64 C66 96, 48 122, 26 156 Z" fill="#2e7d1f" />
+        <path d="M2 156 C8 98, 22 52, 62 22 C44 68, 36 108, 16 156 Z" fill="#46a82b" />
+        <path d="M24 156 C52 124, 86 108, 128 104 C92 128, 62 142, 34 158 Z" fill="#63c738" />
+        <path d="M0 132 C12 96, 30 68, 42 54 C30 88, 22 114, 10 144 Z" fill="#7be043" />
+    </svg>
+    <svg class="foliage-bottom-right" viewBox="0 0 140 160" fill="none" aria-hidden="true">
+        <path d="M12 155 C20 110, 48 84, 96 64 C66 96, 48 122, 26 156 Z" fill="#2e7d1f" />
+        <path d="M2 156 C8 98, 22 52, 62 22 C44 68, 36 108, 16 156 Z" fill="#46a82b" />
+        <path d="M24 156 C52 124, 86 108, 128 104 C92 128, 62 142, 34 158 Z" fill="#63c738" />
+        <path d="M0 132 C12 96, 30 68, 42 54 C30 88, 22 114, 10 144 Z" fill="#7be043" />
+    </svg>
 
-    <!-- Particle Celebration Canvas -->
-    <canvas id="fx-canvas" class="fixed inset-0 pointer-events-none z-50"></canvas>
-
-    <!-- Main App Container -->
-    <div class="relative z-10 flex flex-col justify-between w-full max-w-lg h-full px-3 py-2 sm:px-5 sm:py-4 mx-auto">
-
-        <!-- TOP HUD BAR -->
-        <header class="flex items-center justify-between gap-2 pt-1">
-            <!-- Level Selector Button -->
-            <button id="btn-levels" class="glass-pill btn-tactile flex items-center gap-2 px-3 py-2 rounded-2xl text-sm font-bold text-slate-100 hover:border-indigo-400/50">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span id="hud-level-label">Level 1</span>
-                <svg id="hud-level-chevron" class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+    <div class="game-shell">
+        <!-- A. Top Status Bar -->
+        <header class="top-bar">
+            <button id="btn-pause" type="button" class="orange-orb-btn pause-btn" aria-label="Pause game">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+                    <rect x="2.5" y="2" width="4" height="12" rx="1.4" />
+                    <rect x="9.5" y="2" width="4" height="12" rx="1.4" />
                 </svg>
             </button>
 
-            <!-- Streak / Combo Pill -->
-            <div id="combo-badge" class="hidden glass-pill px-3 py-1.5 rounded-2xl items-center gap-1.5 border-amber-400/40 bg-amber-500/15">
-                <span class="text-amber-300 text-xs font-extrabold tracking-wider uppercase">Streak</span>
-                <span id="combo-count" class="text-amber-400 text-sm font-black">2x</span>
+            <div class="wood-pill level-pill" title="Current level">
+                <span id="hud-level-text">Level 1 – Starter</span>
             </div>
 
-            <!-- Right Controls: Clues (if custom) + Coins + Audio Mute -->
-            <div class="flex items-center gap-2">
-                <button id="btn-clues" class="hidden glass-pill btn-tactile px-3 py-1.5 rounded-2xl text-xs font-extrabold text-amber-200 border-amber-400/40 hover:bg-amber-500/15">
-                    💡 Clues
-                </button>
-                <!-- Coins Counter -->
-                <div id="coin-pill" class="glass-pill flex items-center gap-1.5 px-3 py-1.5 rounded-2xl border-amber-400/30">
-                    <span class="flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-300 text-slate-950 font-black text-xs shadow">✦</span>
-                    <span id="hud-coins" class="font-extrabold text-sm text-amber-300">120</span>
-                </div>
+            <div class="wood-pill puzzle-pill">
+                <span id="hud-puzzle-text">Puzzle 1 of 1</span>
+            </div>
 
-                <!-- Sound Toggle -->
-                <button id="btn-mute" aria-label="Toggle Sound" class="glass-pill btn-tactile p-2 rounded-2xl text-slate-200 hover:text-amber-300">
-                    <svg id="icon-sound-on" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5zM15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14"/>
-                    </svg>
-                    <svg id="icon-sound-off" class="w-5 h-5 hidden text-rose-400" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5zM23 9l-6 6M17 9l6 6"/>
-                    </svg>
-                </button>
+            <div class="wood-pill coin-pill">
+                <span class="coin-star-badge" aria-hidden="true">★</span>
+                <span id="hud-coins">0</span>
+                <button id="btn-clues-orb" type="button" class="coin-plus-badge" title="View clues">+</button>
             </div>
         </header>
 
-        <!-- CROSSWORD / TARGET WORD BOARD AREA -->
-        <main class="flex-1 flex flex-col items-center justify-center my-1 min-h-0 relative">
-            <div id="board-container" class="glass-panel w-full h-full max-h-[42vh] rounded-3xl p-3 sm:p-4 flex items-center justify-center overflow-hidden relative">
-                <div id="crossword-grid" class="grid gap-1.5 sm:gap-2 place-items-center transition-all duration-300">
-                    <!-- Dynamic grid cells injected via JS -->
+        <!-- B. Wooden Word Board -->
+        <section class="board-wrap" aria-label="Word puzzle board">
+            <svg class="board-vine-left" viewBox="0 0 80 56" fill="none" aria-hidden="true">
+                <path d="M4 36 Q24 8 68 12" stroke="#3c8d22" stroke-width="3" stroke-linecap="round" />
+                <ellipse cx="18" cy="24" rx="11" ry="6" transform="rotate(-32 18 24)" fill="#62cc39" />
+                <ellipse cx="36" cy="14" rx="11" ry="5.5" transform="rotate(-12 36 14)" fill="#4cb32b" />
+                <ellipse cx="56" cy="12" rx="9" ry="5" transform="rotate(14 56 12)" fill="#7ce248" />
+                <ellipse cx="10" cy="40" rx="9" ry="5" transform="rotate(-62 10 40)" fill="#4cb32b" />
+            </svg>
+            <svg class="board-vine-right" viewBox="0 0 80 56" fill="none" aria-hidden="true">
+                <path d="M4 36 Q24 8 68 12" stroke="#3c8d22" stroke-width="3" stroke-linecap="round" />
+                <ellipse cx="18" cy="24" rx="11" ry="6" transform="rotate(-32 18 24)" fill="#62cc39" />
+                <ellipse cx="36" cy="14" rx="11" ry="5.5" transform="rotate(-12 36 14)" fill="#4cb32b" />
+                <ellipse cx="56" cy="12" rx="9" ry="5" transform="rotate(14 56 12)" fill="#7ce248" />
+                <ellipse cx="10" cy="40" rx="9" ry="5" transform="rotate(-62 10 40)" fill="#4cb32b" />
+            </svg>
+
+            <div class="wooden-board">
+                <div id="active-slots-row" class="active-slots-row"></div>
+                <div id="stars-row" class="stars-row" aria-label="Puzzle progress stars"></div>
+                <div id="word-pills-grid" class="word-pills-grid"></div>
+                <div id="board-feedback" class="board-feedback">
+                    <span id="feedback-chip" class="feedback-chip">Swipe letters below to find target words</span>
                 </div>
             </div>
+        </section>
 
-            <!-- Floating Feedback Toast Anchor -->
-            <div id="toast-anchor" class="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 z-30"></div>
-        </main>
-
-        <!-- ACTIVE SWIPE WORD PREVIEW PILL -->
-        <div id="word-preview-container" class="flex items-center justify-center my-1">
-            <div id="word-preview" class="opacity-0 scale-90 px-5 py-1.5 rounded-full glass-pill border-amber-400/50 bg-indigo-950/85 text-amber-300 font-black text-xl sm:text-2xl shadow-lg">
-                WORD
-            </div>
-        </div>
-
-        <!-- BOTTOM CONTROLS & LETTER WHEEL SECTION -->
-        <section class="flex items-center justify-between w-full pb-2 sm:pb-3 pt-1 gap-2">
-
-            <!-- Left Column: Shuffle & Bonus Words -->
-            <div class="flex flex-col items-center justify-between h-44 sm:h-52 py-1">
-                <!-- Shuffle Wheel Button -->
-                <button id="btn-shuffle" title="Shuffle Letters" class="glass-pill btn-tactile w-12 h-12 sm:w-13 sm:h-13 rounded-2xl flex items-center justify-center text-slate-200 hover:text-amber-300 hover:border-amber-400/40">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
-                    </svg>
-                </button>
-
-                <!-- Bonus Words Chest Button -->
-                <button id="btn-bonus" title="Bonus Words" class="glass-pill btn-tactile relative w-12 h-12 sm:w-13 sm:h-13 rounded-2xl flex flex-col items-center justify-center text-amber-300 hover:border-amber-400/50">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
-                    </svg>
-                    <span id="bonus-count-badge" class="text-[10px] font-extrabold text-emerald-300 leading-none mt-0.5">0</span>
-                </button>
-            </div>
-
-            <!-- Center: Circular Interactive Letter Wheel -->
-            <div id="wheel-wrapper" class="relative w-52 h-52 sm:w-60 sm:h-60 flex-shrink-0">
-                <div class="wheel-ring"></div>
-                <!-- Dynamic Glowing SVG Trail -->
-                <svg id="wheel-svg" class="absolute inset-0 w-full h-full pointer-events-none z-5" viewBox="0 0 240 240">
+        <!-- C. Circular Letter Wheel -->
+        <main class="wheel-stage">
+            <div id="wheel-wrapper" aria-label="Letter wheel">
+                <div class="wheel-ring-backdrop"></div>
+                <svg id="swipe-canvas-svg">
                     <defs>
                         <filter id="glow-line" x="-30%" y="-30%" width="160%" height="160%">
-                            <feGaussianBlur stdDeviation="4" result="blur"/>
+                            <feGaussianBlur stdDeviation="3.5" result="blur" />
                             <feMerge>
-                                <feMergeNode in="blur"/>
-                                <feMergeNode in="SourceGraphic"/>
+                                <feMergeNode in="blur" />
+                                <feMergeNode in="SourceGraphic" />
                             </feMerge>
                         </filter>
                     </defs>
-                    <polyline id="swipe-trail-glow" fill="none" stroke="#fbbf24" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" opacity="0.45" filter="url(#glow-line)" points=""/>
-                    <polyline id="swipe-trail" fill="none" stroke="#fef08a" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" points=""/>
+                    <polyline id="swipe-line-glow" fill="none" stroke="rgba(255, 232, 160, 0.72)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow-line)" />
+                    <polyline id="swipe-line-core" fill="none" stroke="#ffffff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
-                <!-- Letter Nodes Container -->
-                <div id="letter-nodes-container" class="absolute inset-0"></div>
+                <div id="wheel-tiles-layer"></div>
             </div>
+        </main>
 
-            <!-- Right Column: Hint Button & Endless Mode -->
-            <div class="flex flex-col items-center justify-between h-44 sm:h-52 py-1">
-                <!-- Hint Button (Reveals 1 Letter) -->
-                <button id="btn-hint" title="Reveal Letter Hint (25 Coins)" class="glass-pill btn-tactile relative w-12 h-12 sm:w-13 sm:h-13 rounded-2xl flex flex-col items-center justify-center text-amber-300 hover:border-amber-400/50">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+        <!-- E. Bottom Wooden Shelf Controls -->
+        <footer class="bottom-shelf">
+            <button id="btn-shuffle" type="button" class="control-item">
+                <span class="orange-orb-btn control-orb">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="16 3 21 3 21 8" />
+                        <line x1="4" y1="20" x2="21" y2="3" />
+                        <polyline points="21 16 21 21 16 21" />
+                        <line x1="15" y1="15" x2="21" y2="21" />
+                        <line x1="4" y1="4" x2="9" y2="9" />
                     </svg>
-                    <span class="text-[10px] font-extrabold text-amber-200 leading-none mt-0.5">25✦</span>
-                </button>
+                </span>
+                <span class="control-label">Shuffle</span>
+            </button>
 
-                <!-- Endless / Quick Random Level Button -->
-                <button id="btn-endless" title="Endless Random Puzzle" class="glass-pill btn-tactile w-12 h-12 sm:w-13 sm:h-13 rounded-2xl flex flex-col items-center justify-center text-indigo-300 hover:text-white hover:border-indigo-400/50">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.585 0-4.585 8 0 8 5.606 0 7.644-8 12.74-8z"/>
+            <button id="btn-hint" type="button" class="control-item">
+                <span class="orange-orb-btn control-orb">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 18h6" />
+                        <path d="M10 22h4" />
+                        <path d="M12 2a7 7 0 0 0-4 12.7c.7.6 1 1.3 1 2.3h6c0-1 .3-1.7 1-2.3A7 7 0 0 0 12 2z" fill="rgba(255, 245, 175, 0.45)" />
                     </svg>
-                    <span class="text-[9px] font-bold uppercase tracking-wider mt-0.5">Mix</span>
-                </button>
-            </div>
-        </section>
-    </div>
-
-    <!-- LEVEL COMPLETE MODAL -->
-    <div id="modal-complete" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-950/75 backdrop-blur-md p-4">
-        <div class="glass-panel w-full max-w-sm rounded-3xl p-6 text-center border-amber-400/40 shadow-2xl transform transition-all">
-            <div class="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center text-slate-950 text-3xl font-black shadow-lg shadow-amber-500/30">
-                ★
-            </div>
-            <h2 id="complete-title" class="text-2xl sm:text-3xl font-black text-white tracking-tight">Level Cleared!</h2>
-            <p id="complete-subtitle" class="text-slate-300 text-sm mt-1">Splendid vocabulary mastery</p>
-
-            <div class="grid grid-cols-2 gap-3 my-5">
-                <div class="bg-white/5 border border-white/10 rounded-2xl p-3">
-                    <div class="text-xs text-slate-400 uppercase font-bold">Reward</div>
-                    <div id="complete-reward" class="text-xl font-black text-amber-300 mt-0.5">+30 ✦</div>
-                </div>
-                <div class="bg-white/5 border border-white/10 rounded-2xl p-3">
-                    <div class="text-xs text-slate-400 uppercase font-bold">Bonus Words</div>
-                    <div id="complete-bonus" class="text-xl font-black text-emerald-400 mt-0.5">0</div>
-                </div>
-            </div>
-
-            <button id="btn-next-level" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-lg shadow-lg shadow-emerald-500/30 btn-tactile">
-                Next Level →
+                    <span id="hint-count-badge" class="hint-badge">3</span>
+                </span>
+                <span class="control-label">Hint</span>
             </button>
-        </div>
-    </div>
 
-    <!-- LEVEL SELECTOR MODAL -->
-    <div id="modal-levels" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-950/75 backdrop-blur-md p-4">
-        <div class="glass-panel w-full max-w-md rounded-3xl p-5 sm:p-6 max-h-[82vh] flex flex-col border-white/20">
-            <div class="flex items-center justify-between pb-3 border-b border-white/10">
-                <div>
-                    <h3 class="text-xl font-black text-white">Select Chapter</h3>
-                    <p class="text-xs text-slate-400">12 handcrafted levels + Endless mode</p>
-                </div>
-                <button id="close-levels" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200">✕</button>
-            </div>
-            <div id="levels-grid" class="grid grid-cols-3 gap-2.5 overflow-y-auto py-4 pr-1">
-                <!-- Populated dynamically -->
-            </div>
-            <button id="modal-btn-endless" class="mt-2 w-full py-3 rounded-2xl bg-indigo-600/80 hover:bg-indigo-500 border border-indigo-400/40 font-extrabold text-sm text-white btn-tactile">
-                ∞ Launch Endless Procedural Puzzle
+            <button id="btn-sound" type="button" class="control-item">
+                <span class="orange-orb-btn control-orb">
+                    <svg id="icon-sound-on" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="rgba(255,255,255,0.22)" />
+                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                    </svg>
+                    <svg id="icon-sound-off" class="hidden" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                        <line x1="23" y1="9" x2="17" y2="15" />
+                        <line x1="17" y1="9" x2="23" y2="15" />
+                    </svg>
+                </span>
+                <span id="sound-label" class="control-label">Sound</span>
             </button>
+        </footer>
+    </div>
+
+    <!-- Pause Modal -->
+    <div id="modal-pause" class="modal-backdrop hidden">
+        <div class="wood-modal">
+            <div class="modal-badge-star">||</div>
+            <h2 class="modal-title">Game Paused</h2>
+            <p id="pause-subtitle" class="modal-sub">Take a breath and resume when ready.</p>
+            <button id="btn-resume" type="button" class="modal-btn-primary">Resume Game</button>
+            <button id="btn-pause-sound" type="button" class="modal-btn-secondary">Sound: On</button>
+            <button id="btn-restart-puzzle" type="button" class="modal-btn-secondary hidden">Restart Level</button>
         </div>
     </div>
 
-    <!-- BONUS WORDS MODAL -->
-    <div id="modal-bonus" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-950/75 backdrop-blur-md p-4">
-        <div class="glass-panel w-full max-w-sm rounded-3xl p-5 sm:p-6 max-h-[75vh] flex flex-col border-amber-400/30">
-            <div class="flex items-center justify-between pb-3 border-b border-white/10">
-                <div>
-                    <h3 class="text-xl font-black text-amber-300">Bonus Words</h3>
-                    <p class="text-xs text-slate-300">Valid words not on the crossword earn <span class="text-amber-300 font-bold">+5 ✦</span> each!</p>
-                </div>
-                <button id="close-bonus" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200">✕</button>
-            </div>
-            <div id="bonus-words-list" class="flex flex-wrap gap-2 overflow-y-auto py-4 min-h-[120px] content-start">
-                <!-- Bonus words chips -->
-            </div>
+    <!-- Clues Modal -->
+    <div id="modal-clues" class="modal-backdrop hidden">
+        <div class="wood-modal">
+            <div class="modal-badge-star">?</div>
+            <h2 class="modal-title">Word Clues</h2>
+            <p class="modal-sub">Clues for the current puzzle</p>
+            <div id="clues-list" style="display:flex;flex-direction:column;gap:8px;max-height:240px;overflow-y:auto;margin-bottom:14px;text-align:left;"></div>
+            <button id="btn-close-clues" type="button" class="modal-btn-primary">Back to Wheel</button>
         </div>
     </div>
 
-    <!-- WORD CLUES MODAL (For Teacher-Created Puzzles) -->
-    <div id="modal-clues" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-950/75 backdrop-blur-md p-4">
-        <div class="glass-panel w-full max-w-sm rounded-3xl p-5 sm:p-6 max-h-[75vh] flex flex-col border-amber-400/30">
-            <div class="flex items-center justify-between pb-3 border-b border-white/10">
-                <div>
-                    <h3 class="text-xl font-black text-amber-300">Word Clues</h3>
-                    <p class="text-xs text-slate-300">Swipe the letters on the wheel to solve each word.</p>
+    <!-- Puzzle / Standalone Completion Modal -->
+    <div id="modal-complete" class="modal-backdrop hidden">
+        <div class="wood-modal">
+            <div class="modal-badge-star">★</div>
+            <h2 id="complete-title" class="modal-title">Puzzle Complete!</h2>
+            <p id="complete-subtitle" class="modal-sub">Great vocabulary work!</p>
+
+            <div class="modal-stats-grid">
+                <div class="modal-stat-card">
+                    <div class="modal-stat-label">Words Found</div>
+                    <div id="complete-words-count" class="modal-stat-val">0 / 0</div>
                 </div>
-                <button id="close-clues" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200">✕</button>
+                <div class="modal-stat-card">
+                    <div class="modal-stat-label">Coins Earned</div>
+                    <div id="complete-coins" class="modal-stat-val">+0</div>
+                </div>
             </div>
-            <div id="clues-list" class="space-y-2 overflow-y-auto py-4"></div>
+
+            <div id="complete-word-tags" class="modal-words-tags"></div>
+
+            <button id="btn-continue-puzzle" type="button" class="modal-btn-primary">Continue to Next Puzzle →</button>
         </div>
     </div>
 
     <script>
-        /**
-         * LUMINA WORDS — Complete Single-File Word Swiping Game
-         */
-        const CURATED_LEVELS = [
+        /* ---------- CONSTANTS & PUZZLE GENERATOR (Matches src/utils/luminaPuzzleGenerator.ts) ---------- */
+        const MAX_WORDS_PER_PUZZLE = 5;
+        const MIN_WORD_LEN = 2;
+        const MAX_WORD_LEN = 8;
+        const MAX_WHEEL_LETTERS = 8;
+        const STANDALONE_HINTS_PER_PUZZLE = 3;
+
+        const DEMO_LEVEL_PUZZLES = [
             {
-                id: 1,
-                title: "First Spark",
-                letters: ["S", "T", "A", "R"],
+                puzzleNumber: 1,
+                letters: ["F", "N", "E", "S", "U", "T"],
                 words: [
-                    { word: "STAR", row: 1, col: 0, dir: "H" },
-                    { word: "ART",  row: 1, col: 2, dir: "V" },
-                    { word: "RAT",  row: 3, col: 0, dir: "H" },
-                    { word: "SAT",  row: 0, col: 0, dir: "V" }
-                ],
-                bonus: ["TAR", "TSAR", "ARTS", "RATS"]
+                    { word: "FUN", clue: "Enjoyable activity or play" },
+                    { word: "RUN", clue: "Move quickly on foot" },
+                    { word: "SUN", clue: "Star at the center of our solar system" },
+                    { word: "NUT", clue: "Hard-shelled fruit or seed" },
+                    { word: "TUNE", clue: "A pleasant musical melody" }
+                ]
             },
             {
-                id: 2,
-                title: "Ocean Breeze",
-                letters: ["W", "A", "V", "E"],
+                puzzleNumber: 2,
+                letters: ["S", "T", "A", "R", "E", "P"],
                 words: [
-                    { word: "WAVE", row: 1, col: 0, dir: "H" },
-                    { word: "VOW",  row: 0, col: 2, dir: "V" },
-                    { word: "AWE",  row: 1, col: 1, dir: "V" },
-                    { word: "AVE",  row: 3, col: 1, dir: "H" }
-                ],
-                bonus: ["WAE", "EAVE"]
-            },
-            {
-                id: 3,
-                title: "Solar Flare",
-                letters: ["S", "H", "I", "N", "E"],
-                words: [
-                    { word: "SHINE", row: 2, col: 0, dir: "H" },
-                    { word: "SIN",   row: 0, col: 0, dir: "V" },
-                    { word: "HEN",   row: 2, col: 1, dir: "V" },
-                    { word: "HIS",   row: 0, col: 2, dir: "V" },
-                    { word: "SHE",   row: 4, col: 0, dir: "H" }
-                ],
-                bonus: ["HENS", "SHIN", "NINE", "INS", "HISN"]
-            },
-            {
-                id: 4,
-                title: "Emerald Grove",
-                letters: ["P", "L", "A", "N", "T"],
-                words: [
-                    { word: "PLANT", row: 2, col: 0, dir: "H" },
-                    { word: "PAN",   row: 2, col: 0, dir: "V" },
-                    { word: "ANT",   row: 2, col: 2, dir: "V" },
-                    { word: "TAN",   row: 4, col: 2, dir: "H" },
-                    { word: "LAP",   row: 0, col: 1, dir: "V" },
-                    { word: "NAP",   row: 0, col: 3, dir: "V" }
-                ],
-                bonus: ["PLAN", "PANT", "PLAT", "APT", "PAL", "PAT", "TAP", "ALT"]
-            },
-            {
-                id: 5,
-                title: "Amber Dawn",
-                letters: ["G", "L", "O", "W", "S"],
-                words: [
-                    { word: "GLOWS", row: 2, col: 0, dir: "H" },
-                    { word: "GLOW",  row: 0, col: 2, dir: "V" },
-                    { word: "SLOW",  row: 2, col: 4, dir: "V" },
-                    { word: "OWL",   row: 1, col: 1, dir: "V" },
-                    { word: "LOW",   row: 5, col: 2, dir: "H" }
-                ],
-                bonus: ["LOGS", "LOG", "SOW", "WOG", "WOGS", "OWLS"]
-            },
-            {
-                id: 6,
-                title: "Velvet Night",
-                letters: ["D", "R", "E", "A", "M"],
-                words: [
-                    { word: "DREAM", row: 2, col: 0, dir: "H" },
-                    { word: "READ",  row: 0, col: 1, dir: "V" },
-                    { word: "MADE",  row: 2, col: 4, dir: "V" },
-                    { word: "DEAR",  row: 2, col: 0, dir: "V" },
-                    { word: "EAR",   row: 4, col: 2, dir: "H" },
-                    { word: "ARM",   row: 0, col: 3, dir: "V" }
-                ],
-                bonus: ["DARE", "DAME", "DRAM", "MARE", "REAM", "MAD", "DAM", "RED", "ERA", "RAM"]
-            },
-            {
-                id: 7,
-                title: "Crystal Peak",
-                letters: ["S", "T", "O", "N", "E", "S"],
-                words: [
-                    { word: "STONES", row: 2, col: 0, dir: "H" },
-                    { word: "STONE",  row: 0, col: 0, dir: "V" },
-                    { word: "NOTES",  row: 2, col: 3, dir: "V" },
-                    { word: "TONE",   row: 0, col: 4, dir: "V" },
-                    { word: "SENT",   row: 4, col: 0, dir: "H" },
-                    { word: "SON",    row: 6, col: 2, dir: "H" }
-                ],
-                bonus: ["ONSET", "TONES", "NEST", "NETS", "NOSE", "ONES", "SETS", "TOSS", "NOT", "ONE", "SET", "TEN", "TOE", "TON"]
-            },
-            {
-                id: 8,
-                title: "Golden Compass",
-                letters: ["T", "R", "A", "V", "E", "L"],
-                words: [
-                    { word: "TRAVEL", row: 2, col: 0, dir: "H" },
-                    { word: "ALERT",  row: 0, col: 2, dir: "V" },
-                    { word: "LATER",  row: 2, col: 5, dir: "V" },
-                    { word: "RATE",   row: 2, col: 1, dir: "V" },
-                    { word: "VALE",   row: 4, col: 2, dir: "H" },
-                    { word: "TEAR",   row: 0, col: 4, dir: "V" }
-                ],
-                bonus: ["ALTER", "RAVEL", "EARL", "LATE", "REAL", "TALE", "TEAL", "VEAL", "ART", "ATE", "EAR", "EAT", "ERA", "LET", "RAT", "TAR", "TEA", "VET"]
-            },
-            {
-                id: 9,
-                title: "Astral Voyage",
-                letters: ["P", "L", "A", "N", "E", "T"],
-                words: [
-                    { word: "PLANET", row: 2, col: 0, dir: "H" },
-                    { word: "PLATE",  row: 2, col: 0, dir: "V" },
-                    { word: "LEANT",  row: 0, col: 1, dir: "V" },
-                    { word: "PETAL",  row: 4, col: 0, dir: "H" },
-                    { word: "NEAT",   row: 2, col: 3, dir: "V" },
-                    { word: "TAPE",   row: 2, col: 5, dir: "V" }
-                ],
-                bonus: ["PANEL", "PENAL", "PLANE", "PLANT", "ELAN", "LANE", "LATE", "LEAN", "LEAP", "PALE", "PANE", "PANT", "PEAT", "PELT", "PLAN", "PLEA", "TALE", "TEAL", "ANT", "APE", "APT", "ATE", "EAT", "LAP", "LET", "NAP", "NET", "PAN", "PAT", "PEA", "PEN", "PET", "TAN", "TAP", "TEA", "TEN"]
-            },
-            {
-                id: 10,
-                title: "Sapphire Mist",
-                letters: ["S", "I", "L", "V", "E", "R"],
-                words: [
-                    { word: "SILVER", row: 2, col: 0, dir: "H" },
-                    { word: "LIVER",  row: 0, col: 2, dir: "V" },
-                    { word: "RILES",  row: 2, col: 5, dir: "V" },
-                    { word: "VEIL",   row: 2, col: 3, dir: "V" },
-                    { word: "RISE",   row: 4, col: 1, dir: "H" },
-                    { word: "LIVE",   row: 6, col: 2, dir: "H" }
-                ],
-                bonus: ["LIVERS", "SLIVER", "EVIL", "ISLE", "LEIS", "LIES", "LIRE", "REVS", "RILE", "VILE", "VISE", "IRE", "LEI", "LIE", "REV", "SIR", "VIE"]
-            },
-            {
-                id: 11,
-                title: "Celestial Harp",
-                letters: ["H", "A", "R", "M", "O", "N", "Y"],
-                words: [
-                    { word: "HARMONY", row: 3, col: 0, dir: "H" },
-                    { word: "MANOR",   row: 1, col: 3, dir: "V" },
-                    { word: "MAYOR",   row: 3, col: 6, dir: "V" },
-                    { word: "HORN",    row: 3, col: 0, dir: "V" },
-                    { word: "ARMY",    row: 3, col: 1, dir: "V" },
-                    { word: "ROAM",    row: 5, col: 3, dir: "H" },
-                    { word: "NORM",    row: 1, col: 5, dir: "V" }
-                ],
-                bonus: ["ROMAN", "HOARY", "MORAY", "RAYON", "HARM", "MANY", "MOAN", "MYNA", "OMAN", "ROAN", "YARN", "ANY", "ARM", "HAM", "HAY", "MAN", "MAR", "MAY", "NAY", "NOR", "OAR", "RAM", "RAN", "RAY", "YAM", "YON"]
-            },
-            {
-                id: 12,
-                title: "Grand Zenith",
-                letters: ["C", "H", "A", "M", "P", "I", "O", "N"],
-                words: [
-                    { word: "CHAMPION", row: 3, col: 0, dir: "H" },
-                    { word: "CHAIN",    row: 3, col: 0, dir: "V" },
-                    { word: "PIANO",    row: 1, col: 4, dir: "V" },
-                    { word: "MANIC",    row: 3, col: 3, dir: "V" },
-                    { word: "CHIN",     row: 7, col: 0, dir: "H" },
-                    { word: "CAMP",     row: 0, col: 2, dir: "V" },
-                    { word: "COIN",     row: 5, col: 3, dir: "H" }
-                ],
-                bonus: ["CAMPO", "CHIMP", "CHINA", "CHOMP", "MACHO", "MANIC", "MOCHA", "PANIC", "AMINO", "CAMP", "CHAP", "CHIN", "CHIP", "CHOP", "CLAN", "COIN", "COMA", "COMP", "ICON", "INCH", "MAIN", "MICA", "MIND", "MOAN", "PAIN", "PICA", "AIM", "CAM", "CAN", "CAP", "COP", "HAM", "HIM", "HIP", "HOP", "IMP", "ION", "MAN", "MAP", "MOP", "NAP", "NIP", "PAN", "PIN"]
+                    { word: "STAR", clue: "Bright glowing sphere in space" },
+                    { word: "RATE", clue: "Speed or measure of something" },
+                    { word: "PART", clue: "A piece of a whole" },
+                    { word: "TRAP", clue: "Device used to catch something" },
+                    { word: "SPARE", clue: "Extra one kept in reserve" }
+                ]
             }
         ];
 
-        const ENDLESS_POOLS = [
-            {
-                title: "Endless: Prism",
-                letters: ["P", "R", "I", "S", "M"],
-                words: [
-                    { word: "PRISM", row: 2, col: 0, dir: "H" },
-                    { word: "RIMS",  row: 2, col: 1, dir: "V" },
-                    { word: "IMPS",  row: 0, col: 2, dir: "V" },
-                    { word: "SIP",   row: 4, col: 1, dir: "H" }
-                ],
-                bonus: ["RIPS", "IMP", "RIM", "RIP", "SIR"]
-            },
-            {
-                title: "Endless: Sparkle",
-                letters: ["S", "P", "A", "R", "K", "S"],
-                words: [
-                    { word: "SPARKS", row: 2, col: 0, dir: "H" },
-                    { word: "SPARK",  row: 0, col: 0, dir: "V" },
-                    { word: "PARKS",  row: 2, col: 1, dir: "V" },
-                    { word: "ASK",    row: 4, col: 0, dir: "H" },
-                    { word: "ARK",    row: 0, col: 3, dir: "V" }
-                ],
-                bonus: ["PARK", "SPAR", "RASP", "PAR", "RAP", "SAP", "SPA"]
-            },
-            {
-                title: "Endless: Nebula",
-                letters: ["N", "E", "B", "U", "L", "A"],
-                words: [
-                    { word: "NEBULA", row: 2, col: 0, dir: "H" },
-                    { word: "ABLE",   row: 0, col: 2, dir: "V" },
-                    { word: "LEAN",   row: 2, col: 4, dir: "V" },
-                    { word: "BEAN",   row: 2, col: 2, dir: "V" },
-                    { word: "LANE",   row: 4, col: 1, dir: "H" }
-                ],
-                bonus: ["BALE", "BLUE", "ELAN", "LUNE", "NUB", "BAN", "BEN", "BUN", "LAB", "LEA", "NAB"]
-            },
-            {
-                title: "Endless: Orchid",
-                letters: ["O", "R", "C", "H", "I", "D"],
-                words: [
-                    { word: "ORCHID", row: 2, col: 0, dir: "H" },
-                    { word: "CHORD",  row: 0, col: 2, dir: "V" },
-                    { word: "RICH",   row: 2, col: 1, dir: "V" },
-                    { word: "ROD",    row: 4, col: 2, dir: "H" },
-                    { word: "HID",    row: 0, col: 4, dir: "V" }
-                ],
-                bonus: ["CHOIR", "ICHOR", "CORD", "DOIR", "COD", "HID", "RID", "ROC"]
-            },
-            {
-                title: "Endless: Mirage",
-                letters: ["M", "I", "R", "A", "G", "E"],
-                words: [
-                    { word: "MIRAGE", row: 2, col: 0, dir: "H" },
-                    { word: "IMAGE",  row: 0, col: 1, dir: "V" },
-                    { word: "GRIME",  row: 2, col: 4, dir: "V" },
-                    { word: "RAGE",   row: 2, col: 2, dir: "V" },
-                    { word: "GEAR",   row: 4, col: 1, dir: "H" }
-                ],
-                bonus: ["GAME", "GERM", "GRIM", "MAGE", "MARE", "REAM", "RIME", "AGE", "AIM", "AIR", "ARE", "ARM", "EAR", "ERA", "GEM", "IRE", "RAG", "RAM", "RIG", "RIM"]
+        function computeWheelLetters(words) {
+            const maxFreq = {};
+            for (const item of words) {
+                const freq = {};
+                for (const ch of item.word) {
+                    freq[ch] = (freq[ch] || 0) + 1;
+                }
+                for (const ch of Object.keys(freq)) {
+                    maxFreq[ch] = Math.max(maxFreq[ch] || 0, freq[ch]);
+                }
             }
+            const letters = [];
+            for (const ch of Object.keys(maxFreq).sort()) {
+                for (let i = 0; i < maxFreq[ch]; i++) {
+                    letters.push(ch);
+                }
+            }
+            return letters;
+        }
+
+        function sanitizeWordEntries(rawItems) {
+            const seen = new Set();
+            const cleaned = [];
+            for (const raw of rawItems || []) {
+                const text = typeof raw === "string" ? raw : (raw && raw.word) || "";
+                const clue = typeof raw === "string" ? "" : ((raw && raw.clue) || "").trim();
+                const word = String(text).replace(/[^A-Za-z]/g, "").toUpperCase();
+                if (word.length >= MIN_WORD_LEN && word.length <= MAX_WORD_LEN && !seen.has(word)) {
+                    seen.add(word);
+                    cleaned.push({ word, clue });
+                }
+            }
+            return cleaned;
+        }
+
+        function generateLuminaPuzzles(rawItems) {
+            const cleaned = sanitizeWordEntries(rawItems);
+            if (cleaned.length === 0) return [];
+
+            // Fix standalone DEMO_LEVEL_PUZZLES note: in demo RUN wasn't formable from FNESUT unless R is present;
+            // normalize any caller input through computeWheelLetters directly.
+            const sequentialGroups = [];
+            let allSequentialValid = true;
+            for (let i = 0; i < cleaned.length; i += MAX_WORDS_PER_PUZZLE) {
+                const slice = cleaned.slice(i, i + MAX_WORDS_PER_PUZZLE);
+                const letters = computeWheelLetters(slice);
+                if (letters.length > MAX_WHEEL_LETTERS) {
+                    allSequentialValid = false;
+                    break;
+                }
+                sequentialGroups.push({
+                    puzzleNumber: sequentialGroups.length + 1,
+                    letters,
+                    words: slice
+                });
+            }
+            if (allSequentialValid) return sequentialGroups;
+
+            // Best-fit compatibility packing for diverse letter pools
+            const bins = [];
+            for (const item of cleaned) {
+                let bestIdx = -1;
+                let bestCost = Infinity;
+                let bestLetters = null;
+
+                for (let b = 0; b < bins.length; b++) {
+                    if (bins[b].words.length >= MAX_WORDS_PER_PUZZLE) continue;
+                    const candidateWords = [...bins[b].words, item];
+                    const candidateLetters = computeWheelLetters(candidateWords);
+                    if (candidateLetters.length > MAX_WHEEL_LETTERS) continue;
+                    const addedCost = candidateLetters.length - bins[b].letters.length;
+                    if (addedCost < bestCost) {
+                        bestCost = addedCost;
+                        bestIdx = b;
+                        bestLetters = candidateLetters;
+                    }
+                }
+
+                if (bestIdx >= 0 && bestLetters) {
+                    bins[bestIdx].words.push(item);
+                    bins[bestIdx].letters = bestLetters;
+                } else {
+                    bins.push({ words: [item], letters: computeWheelLetters([item]) });
+                }
+            }
+
+            return bins.map((bin, idx) => ({
+                puzzleNumber: idx + 1,
+                letters: bin.letters,
+                words: bin.words
+            }));
+        }
+
+        // Verify demo puzzle #1 letters can form every word cleanly (F,N,E,S,U,T -> FUN, SUN, NUT, TUNE, TEN)
+        DEMO_LEVEL_PUZZLES[0].words = [
+            { word: "FUN", clue: "Enjoyable play or activity" },
+            { word: "TEN", clue: "Number after nine" },
+            { word: "SUN", clue: "Star warming the Earth" },
+            { word: "NUT", clue: "Hard-shelled seed" },
+            { word: "TUNE", clue: "Catchy musical melody" }
         ];
 
+        /* ---------- SOUND ENGINE (Web Audio API) ---------- */
         class SoundEngine {
-            constructor() { this.ctx = null; this.muted = false; }
-            init() {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+            ensure() {
+                if (this.muted) return null;
                 if (!this.ctx) {
                     const AudioCtx = window.AudioContext || window.webkitAudioContext;
                     if (AudioCtx) this.ctx = new AudioCtx();
                 }
-                if (this.ctx && this.ctx.state === "suspended") this.ctx.resume();
+                if (this.ctx && this.ctx.state === "suspended") {
+                    this.ctx.resume().catch(() => {});
+                }
+                return this.ctx;
             }
-            playPop(stepIndex = 0) {
-                if (this.muted) return; this.init(); if (!this.ctx) return;
-                const now = this.ctx.currentTime, osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
-                const scale = [330, 392, 440, 523.25, 587.33, 659.25, 783.99, 880];
-                const freq = scale[stepIndex % scale.length];
+            playSelect(stepIdx) {
+                const ctx = this.ensure();
+                if (!ctx) return;
+                const scale = [392, 440, 493.88, 523.25, 587.33, 659.25, 698.46, 783.99];
+                const freq = scale[Math.min(stepIdx, scale.length - 1)];
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
                 osc.type = "sine";
-                osc.frequency.setValueAtTime(freq, now);
-                osc.frequency.exponentialRampToValueAtTime(freq * 1.18, now + 0.09);
-                gain.gain.setValueAtTime(0.16, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-                osc.connect(gain); gain.connect(this.ctx.destination);
-                osc.start(now); osc.stop(now + 0.13);
+                osc.frequency.setValueAtTime(freq, ctx.currentTime);
+                gain.gain.setValueAtTime(0.09, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.11);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.11);
             }
-            playSuccess(combo = 1) {
-                if (this.muted) return; this.init(); if (!this.ctx) return;
-                const now = this.ctx.currentTime, baseShift = Math.min(combo - 1, 5) * 35;
-                [523.25 + baseShift, 659.25 + baseShift, 783.99 + baseShift, 1046.5 + baseShift].forEach((freq, idx) => {
-                    const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
-                    osc.type = "triangle"; osc.frequency.setValueAtTime(freq, now + idx * 0.065);
-                    gain.gain.setValueAtTime(0.001, now + idx * 0.065);
-                    gain.gain.linearRampToValueAtTime(0.18, now + idx * 0.065 + 0.02);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.065 + 0.35);
-                    osc.connect(gain); gain.connect(this.ctx.destination);
-                    osc.start(now + idx * 0.065); osc.stop(now + idx * 0.065 + 0.36);
+            playSuccess() {
+                const ctx = this.ensure();
+                if (!ctx) return;
+                [523.25, 659.25, 783.99].forEach((freq, i) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    const t = ctx.currentTime + i * 0.06;
+                    osc.type = "triangle";
+                    osc.frequency.setValueAtTime(freq, t);
+                    gain.gain.setValueAtTime(0.11, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(t);
+                    osc.stop(t + 0.22);
                 });
             }
-            playBonus() {
-                if (this.muted) return; this.init(); if (!this.ctx) return;
-                const now = this.ctx.currentTime;
-                [587.33, 880].forEach((freq, idx) => {
-                    const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
-                    osc.type = "sine"; osc.frequency.setValueAtTime(freq, now + idx * 0.08);
-                    gain.gain.setValueAtTime(0.15, now + idx * 0.08);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.25);
-                    osc.connect(gain); gain.connect(this.ctx.destination);
-                    osc.start(now + idx * 0.08); osc.stop(now + idx * 0.08 + 0.26);
-                });
-            }
-            playInvalid() {
-                if (this.muted) return; this.init(); if (!this.ctx) return;
-                const now = this.ctx.currentTime, osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
-                osc.type = "sawtooth"; osc.frequency.setValueAtTime(155, now);
-                osc.frequency.linearRampToValueAtTime(105, now + 0.2);
-                gain.gain.setValueAtTime(0.12, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
-                osc.connect(gain); gain.connect(this.ctx.destination);
-                osc.start(now); osc.stop(now + 0.23);
+            playError() {
+                const ctx = this.ensure();
+                if (!ctx) return;
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = "sawtooth";
+                osc.frequency.setValueAtTime(190, ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(120, ctx.currentTime + 0.16);
+                gain.gain.setValueAtTime(0.07, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.16);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.16);
             }
             playFanfare() {
-                if (this.muted) return; this.init(); if (!this.ctx) return;
-                const now = this.ctx.currentTime;
-                [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((freq, i) => {
-                    const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
-                    osc.type = "triangle"; osc.frequency.setValueAtTime(freq, now + i * 0.09);
-                    gain.gain.setValueAtTime(0.16, now + i * 0.09);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.09 + 0.65);
-                    osc.connect(gain); gain.connect(this.ctx.destination);
-                    osc.start(now + i * 0.09); osc.stop(now + i * 0.09 + 0.68);
+                const ctx = this.ensure();
+                if (!ctx) return;
+                [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    const t = ctx.currentTime + i * 0.095;
+                    osc.type = "triangle";
+                    osc.frequency.setValueAtTime(freq, t);
+                    gain.gain.setValueAtTime(0.14, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.34);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(t);
+                    osc.stop(t + 0.34);
                 });
             }
         }
-        const sound = new SoundEngine();
 
+        /* ---------- CONFETTI / SPARKLE PARTICLES ---------- */
         class ParticleEngine {
             constructor(canvas) {
-                this.canvas = canvas; this.ctx = canvas.getContext("2d"); this.particles = [];
-                this.resize(); window.addEventListener("resize", () => this.resize()); this.loop();
+                this.canvas = canvas;
+                this.ctx = canvas.getContext("2d");
+                this.particles = [];
+                this.resize();
+                window.addEventListener("resize", () => this.resize());
             }
-            resize() { this.canvas.width = window.innerWidth; this.canvas.height = window.innerHeight; }
-            burst(x, y, colors = ["#fbbf24", "#10b981", "#818cf8", "#fef08a"], count = 26) {
+            resize() {
+                const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                this.canvas.width = window.innerWidth * dpr;
+                this.canvas.height = window.innerHeight * dpr;
+                this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            }
+            burst(x, y, colors, count) {
                 for (let i = 0; i < count; i++) {
-                    const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
-                    const speed = 2.5 + Math.random() * 5.5;
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 2.2 + Math.random() * 5.2;
                     this.particles.push({
-                        x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 1.5,
-                        size: 3 + Math.random() * 4.5, color: colors[Math.floor(Math.random() * colors.length)],
-                        alpha: 1, decay: 0.018 + Math.random() * 0.015, gravity: 0.12
+                        x, y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed - 2.2,
+                        size: 3 + Math.random() * 4.5,
+                        color: colors[i % colors.length],
+                        alpha: 1,
+                        decay: 0.018 + Math.random() * 0.018
                     });
                 }
+                if (!this.animating) this.animate();
             }
-            loop() {
-                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-                for (let i = this.particles.length - 1; i >= 0; i--) {
-                    const p = this.particles[i];
-                    p.x += p.vx; p.y += p.vy; p.vy += p.gravity; p.alpha -= p.decay;
-                    if (p.alpha <= 0) { this.particles.splice(i, 1); continue; }
-                    this.ctx.save(); this.ctx.globalAlpha = p.alpha; this.ctx.fillStyle = p.color;
-                    this.ctx.beginPath(); this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); this.ctx.fill(); this.ctx.restore();
+            animate() {
+                this.animating = true;
+                this.ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+                this.particles = this.particles.filter((p) => p.alpha > 0.02);
+                for (const p of this.particles) {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.14;
+                    p.alpha -= p.decay;
+                    this.ctx.globalAlpha = Math.max(0, p.alpha);
+                    this.ctx.fillStyle = p.color;
+                    this.ctx.beginPath();
+                    this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    this.ctx.fill();
                 }
-                requestAnimationFrame(() => this.loop());
+                this.ctx.globalAlpha = 1;
+                if (this.particles.length > 0) {
+                    requestAnimationFrame(() => this.animate());
+                } else {
+                    this.animating = false;
+                }
             }
         }
 
-        const STORAGE_KEY = "lumina_words_save_v1";
-        const edtechraBridge = { active: false, maxPoints: 100, reported: false, startTime: 0, hintsUsed: 0 };
+        const sound = new SoundEngine();
+        const fx = new ParticleEngine(document.getElementById("fx-canvas"));
 
-        const state = {
-            coins: 120,
-            unlockedLevel: 1,
-            currentLevelIndex: 0,
-            isEndless: false,
-            isCustom: false,
-            endlessCount: 1,
-            activeLevelData: null,
-            foundWords: new Set(),
-            foundBonusWords: new Set(),
-            revealedHintCells: new Set(),
-            combo: 0,
-            wheelOrder: [],
-            selectedNodes: [],
-            isDragging: false,
-            pointerPos: null,
-            cellMap: new Map(),
-            gridRows: 0,
-            gridCols: 0
+        /* ---------- GAME STATE ---------- */
+        const edtechraBridge = {
+            active: false,
+            mode: "student",
+            title: "Lumina Words",
+            levelNumber: 1,
+            levelTitle: "Word Adventure",
+            maxPoints: 100,
+            startTime: Date.now(),
+            hintsUsed: 0,
+            reported: false
         };
 
-        function saveProgress() {
-            if (edtechraBridge.active) return;
-            try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify({
-                    coins: state.coins, unlockedLevel: state.unlockedLevel,
-                    currentLevelIndex: state.currentLevelIndex, muted: sound.muted
-                }));
-            } catch (e) {}
-        }
+        const state = {
+            puzzles: [],
+            puzzleIndex: 0,
+            coins: 0,
+            hintsLeft: STANDALONE_HINTS_PER_PUZZLE,
+            foundWords: new Set(),
+            revealedCharIndices: new Map(), // word -> Set<charIndex>
+            wheelItems: [], // [{ id, char, x, y, r, el }]
+            activeIndices: [], // indices into state.wheelItems
+            isDragging: false,
+            pointerId: null,
+            pointerPos: { x: 0, y: 0 },
+            paused: false,
+            totalWordsSolvedAcrossLevel: 0
+        };
 
-        function loadProgress() {
-            if (edtechraBridge.active) return;
-            try {
-                const raw = localStorage.getItem(STORAGE_KEY);
-                if (!raw) return;
-                const data = JSON.parse(raw);
-                if (typeof data.coins === "number") state.coins = data.coins;
-                if (typeof data.unlockedLevel === "number") state.unlockedLevel = Math.max(1, Math.min(data.unlockedLevel, CURATED_LEVELS.length));
-                if (typeof data.currentLevelIndex === "number") state.currentLevelIndex = Math.max(0, Math.min(data.currentLevelIndex, CURATED_LEVELS.length - 1));
-                if (typeof data.muted === "boolean") { sound.muted = data.muted; updateMuteIcon(); }
-            } catch (e) {}
-        }
-
+        /* ---------- DOM REFERENCES ---------- */
         const dom = {
-            hudLevelLabel: document.getElementById("hud-level-label"),
+            hudLevelText: document.getElementById("hud-level-text"),
+            hudPuzzleText: document.getElementById("hud-puzzle-text"),
             hudCoins: document.getElementById("hud-coins"),
-            comboBadge: document.getElementById("combo-badge"),
-            comboCount: document.getElementById("combo-count"),
-            boardContainer: document.getElementById("board-container"),
-            crosswordGrid: document.getElementById("crossword-grid"),
-            wordPreview: document.getElementById("word-preview"),
+            activeSlotsRow: document.getElementById("active-slots-row"),
+            starsRow: document.getElementById("stars-row"),
+            wordPillsGrid: document.getElementById("word-pills-grid"),
+            feedbackChip: document.getElementById("feedback-chip"),
             wheelWrapper: document.getElementById("wheel-wrapper"),
-            wheelSvg: document.getElementById("wheel-svg"),
-            swipeTrail: document.getElementById("swipe-trail"),
-            swipeTrailGlow: document.getElementById("swipe-trail-glow"),
-            nodesContainer: document.getElementById("letter-nodes-container"),
-            bonusCountBadge: document.getElementById("bonus-count-badge"),
-            toastAnchor: document.getElementById("toast-anchor"),
+            wheelTilesLayer: document.getElementById("wheel-tiles-layer"),
+            swipeLineGlow: document.getElementById("swipe-line-glow"),
+            swipeLineCore: document.getElementById("swipe-line-core"),
+            hintCountBadge: document.getElementById("hint-count-badge"),
+            iconSoundOn: document.getElementById("icon-sound-on"),
+            iconSoundOff: document.getElementById("icon-sound-off"),
+            soundLabel: document.getElementById("sound-label"),
+            modalPause: document.getElementById("modal-pause"),
+            btnPauseSound: document.getElementById("btn-pause-sound"),
+            btnRestartPuzzle: document.getElementById("btn-restart-puzzle"),
+            modalClues: document.getElementById("modal-clues"),
+            cluesList: document.getElementById("clues-list"),
             modalComplete: document.getElementById("modal-complete"),
             completeTitle: document.getElementById("complete-title"),
             completeSubtitle: document.getElementById("complete-subtitle"),
-            completeReward: document.getElementById("complete-reward"),
-            completeBonus: document.getElementById("complete-bonus"),
-            modalLevels: document.getElementById("modal-levels"),
-            levelsGrid: document.getElementById("levels-grid"),
-            modalBonus: document.getElementById("modal-bonus"),
-            bonusWordsList: document.getElementById("bonus-words-list"),
-            btnClues: document.getElementById("btn-clues"),
-            modalClues: document.getElementById("modal-clues"),
-            cluesList: document.getElementById("clues-list")
+            completeWordsCount: document.getElementById("complete-words-count"),
+            completeCoins: document.getElementById("complete-coins"),
+            completeWordTags: document.getElementById("complete-word-tags"),
+            btnContinuePuzzle: document.getElementById("btn-continue-puzzle")
         };
 
-        const fx = new ParticleEngine(document.getElementById("fx-canvas"));
-
-        /* ---------- CUSTOM TEACHER PUZZLE GENERATOR ---------- */
-        function generateCustomLuminaLevel(title, rawItems) {
-            const cleaned = [];
-            const seen = new Set();
-            rawItems.forEach(item => {
-                const rawW = (typeof item === "string" ? item : item.word || "").replace(/[^A-Za-z]/g, "").toUpperCase();
-                const clue = (typeof item === "string" ? "" : item.clue || "").trim();
-                if (rawW.length >= 2 && rawW.length <= 12 && !seen.has(rawW)) {
-                    seen.add(rawW);
-                    cleaned.push({ word: rawW, clue });
-                }
-            });
-
-            if (cleaned.length === 0) return null;
-
-            // Compute minimal letter multiset so every word can be formed on the wheel
-            const maxFreq = {};
-            cleaned.forEach(({ word }) => {
-                const freq = {};
-                for (const ch of word) freq[ch] = (freq[ch] || 0) + 1;
-                Object.keys(freq).forEach(ch => {
-                    maxFreq[ch] = Math.max(maxFreq[ch] || 0, freq[ch]);
-                });
-            });
-            const letters = [];
-            Object.keys(maxFreq).forEach(ch => {
-                for (let i = 0; i < maxFreq[ch]; i++) letters.push(ch);
-            });
-
-            // Sort longest first for crossword placement
-            const sorted = [...cleaned].sort((a, b) => b.word.length - a.word.length);
-            const grid = new Map(); // "r,c" -> char
-            const placed = [];
-
-            function canPlace(word, r, c, dir) {
-                let intersections = 0;
-                for (let i = 0; i < word.length; i++) {
-                    const rr = dir === "V" ? r + i : r;
-                    const cc = dir === "H" ? c + i : c;
-                    const existing = grid.get(`${rr},${cc}`);
-                    if (existing !== undefined) {
-                        if (existing !== word[i]) return -1;
-                        intersections++;
-                    } else {
-                        // Avoid parallel touching neighbors unless intersecting
-                        if (dir === "H") {
-                            if (grid.has(`${rr - 1},${cc}`) || grid.has(`${rr + 1},${cc}`)) return -1;
-                        } else {
-                            if (grid.has(`${rr},${cc - 1}`) || grid.has(`${rr},${cc + 1}`)) return -1;
-                        }
-                    }
-                }
-                // Check before start and after end
-                const br = dir === "V" ? r - 1 : r, bc = dir === "H" ? c - 1 : c;
-                const ar = dir === "V" ? r + word.length : r, ac = dir === "H" ? c + word.length : c;
-                if (grid.has(`${br},${bc}`) || grid.has(`${ar},${ac}`)) return -1;
-                return intersections;
+        let feedbackTimer = null;
+        function setFeedback(text, tone = "neutral") {
+            clearTimeout(feedbackTimer);
+            dom.feedbackChip.textContent = text;
+            dom.feedbackChip.className = "feedback-chip" + (tone === "success" ? " success" : tone === "error" ? " error" : "");
+            if (tone !== "neutral") {
+                feedbackTimer = setTimeout(() => {
+                    dom.feedbackChip.textContent = "Tap a word card for a clue, or swipe letters";
+                    dom.feedbackChip.className = "feedback-chip";
+                }, 2000);
             }
-
-            function commit(entry, r, c, dir) {
-                for (let i = 0; i < entry.word.length; i++) {
-                    const rr = dir === "V" ? r + i : r;
-                    const cc = dir === "H" ? c + i : c;
-                    grid.set(`${rr},${cc}`, entry.word[i]);
-                }
-                placed.push({ word: entry.word, clue: entry.clue, row: r, col: c, dir });
-            }
-
-            // Place first word horizontally at (0,0)
-            commit(sorted[0], 0, 0, "H");
-
-            for (let idx = 1; idx < sorted.length; idx++) {
-                const entry = sorted[idx];
-                let best = null;
-                for (const p of placed) {
-                    const tryDir = p.dir === "H" ? "V" : "H";
-                    for (let i = 0; i < p.word.length; i++) {
-                        const pr = p.dir === "V" ? p.row + i : p.row;
-                        const pc = p.dir === "H" ? p.col + i : p.col;
-                        for (let j = 0; j < entry.word.length; j++) {
-                            if (entry.word[j] !== p.word[i]) continue;
-                            const sr = tryDir === "V" ? pr - j : pr;
-                            const sc = tryDir === "H" ? pc - j : pc;
-                            const score = canPlace(entry.word, sr, sc, tryDir);
-                            if (score > 0 && (!best || score > best.score)) {
-                                best = { r: sr, c: sc, dir: tryDir, score };
-                            }
-                        }
-                    }
-                }
-                if (best) {
-                    commit(entry, best.r, best.c, best.dir);
-                } else {
-                    // Fallback: place below existing grid
-                    let maxR = 0;
-                    grid.forEach((_, k) => { maxR = Math.max(maxR, Number(k.split(",")[0])); });
-                    commit(entry, maxR + 2, 0, "H");
-                }
-            }
-
-            // Normalize coordinates so minRow = 0 and minCol = 0
-            let minR = Infinity, minC = Infinity;
-            placed.forEach(p => { minR = Math.min(minR, p.row); minC = Math.min(minC, p.col); });
-            placed.forEach(p => { p.row -= minR; p.col -= minC; });
-
-            return {
-                id: 0,
-                title: title || "Classroom Puzzle",
-                letters,
-                words: placed,
-                bonus: []
-            };
         }
 
-        function loadCustomLevel(customLevel) {
-            state.isEndless = false;
-            state.isCustom = true;
-            state.foundWords.clear();
-            state.foundBonusWords.clear();
-            state.revealedHintCells.clear();
-            state.combo = 0;
-            updateComboUI();
+        function currentPuzzle() {
+            return state.puzzles[state.puzzleIndex] || null;
+        }
 
-            state.activeLevelData = customLevel;
-            dom.hudLevelLabel.textContent = customLevel.title || "Word Puzzle";
-            document.getElementById("hud-level-chevron").classList.add("hidden");
-            document.getElementById("btn-levels").disabled = true;
+        function shuffleArray(arr) {
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+        }
 
-            const hasClues = customLevel.words.some(w => Boolean(w.clue));
-            dom.btnClues.classList.toggle("hidden", !hasClues);
-
-            state.wheelOrder = state.activeLevelData.letters.map((char, idx) => ({ char, id: idx }));
-            shuffleArray(state.wheelOrder);
-
+        /* ---------- PUZZLE INITIALIZATION ---------- */
+        function startLevelWithPuzzles(puzzles, options = {}) {
+            state.puzzles = puzzles;
+            state.puzzleIndex = 0;
+            state.totalWordsSolvedAcrossLevel = 0;
+            state.coins = 0;
             edtechraBridge.startTime = Date.now();
             edtechraBridge.hintsUsed = 0;
+            edtechraBridge.reported = false;
 
-            buildCrosswordBoard();
-            renderWheel();
-            updateHUD();
+            const lvlNum = options.levelNumber || edtechraBridge.levelNumber || 1;
+            const rawTitle = (options.levelTitle || options.title || "Lumina Words").trim();
+            dom.hudLevelText.textContent = rawTitle.toLowerCase().startsWith("level ")
+                ? rawTitle
+                : `Level ${lvlNum} – ${rawTitle}`;
+
+            loadPuzzleAtIndex(0);
         }
 
-        function loadLevel(index, isEndless = false) {
-            state.isEndless = isEndless;
-            state.isCustom = false;
+        function loadPuzzleAtIndex(idx) {
+            state.puzzleIndex = idx;
+            const puzzle = currentPuzzle();
+            if (!puzzle) return;
+
             state.foundWords.clear();
-            state.foundBonusWords.clear();
-            state.revealedHintCells.clear();
-            state.combo = 0;
-            updateComboUI();
-
-            if (isEndless) {
-                const template = ENDLESS_POOLS[(state.endlessCount - 1) % ENDLESS_POOLS.length];
-                state.activeLevelData = JSON.parse(JSON.stringify(template));
-                dom.hudLevelLabel.textContent = `Endless #${state.endlessCount}`;
-            } else {
-                state.currentLevelIndex = index;
-                state.activeLevelData = JSON.parse(JSON.stringify(CURATED_LEVELS[index]));
-                dom.hudLevelLabel.textContent = `Level ${state.activeLevelData.id}`;
-            }
-
-            state.wheelOrder = state.activeLevelData.letters.map((char, idx) => ({ char, id: idx }));
-            shuffleArray(state.wheelOrder);
-
-            buildCrosswordBoard();
-            renderWheel();
-            updateHUD();
-            saveProgress();
-        }
-
-        function buildCrosswordBoard() {
-            const words = state.activeLevelData.words;
-            state.cellMap.clear();
-            let maxR = 0, maxC = 0;
-            words.forEach((entry, wIdx) => {
-                for (let i = 0; i < entry.word.length; i++) {
-                    const r = entry.dir === "V" ? entry.row + i : entry.row;
-                    const c = entry.dir === "H" ? entry.col + i : entry.col;
-                    maxR = Math.max(maxR, r); maxC = Math.max(maxC, c);
-                    const key = `${r},${c}`;
-                    if (!state.cellMap.has(key)) {
-                        state.cellMap.set(key, { r, c, char: entry.word[i], wordIndices: [wIdx], element: null });
-                    } else {
-                        state.cellMap.get(key).wordIndices.push(wIdx);
-                    }
-                }
-            });
-
-            state.gridRows = maxR + 1;
-            state.gridCols = maxC + 1;
-
-            const containerRect = dom.boardContainer.getBoundingClientRect();
-            const availW = Math.max(240, containerRect.width - 28);
-            const availH = Math.max(180, containerRect.height - 28);
-            const gap = 6;
-            const cellW = Math.floor((availW - gap * (state.gridCols - 1)) / state.gridCols);
-            const cellH = Math.floor((availH - gap * (state.gridRows - 1)) / state.gridRows);
-            const cellSize = Math.max(26, Math.min(50, cellW, cellH));
-
-            dom.crosswordGrid.innerHTML = "";
-            dom.crosswordGrid.style.gridTemplateColumns = `repeat(${state.gridCols}, ${cellSize}px)`;
-            dom.crosswordGrid.style.gridTemplateRows = `repeat(${state.gridRows}, ${cellSize}px)`;
-
-            for (let r = 0; r < state.gridRows; r++) {
-                for (let c = 0; c < state.gridCols; c++) {
-                    const key = `${r},${c}`;
-                    const cellDiv = document.createElement("div");
-                    cellDiv.style.width = `${cellSize}px`;
-                    cellDiv.style.height = `${cellSize}px`;
-                    cellDiv.style.fontSize = `${Math.floor(cellSize * 0.52)}px`;
-                    if (state.cellMap.has(key)) {
-                        const cellData = state.cellMap.get(key);
-                        cellDiv.className = "board-cell hidden-slot";
-                        cellDiv.dataset.key = key;
-                        cellDiv.textContent = cellData.char;
-                        cellData.element = cellDiv;
-                    } else {
-                        cellDiv.className = "pointer-events-none";
-                    }
-                    dom.crosswordGrid.appendChild(cellDiv);
-                }
-            }
-            refreshBoardVisuals();
-        }
-
-        function refreshBoardVisuals() {
-            const words = state.activeLevelData.words;
-            state.cellMap.forEach((cellData, key) => {
-                const isWordSolved = cellData.wordIndices.some(wIdx => state.foundWords.has(words[wIdx].word));
-                const isHinted = state.revealedHintCells.has(key);
-                if (isWordSolved) cellData.element.className = "board-cell revealed-slot";
-                else if (isHinted) cellData.element.className = "board-cell hinted-slot";
-                else cellData.element.className = "board-cell hidden-slot";
-            });
-        }
-
-        function renderWheel() {
-            dom.nodesContainer.innerHTML = "";
-            const count = state.wheelOrder.length;
-            const wheelRect = dom.wheelWrapper.getBoundingClientRect();
-            const size = wheelRect.width || 224;
-            const center = size / 2;
-            const radius = size * 0.34;
-            const nodeSize = count >= 7 ? size * 0.20 : size * 0.24;
-
-            state.wheelOrder.forEach((item, idx) => {
-                const angle = (Math.PI * 2 * idx) / count - Math.PI / 2;
-                const x = center + Math.cos(angle) * radius;
-                const y = center + Math.sin(angle) * radius;
-
-                const node = document.createElement("div");
-                node.className = "letter-node";
-                node.dataset.index = idx;
-                node.textContent = item.char;
-                node.style.width = `${nodeSize}px`;
-                node.style.height = `${nodeSize}px`;
-                node.style.fontSize = `${Math.floor(nodeSize * 0.48)}px`;
-                node.style.left = `${(x / size) * 100}%`;
-                node.style.top = `${(y / size) * 100}%`;
-
-                item.normX = (x / size) * 240;
-                item.normY = (y / size) * 240;
-                item.element = node;
-                dom.nodesContainer.appendChild(node);
-            });
-        }
-
-        function shuffleWheel() {
-            if (state.isDragging) return;
-            sound.playPop(2);
-            shuffleArray(state.wheelOrder);
-            const count = state.wheelOrder.length;
-            const wheelRect = dom.wheelWrapper.getBoundingClientRect();
-            const size = wheelRect.width || 224;
-            const center = size / 2;
-            const radius = size * 0.34;
-
-            state.wheelOrder.forEach((item, idx) => {
-                const angle = (Math.PI * 2 * idx) / count - Math.PI / 2;
-                const x = center + Math.cos(angle) * radius;
-                const y = center + Math.sin(angle) * radius;
-                item.normX = (x / size) * 240;
-                item.normY = (y / size) * 240;
-                item.element.dataset.index = idx;
-                item.element.style.left = `${(x / size) * 100}%`;
-                item.element.style.top = `${(y / size) * 100}%`;
-            });
-        }
-
-        function updateSwipeTrail() {
-            if (state.selectedNodes.length === 0) {
-                dom.swipeTrail.setAttribute("points", "");
-                dom.swipeTrailGlow.setAttribute("points", "");
-                return;
-            }
-            const points = state.selectedNodes.map(idx => {
-                const item = state.wheelOrder[idx];
-                return `${item.normX},${item.normY}`;
-            });
-            if (state.isDragging && state.pointerPos) {
-                const rect = dom.wheelWrapper.getBoundingClientRect();
-                const relX = ((state.pointerPos.x - rect.left) / rect.width) * 240;
-                const relY = ((state.pointerPos.y - rect.top) / rect.height) * 240;
-                points.push(`${relX.toFixed(1)},${relY.toFixed(1)}`);
-            }
-            const str = points.join(" ");
-            dom.swipeTrail.setAttribute("points", str);
-            dom.swipeTrailGlow.setAttribute("points", str);
-        }
-
-        function updateWordPreview() {
-            const word = state.selectedNodes.map(i => state.wheelOrder[i].char).join("");
-            if (word.length > 0) {
-                dom.wordPreview.textContent = word;
-                dom.wordPreview.classList.remove("opacity-0", "scale-90", "shake-invalid", "pop-valid", "pop-bonus");
-                dom.wordPreview.classList.add("opacity-100", "scale-100");
-            } else {
-                dom.wordPreview.classList.remove("opacity-100", "scale-100");
-                dom.wordPreview.classList.add("opacity-0", "scale-90");
-            }
-        }
-
-        function getNodeAtPoint(clientX, clientY) {
-            const rect = dom.wheelWrapper.getBoundingClientRect();
-            const count = state.wheelOrder.length;
-            const hitRadius = (rect.width * (count >= 7 ? 0.135 : 0.155));
-            for (let i = 0; i < state.wheelOrder.length; i++) {
-                const nodeRect = state.wheelOrder[i].element.getBoundingClientRect();
-                const cx = nodeRect.left + nodeRect.width / 2;
-                const cy = nodeRect.top + nodeRect.height / 2;
-                if (Math.hypot(clientX - cx, clientY - cy) <= hitRadius) return i;
-            }
-            return -1;
-        }
-
-        function handlePointerDown(e) {
-            if (e.button !== undefined && e.button !== 0) return;
-            sound.init();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            const hitIdx = getNodeAtPoint(clientX, clientY);
-            if (hitIdx === -1) return;
-            state.isDragging = true;
-            state.selectedNodes = [hitIdx];
-            state.pointerPos = { x: clientX, y: clientY };
-            state.wheelOrder[hitIdx].element.classList.add("selected");
-            sound.playPop(0);
-            updateSwipeTrail();
-            updateWordPreview();
-        }
-
-        function handlePointerMove(e) {
-            if (!state.isDragging) return;
-            if (e.cancelable) e.preventDefault();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            state.pointerPos = { x: clientX, y: clientY };
-            const hitIdx = getNodeAtPoint(clientX, clientY);
-            if (hitIdx !== -1) {
-                const lastIdx = state.selectedNodes[state.selectedNodes.length - 1];
-                const prevIdx = state.selectedNodes.length >= 2 ? state.selectedNodes[state.selectedNodes.length - 2] : -1;
-                if (hitIdx === prevIdx) {
-                    const removed = state.selectedNodes.pop();
-                    state.wheelOrder[removed].element.classList.remove("selected");
-                    sound.playPop(Math.max(0, state.selectedNodes.length - 1));
-                    updateWordPreview();
-                } else if (!state.selectedNodes.includes(hitIdx) && hitIdx !== lastIdx) {
-                    state.selectedNodes.push(hitIdx);
-                    state.wheelOrder[hitIdx].element.classList.add("selected");
-                    sound.playPop(state.selectedNodes.length - 1);
-                    updateWordPreview();
-                }
-            }
-            updateSwipeTrail();
-        }
-
-        function handlePointerUp() {
-            if (!state.isDragging) return;
+            state.revealedCharIndices.clear();
+            state.hintsLeft = STANDALONE_HINTS_PER_PUZZLE;
+            state.activeIndices = [];
             state.isDragging = false;
-            state.pointerPos = null;
-            const formedWord = state.selectedNodes.map(i => state.wheelOrder[i].char).join("");
-            const sourceNodes = state.selectedNodes.map(i => state.wheelOrder[i].element);
-            state.wheelOrder.forEach(item => item.element.classList.remove("selected"));
-            state.selectedNodes = [];
-            updateSwipeTrail();
-            if (formedWord.length >= 2) evaluateWord(formedWord, sourceNodes);
-            else updateWordPreview();
+            state.pointerId = null;
+
+            state.wheelItems = puzzle.letters.slice(0, MAX_WHEEL_LETTERS).map((char, i) => ({
+                id: i,
+                char,
+                x: 0,
+                y: 0,
+                r: 28,
+                el: null
+            }));
+            shuffleArray(state.wheelItems);
+
+            dom.hudPuzzleText.textContent = `Puzzle ${idx + 1} of ${state.puzzles.length}`;
+            dom.hudCoins.textContent = String(state.coins);
+            dom.hintCountBadge.textContent = String(state.hintsLeft);
+
+            renderActiveSlots("", "idle");
+            renderStarsRow();
+            renderWordPills();
+            renderWheel();
+            clearSwipeLine();
+            setFeedback("Swipe letters on the wheel to discover words", "neutral");
         }
 
-        function evaluateWord(word, sourceNodes) {
-            const targetEntryIndex = state.activeLevelData.words.findIndex(w => w.word === word);
-            if (targetEntryIndex !== -1) {
-                if (state.foundWords.has(word)) {
-                    state.combo = 0; updateComboUI(); sound.playPop(1);
-                    showToast("Already Found!", "text-amber-300");
-                    pulseWordCells(state.activeLevelData.words[targetEntryIndex]);
-                    hidePreviewAfterDelay(350);
-                    return;
+        /* ---------- RENDERING: BOARD SLOTS, STARS, WORD PILLS ---------- */
+        function renderActiveSlots(word, status = "idle") {
+            const puzzle = currentPuzzle();
+            const longestWord = puzzle
+                ? Math.max(4, ...puzzle.words.map((w) => w.word.length))
+                : 5;
+            const slotCount = Math.min(MAX_WORD_LEN, Math.max(longestWord, word.length));
+
+            dom.activeSlotsRow.innerHTML = "";
+            dom.activeSlotsRow.classList.toggle("shake", status === "error");
+
+            for (let i = 0; i < slotCount; i++) {
+                const slot = document.createElement("div");
+                const ch = word[i] || "";
+                slot.className = "preview-slot";
+                if (ch) {
+                    slot.classList.add("filled");
+                    if (status === "success") slot.classList.add("pop-success");
+                    if (status === "already") slot.classList.add("pop-already");
                 }
-                state.foundWords.add(word);
-                state.combo += 1; updateComboUI();
-                const bonusCoins = word.length * 2 + (state.combo > 1 ? state.combo * 2 : 0);
-                state.coins += bonusCoins; updateHUD(); saveProgress();
-                sound.playSuccess(state.combo);
-                dom.wordPreview.classList.add("pop-valid");
-                hidePreviewAfterDelay(450);
-                showToast(state.combo >= 2 ? `${state.combo}x Streak! +${bonusCoins} ✦` : `+${bonusCoins} ✦`, "text-emerald-300");
-                animateWordToBoard(state.activeLevelData.words[targetEntryIndex], sourceNodes, () => {
-                    refreshBoardVisuals(); checkLevelCompletion();
-                });
-                return;
+                slot.textContent = ch;
+                dom.activeSlotsRow.appendChild(slot);
             }
-            if (state.activeLevelData.bonus.includes(word)) {
-                if (state.foundBonusWords.has(word)) {
-                    sound.playPop(1); showToast("Bonus Already Collected!", "text-amber-300");
-                    hidePreviewAfterDelay(350); return;
-                }
-                state.foundBonusWords.add(word);
-                state.coins += 5; updateHUD(); saveProgress();
-                sound.playBonus(); dom.wordPreview.classList.add("pop-bonus");
-                hidePreviewAfterDelay(450); showToast(`Bonus Word! +5 ✦`, "text-amber-300");
-                const bonusBtnRect = document.getElementById("btn-bonus").getBoundingClientRect();
-                fx.burst(bonusBtnRect.left + bonusBtnRect.width / 2, bonusBtnRect.top + bonusBtnRect.height / 2, ["#fbbf24", "#fef08a"], 18);
-                return;
-            }
-            state.combo = 0; updateComboUI(); sound.playInvalid();
-            dom.wordPreview.classList.add("shake-invalid");
-            hidePreviewAfterDelay(450);
         }
 
-        function animateWordToBoard(wordEntry, sourceNodes, onComplete) {
-            const chars = wordEntry.word.split("");
-            let completedCount = 0;
-            chars.forEach((ch, idx) => {
-                const r = wordEntry.dir === "V" ? wordEntry.row + idx : wordEntry.row;
-                const c = wordEntry.dir === "H" ? wordEntry.col + idx : wordEntry.col;
-                const targetCell = state.cellMap.get(`${r},${c}`)?.element;
-                const srcNode = sourceNodes[idx % sourceNodes.length];
-                if (!targetCell || !srcNode) {
-                    completedCount++; if (completedCount === chars.length) onComplete(); return;
+        function renderStarsRow() {
+            const puzzle = currentPuzzle();
+            if (!puzzle) return;
+            const total = puzzle.words.length;
+            const earned = state.foundWords.size;
+            dom.starsRow.innerHTML = "";
+
+            for (let i = 0; i < total; i++) {
+                const isLit = i < earned;
+                const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                svg.setAttribute("viewBox", "0 0 36 36");
+                svg.setAttribute("class", "progress-star" + (isLit ? " earned" : ""));
+                svg.innerHTML = isLit
+                    ? `<defs><linearGradient id="sg${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#fff099"/><stop offset="55%" stop-color="#fbbf24"/><stop offset="100%" stop-color="#d97706"/></linearGradient></defs>
+                       <path d="M18 3l4.6 9.3 10.2 1.5-7.4 7.2 1.8 10.2L18 26.4l-9.2 4.8 1.8-10.2-7.4-7.2 10.2-1.5z" fill="url(#sg${i})" stroke="#92400e" stroke-width="2" stroke-linejoin="round"/>`
+                    : `<path d="M18 3l4.6 9.3 10.2 1.5-7.4 7.2 1.8 10.2L18 26.4l-9.2 4.8 1.8-10.2-7.4-7.2 10.2-1.5z" fill="#94a3b8" stroke="#475569" stroke-width="2" stroke-linejoin="round"/>`;
+                dom.starsRow.appendChild(svg);
+            }
+        }
+
+        function renderWordPills(justFoundWord = null) {
+            const puzzle = currentPuzzle();
+            if (!puzzle) return;
+            dom.wordPillsGrid.innerHTML = "";
+
+            puzzle.words.forEach((entry, idx) => {
+                const isFound = state.foundWords.has(entry.word);
+                const pill = document.createElement("button");
+                pill.type = "button";
+                pill.className = "word-card-pill " + (isFound ? "found" : "unfound");
+                if (justFoundWord === entry.word) {
+                    pill.classList.add("pulse-highlight");
                 }
-                const srcRect = srcNode.getBoundingClientRect(), dstRect = targetCell.getBoundingClientRect();
-                const flyer = document.createElement("div");
-                flyer.className = "flying-letter text-2xl sm:text-3xl";
-                flyer.textContent = ch;
-                flyer.style.left = `${srcRect.left + srcRect.width / 2}px`;
-                flyer.style.top = `${srcRect.top + srcRect.height / 2}px`;
-                flyer.style.transform = "translate(-50%, -50%) scale(1.2)";
-                document.body.appendChild(flyer);
-                requestAnimationFrame(() => {
-                    const dx = (dstRect.left + dstRect.width / 2) - (srcRect.left + srcRect.width / 2);
-                    const dy = (dstRect.top + dstRect.height / 2) - (srcRect.top + srcRect.height / 2);
-                    flyer.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.95)`;
-                    flyer.style.opacity = "0.85";
-                });
-                setTimeout(() => {
-                    flyer.remove();
-                    fx.burst(dstRect.left + dstRect.width / 2, dstRect.top + dstRect.height / 2, ["#10b981", "#6ee7b7", "#fbbf24"], 10);
-                    completedCount++;
-                    if (completedCount === chars.length) onComplete();
-                }, 430);
+
+                if (isFound) {
+                    const label = document.createElement("span");
+                    label.className = "word-card-letters";
+                    label.textContent = entry.word;
+
+                    const checkSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                    checkSvg.setAttribute("viewBox", "0 0 20 20");
+                    checkSvg.setAttribute("class", "word-check-icon");
+                    checkSvg.innerHTML = `<path d="M4.5 10.5l3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`;
+
+                    pill.appendChild(label);
+                    pill.appendChild(checkSvg);
+                    pill.addEventListener("click", () => {
+                        setFeedback(entry.clue ? `${entry.word}: ${entry.clue}` : `${entry.word} discovered!`, "success");
+                    });
+                } else {
+                    const mask = document.createElement("span");
+                    mask.className = "word-mask-slots";
+                    const hintedSet = state.revealedCharIndices.get(entry.word);
+                    for (let c = 0; c < entry.word.length; c++) {
+                        const cell = document.createElement("span");
+                        const isHinted = hintedSet && hintedSet.has(c);
+                        cell.className = "word-mask-char" + (isHinted ? " hinted" : "");
+                        cell.textContent = isHinted ? entry.word[c] : "";
+                        mask.appendChild(cell);
+                    }
+                    pill.appendChild(mask);
+                    pill.addEventListener("click", () => {
+                        if (entry.clue) {
+                            setFeedback(`Word ${idx + 1} clue (${entry.word.length} letters): ${entry.clue}`, "neutral");
+                        } else {
+                            setFeedback(`Word ${idx + 1}: ${entry.word.length} letters`, "neutral");
+                        }
+                    });
+                }
+
+                dom.wordPillsGrid.appendChild(pill);
             });
         }
 
-        function pulseWordCells(wordEntry) {
-            for (let i = 0; i < wordEntry.word.length; i++) {
-                const r = wordEntry.dir === "V" ? wordEntry.row + i : wordEntry.row;
-                const c = wordEntry.dir === "H" ? wordEntry.col + i : wordEntry.col;
-                const el = state.cellMap.get(`${r},${c}`)?.element;
-                if (el) { el.classList.remove("flash-duplicate"); void el.offsetWidth; el.classList.add("flash-duplicate"); }
+        /* ---------- RENDERING: RESPONSIVE CIRCULAR LETTER WHEEL ---------- */
+        function renderWheel() {
+            const rect = dom.wheelWrapper.getBoundingClientRect();
+            const size = rect.width || 256;
+            const n = state.wheelItems.length;
+            dom.wheelTilesLayer.innerHTML = "";
+            if (n === 0) return;
+
+            // Spacious tile sizing guaranteed never to overlap up to 8 letters
+            const tileSize = n <= 5 ? Math.round(size * 0.245)
+                : n === 6 ? Math.round(size * 0.235)
+                : n === 7 ? Math.round(size * 0.215)
+                : Math.round(size * 0.198);
+
+            const clampedTile = Math.max(46, Math.min(66, tileSize));
+            const ringRadius = size / 2 - clampedTile / 2 - 6;
+            const center = size / 2;
+
+            state.wheelItems.forEach((item, idx) => {
+                const angle = -Math.PI / 2 + (idx * Math.PI * 2) / n;
+                const x = center + Math.cos(angle) * ringRadius;
+                const y = center + Math.sin(angle) * ringRadius;
+
+                item.x = x;
+                item.y = y;
+                item.r = clampedTile / 2;
+
+                const tile = document.createElement("div");
+                tile.className = "wheel-tile";
+                tile.style.width = `${clampedTile}px`;
+                tile.style.height = `${clampedTile}px`;
+                tile.style.left = `${x}px`;
+                tile.style.top = `${y}px`;
+                tile.style.fontSize = `${Math.round(clampedTile * 0.54)}px`;
+                tile.textContent = item.char;
+                item.el = tile;
+
+                dom.wheelTilesLayer.appendChild(tile);
+            });
+        }
+
+        /* ---------- SMOOTH CONTINUOUS SWIPE INTERACTION ---------- */
+        function getWheelLocalPos(clientX, clientY) {
+            const rect = dom.wheelWrapper.getBoundingClientRect();
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+
+        function findHitTileIndex(pos) {
+            let bestIdx = -1;
+            let bestDist = Infinity;
+            for (let i = 0; i < state.wheelItems.length; i++) {
+                const item = state.wheelItems[i];
+                const dx = pos.x - item.x;
+                const dy = pos.y - item.y;
+                const dist = Math.hypot(dx, dy);
+                // Tight hit radius (82% of half-width) prevents accidental neighbor hits
+                if (dist <= item.r * 0.86 && dist < bestDist) {
+                    bestDist = dist;
+                    bestIdx = i;
+                }
+            }
+            return bestIdx;
+        }
+
+        function updateSwipeVisuals() {
+            const activeWord = state.activeIndices.map((i) => state.wheelItems[i].char).join("");
+            renderActiveSlots(activeWord, "idle");
+
+            state.wheelItems.forEach((item, idx) => {
+                if (item.el) {
+                    item.el.classList.toggle("selected", state.activeIndices.includes(idx));
+                }
+            });
+
+            if (state.activeIndices.length === 0) {
+                clearSwipeLine();
+                return;
+            }
+
+            const points = state.activeIndices.map((idx) => {
+                const it = state.wheelItems[idx];
+                return `${it.x},${it.y}`;
+            });
+            if (state.isDragging) {
+                points.push(`${state.pointerPos.x},${state.pointerPos.y}`);
+            }
+            const ptsStr = points.join(" ");
+            dom.swipeLineGlow.setAttribute("points", ptsStr);
+            dom.swipeLineCore.setAttribute("points", ptsStr);
+        }
+
+        function clearSwipeLine() {
+            dom.swipeLineGlow.setAttribute("points", "");
+            dom.swipeLineCore.setAttribute("points", "");
+        }
+
+        function handleWheelPointerDown(e) {
+            if (state.paused || !currentPuzzle()) return;
+            const pos = getWheelLocalPos(e.clientX, e.clientY);
+            const hit = findHitTileIndex(pos);
+            if (hit === -1) return;
+
+            e.preventDefault();
+            try { dom.wheelWrapper.setPointerCapture(e.pointerId); } catch (_) {}
+
+            state.isDragging = true;
+            state.pointerId = e.pointerId;
+            state.pointerPos = pos;
+            state.activeIndices = [hit];
+            sound.playSelect(0);
+            updateSwipeVisuals();
+        }
+
+        function handleWheelPointerMove(e) {
+            if (!state.isDragging || (state.pointerId !== null && e.pointerId !== state.pointerId)) return;
+            e.preventDefault();
+
+            const pos = getWheelLocalPos(e.clientX, e.clientY);
+            state.pointerPos = pos;
+
+            const hit = findHitTileIndex(pos);
+            if (hit !== -1) {
+                const existingPos = state.activeIndices.indexOf(hit);
+                if (existingPos === -1) {
+                    state.activeIndices.push(hit);
+                    sound.playSelect(state.activeIndices.length - 1);
+                } else if (
+                    state.activeIndices.length >= 2 &&
+                    existingPos === state.activeIndices.length - 2
+                ) {
+                    // Backtrack one letter smoothly
+                    state.activeIndices.pop();
+                    sound.playSelect(state.activeIndices.length - 1);
+                }
+            }
+
+            updateSwipeVisuals();
+        }
+
+        function handleWheelPointerEnd(e) {
+            if (!state.isDragging || (state.pointerId !== null && e.pointerId !== state.pointerId)) return;
+            try { dom.wheelWrapper.releasePointerCapture(e.pointerId); } catch (_) {}
+
+            const formedWord = state.activeIndices.map((i) => state.wheelItems[i].char).join("");
+            state.isDragging = false;
+            state.pointerId = null;
+            state.activeIndices = [];
+
+            state.wheelItems.forEach((item) => item.el && item.el.classList.remove("selected"));
+            clearSwipeLine();
+
+            if (formedWord.length >= MIN_WORD_LEN) {
+                evaluateSubmittedWord(formedWord);
+            } else {
+                renderActiveSlots("", "idle");
             }
         }
 
-        function hidePreviewAfterDelay(ms) {
+        /* ---------- WORD EVALUATION & PROGRESSION ---------- */
+        function evaluateSubmittedWord(word) {
+            const puzzle = currentPuzzle();
+            if (!puzzle) return;
+
+            const targetEntry = puzzle.words.find((w) => w.word === word);
+            if (!targetEntry) {
+                sound.playError();
+                renderActiveSlots(word, "error");
+                setFeedback(`"${word}" is not in this puzzle`, "error");
+                setTimeout(() => renderActiveSlots("", "idle"), 360);
+                return;
+            }
+
+            if (state.foundWords.has(word)) {
+                renderActiveSlots(word, "already");
+                setFeedback(`"${word}" already found!`, "neutral");
+                setTimeout(() => renderActiveSlots("", "idle"), 420);
+                return;
+            }
+
+            // Valid newly discovered word!
+            state.foundWords.add(word);
+            state.totalWordsSolvedAcrossLevel += 1;
+            const wordPoints = word.length * 10;
+            state.coins += wordPoints;
+            dom.hudCoins.textContent = String(state.coins);
+
+            sound.playSuccess();
+            renderActiveSlots(word, "success");
+            renderStarsRow();
+            renderWordPills(word);
+            setFeedback(`Awesome! +${wordPoints} coins for "${word}"`, "success");
+
+            const wheelRect = dom.wheelWrapper.getBoundingClientRect();
+            fx.burst(
+                wheelRect.left + wheelRect.width / 2,
+                wheelRect.top + wheelRect.height * 0.2,
+                ["#fde047", "#4ade80", "#fb923c", "#ffffff"],
+                20
+            );
+
             setTimeout(() => {
-                if (!state.isDragging) {
-                    dom.wordPreview.classList.remove("opacity-100", "scale-100", "shake-invalid", "pop-valid", "pop-bonus");
-                    dom.wordPreview.classList.add("opacity-0", "scale-90");
-                }
-            }, ms);
+                if (!state.isDragging) renderActiveSlots("", "idle");
+            }, 460);
+
+            if (state.foundWords.size >= puzzle.words.length) {
+                onPuzzleCompleted();
+            }
         }
 
-        function showToast(text, colorClass = "text-white") {
-            const badge = document.createElement("div");
-            badge.className = `toast-badge glass-pill px-4 py-1.5 rounded-full text-xs sm:text-sm font-black whitespace-nowrap shadow-xl ${colorClass}`;
-            badge.textContent = text;
-            dom.toastAnchor.appendChild(badge);
-            setTimeout(() => badge.remove(), 1550);
-        }
+        function onPuzzleCompleted() {
+            const puzzle = currentPuzzle();
+            if (!puzzle) return;
 
-        function useHint() {
-            const HINT_COST = 25;
-            if (state.coins < HINT_COST) { sound.playInvalid(); showToast("Need 25 ✦ for Hint!", "text-rose-400"); return; }
-            const words = state.activeLevelData.words, candidates = [];
-            state.cellMap.forEach((cellData, key) => {
-                const isWordSolved = cellData.wordIndices.some(wIdx => state.foundWords.has(words[wIdx].word));
-                if (!isWordSolved && !state.revealedHintCells.has(key)) candidates.push(cellData);
-            });
-            if (candidates.length === 0) { showToast("All letters already visible!", "text-amber-300"); return; }
-            state.coins -= HINT_COST;
-            edtechraBridge.hintsUsed++;
-            const chosen = candidates[Math.floor(Math.random() * candidates.length)];
-            state.revealedHintCells.add(`${chosen.r},${chosen.c}`);
-            sound.playBonus(); updateHUD(); saveProgress(); refreshBoardVisuals();
-            const rect = chosen.element.getBoundingClientRect();
-            fx.burst(rect.left + rect.width / 2, rect.top + rect.height / 2, ["#fbbf24", "#fef08a"], 16);
-            words.forEach(wObj => {
-                if (state.foundWords.has(wObj.word)) return;
-                let allRevealed = true;
-                for (let i = 0; i < wObj.word.length; i++) {
-                    const r = wObj.dir === "V" ? wObj.row + i : wObj.row;
-                    const c = wObj.dir === "H" ? wObj.col + i : wObj.col;
-                    const k = `${r},${c}`, cd = state.cellMap.get(k);
-                    const solvedByOther = cd.wordIndices.some(idx => state.foundWords.has(words[idx].word));
-                    if (!state.revealedHintCells.has(k) && !solvedByOther) { allRevealed = false; break; }
-                }
-                if (allRevealed) state.foundWords.add(wObj.word);
-            });
-            refreshBoardVisuals(); checkLevelCompletion();
-        }
-
-        function checkLevelCompletion() {
-            const totalTargetWords = state.activeLevelData.words.length;
-            if (state.foundWords.size < totalTargetWords) return;
+            const isFinalPuzzle = state.puzzleIndex >= state.puzzles.length - 1;
+            const totalLevelWords = state.puzzles.reduce((sum, p) => sum + p.words.length, 0);
 
             setTimeout(() => {
                 sound.playFanfare();
-                const levelReward = 30;
-                state.coins += levelReward;
-                if (!state.isEndless && !state.isCustom) {
-                    const nextLvlNum = state.activeLevelData.id + 1;
-                    if (nextLvlNum <= CURATED_LEVELS.length && nextLvlNum > state.unlockedLevel) state.unlockedLevel = nextLvlNum;
-                }
-                updateHUD(); saveProgress();
-                fx.burst(window.innerWidth * 0.3, window.innerHeight * 0.35, ["#fbbf24", "#10b981", "#6366f1"], 35);
-                fx.burst(window.innerWidth * 0.7, window.innerHeight * 0.35, ["#fef08a", "#34d399", "#f472b6"], 35);
+                fx.burst(window.innerWidth * 0.28, window.innerHeight * 0.32, ["#fbbf24", "#4ade80", "#fb923c"], 32);
+                fx.burst(window.innerWidth * 0.72, window.innerHeight * 0.32, ["#fef08a", "#34d399", "#f472b6"], 32);
 
-                if (edtechraBridge.active && !edtechraBridge.reported) {
+                if (isFinalPuzzle && edtechraBridge.active && !edtechraBridge.reported) {
                     edtechraBridge.reported = true;
                     const timeSec = Math.max(1, Math.round((Date.now() - edtechraBridge.startTime) / 1000));
                     window.parent.postMessage({
@@ -1451,176 +1674,238 @@
                             maxAvailablePoints: edtechraBridge.maxPoints,
                             completionStatus: "completed",
                             timeTakenSeconds: timeSec,
-                            details: { wordsSolved: totalTargetWords, totalWords: totalTargetWords, questionsCompleted: totalTargetWords, correctAnswers: totalTargetWords, hintsUsed: edtechraBridge.hintsUsed }
+                            details: {
+                                wordsSolved: state.totalWordsSolvedAcrossLevel,
+                                totalWords: totalLevelWords,
+                                questionsCompleted: totalLevelWords,
+                                correctAnswers: totalLevelWords,
+                                puzzlesCompleted: state.puzzles.length,
+                                totalPuzzles: state.puzzles.length,
+                                hintsUsed: edtechraBridge.hintsUsed
+                            }
                         }
                     }, "*");
+
+                    // In student mode, parent GamePlayerModal presents the official EdTechra Level Completion screen.
+                    if (edtechraBridge.mode === "student") return;
                 }
 
-                dom.completeTitle.textContent = state.isCustom
-                    ? "Puzzle Cleared!"
-                    : state.isEndless ? `Endless #${state.endlessCount} Cleared!` : `Level ${state.activeLevelData.id} Cleared!`;
-                dom.completeSubtitle.textContent = `"${state.activeLevelData.title}" mastered`;
-                dom.completeReward.textContent = edtechraBridge.active ? `+${edtechraBridge.maxPoints} pts` : `+${levelReward} ✦`;
-                dom.completeBonus.textContent = `${state.foundBonusWords.size}`;
+                // Either advancing between Puzzle i -> i+1, Teacher Preview final modal, or standalone celebration
+                dom.completeTitle.textContent = isFinalPuzzle
+                    ? "All Puzzles Mastered!"
+                    : `Puzzle ${state.puzzleIndex + 1} Complete!`;
+                dom.completeSubtitle.textContent = isFinalPuzzle
+                    ? `${state.puzzles.length} of ${state.puzzles.length} puzzles solved cleanly`
+                    : `Next up: Puzzle ${state.puzzleIndex + 2} of ${state.puzzles.length}`;
+                dom.completeWordsCount.textContent = `${puzzle.words.length} / ${puzzle.words.length}`;
+                dom.completeCoins.textContent = `${state.coins} ★`;
 
-                if (edtechraBridge.active) {
-                    const nextBtn = document.getElementById("btn-next-level");
-                    if (edtechraBridge.mode === "student") {
-                        nextBtn.classList.add("hidden");
-                    } else {
-                        nextBtn.classList.remove("hidden");
-                        nextBtn.textContent = "Play Again ↻";
+                dom.completeWordTags.innerHTML = "";
+                puzzle.words.forEach((w) => {
+                    const tag = document.createElement("span");
+                    tag.className = "modal-word-tag";
+                    tag.textContent = `${w.word} ✓`;
+                    dom.completeWordTags.appendChild(tag);
+                });
+
+                dom.btnContinuePuzzle.textContent = isFinalPuzzle
+                    ? "Play Level Again ↻"
+                    : `Continue to Puzzle ${state.puzzleIndex + 2} →`;
+                dom.modalComplete.classList.remove("hidden");
+            }, 520);
+        }
+
+        /* ---------- BOTTOM CONTROLS & MODALS ---------- */
+        function handleShuffle() {
+            if (state.paused || state.wheelItems.length < 2) return;
+            shuffleArray(state.wheelItems);
+            renderWheel();
+            sound.playSelect(2);
+            setFeedback("Letters shuffled!", "neutral");
+        }
+
+        function handleHint() {
+            const puzzle = currentPuzzle();
+            if (!puzzle || state.paused) return;
+
+            if (state.hintsLeft <= 0) {
+                setFeedback("No hints left for this puzzle!", "error");
+                sound.playError();
+                return;
+            }
+
+            const remaining = puzzle.words.filter((w) => !state.foundWords.has(w.word));
+            if (remaining.length === 0) return;
+
+            for (const entry of remaining) {
+                if (!state.revealedCharIndices.has(entry.word)) {
+                    state.revealedCharIndices.set(entry.word, new Set());
+                }
+                const set = state.revealedCharIndices.get(entry.word);
+                for (let idx = 0; idx < entry.word.length; idx++) {
+                    if (!set.has(idx)) {
+                        set.add(idx);
+                        state.hintsLeft -= 1;
+                        edtechraBridge.hintsUsed += 1;
+                        dom.hintCountBadge.textContent = String(state.hintsLeft);
+                        sound.playSelect(4);
+                        renderWordPills();
+                        setFeedback(`Hint revealed letter "${entry.word[idx]}"!`, "success");
+                        return;
                     }
                 }
-
-                dom.modalComplete.classList.remove("hidden");
-                dom.modalComplete.classList.add("flex");
-            }, 450);
-        }
-
-        function updateHUD() {
-            dom.hudCoins.textContent = state.coins;
-            dom.bonusCountBadge.textContent = state.foundBonusWords.size;
-        }
-
-        function updateComboUI() {
-            if (state.combo >= 2) {
-                dom.comboBadge.classList.remove("hidden"); dom.comboBadge.classList.add("flex");
-                dom.comboCount.textContent = `${state.combo}x`;
-            } else {
-                dom.comboBadge.classList.add("hidden"); dom.comboBadge.classList.remove("flex");
             }
+            setFeedback("All letters already hinted — swipe the word!", "neutral");
         }
 
-        function updateMuteIcon() {
-            const on = document.getElementById("icon-sound-on"), off = document.getElementById("icon-sound-off");
-            if (sound.muted) { on.classList.add("hidden"); off.classList.remove("hidden"); }
-            else { on.classList.remove("hidden"); off.classList.add("hidden"); }
+        function updateSoundUI() {
+            dom.iconSoundOn.classList.toggle("hidden", sound.muted);
+            dom.iconSoundOff.classList.toggle("hidden", !sound.muted);
+            dom.soundLabel.textContent = sound.muted ? "Muted" : "Sound";
+            dom.btnPauseSound.textContent = sound.muted ? "Sound: Off" : "Sound: On";
         }
 
-        function openLevelsModal() {
-            if (edtechraBridge.active) return;
-            dom.levelsGrid.innerHTML = "";
-            CURATED_LEVELS.forEach((lvl, idx) => {
-                const unlocked = lvl.id <= state.unlockedLevel;
-                const isCurrent = !state.isEndless && idx === state.currentLevelIndex;
-                const btn = document.createElement("button");
-                btn.disabled = !unlocked;
-                btn.className = `p-3 rounded-2xl border text-left transition-all flex flex-col justify-between ${
-                    unlocked ? isCurrent ? "bg-amber-500/20 border-amber-400 text-white shadow-lg shadow-amber-500/15"
-                        : "bg-white/5 hover:bg-white/15 border-white/15 text-slate-100 btn-tactile"
-                        : "bg-slate-900/50 border-white/5 text-slate-500 cursor-not-allowed"
-                }`;
-                btn.innerHTML = `<div class="flex items-center justify-between w-full"><span class="font-black text-base">${lvl.id}</span><span class="text-xs">${unlocked ? (lvl.id < state.unlockedLevel ? "★" : "●") : "🔒"}</span></div><div class="text-[11px] font-semibold truncate mt-1 opacity-85">${lvl.title}</div>`;
-                if (unlocked) btn.addEventListener("click", () => { dom.modalLevels.classList.add("hidden"); dom.modalLevels.classList.remove("flex"); loadLevel(idx, false); });
-                dom.levelsGrid.appendChild(btn);
-            });
-            dom.modalLevels.classList.remove("hidden"); dom.modalLevels.classList.add("flex");
+        function toggleSound() {
+            sound.muted = !sound.muted;
+            updateSoundUI();
         }
 
-        function openBonusModal() {
-            dom.bonusWordsList.innerHTML = "";
-            if (state.foundBonusWords.size === 0) {
-                dom.bonusWordsList.innerHTML = `<p class="text-sm text-slate-400 italic w-full text-center py-6">Swipe extra valid English words not on the crossword to collect bonus coins!</p>`;
-            } else {
-                state.foundBonusWords.forEach(w => {
-                    const chip = document.createElement("span");
-                    chip.className = "px-3 py-1 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-200 font-bold text-sm";
-                    chip.textContent = w; dom.bonusWordsList.appendChild(chip);
-                });
-            }
-            dom.modalBonus.classList.remove("hidden"); dom.modalBonus.classList.add("flex");
+        function openPauseModal() {
+            state.paused = true;
+            dom.btnRestartPuzzle.classList.toggle(
+                "hidden",
+                edtechraBridge.active && edtechraBridge.mode === "student"
+            );
+            dom.modalPause.classList.remove("hidden");
+        }
+
+        function closePauseModal() {
+            state.paused = false;
+            dom.modalPause.classList.add("hidden");
         }
 
         function openCluesModal() {
+            const puzzle = currentPuzzle();
+            if (!puzzle) return;
             dom.cluesList.innerHTML = "";
-            (state.activeLevelData?.words || []).forEach((w, idx) => {
-                const solved = state.foundWords.has(w.word);
+            puzzle.words.forEach((entry, idx) => {
+                const found = state.foundWords.has(entry.word);
                 const row = document.createElement("div");
-                row.className = `p-3 rounded-2xl border ${solved ? "bg-emerald-500/15 border-emerald-400/40 text-emerald-100" : "bg-white/5 border-white/10 text-slate-200"}`;
-                row.innerHTML = `<div class="flex items-center justify-between text-xs font-extrabold uppercase tracking-wider mb-1"><span>Word ${idx + 1} (${w.word.length} letters)</span><span>${solved ? "✓ Found" : w.dir === "H" ? "Across" : "Down"}</span></div><div class="text-sm font-medium">${w.clue || "Find this word on the wheel"}</div>`;
+                row.style.cssText =
+                    "padding:8px 10px;border-radius:12px;background:rgba(255,246,224,0.86);border:1.5px solid rgba(110,50,14,0.22);";
+                row.innerHTML = `<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:900;color:#8a4318;margin-bottom:2px;">
+                    <span>Word ${idx + 1} (${entry.word.length} letters)</span>
+                    <span>${found ? entry.word + " ✓" : "Hidden"}</span>
+                </div>
+                <div style="font-size:13px;font-weight:700;color:#4a1c04;">${entry.clue ? entry.clue.replace(/</g, "&lt;") : "Form this word from the letter wheel."}</div>`;
                 dom.cluesList.appendChild(row);
             });
-            dom.modalClues.classList.remove("hidden"); dom.modalClues.classList.add("flex");
+            dom.modalClues.classList.remove("hidden");
         }
 
-        function shuffleArray(arr) {
-            for (let i = arr.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [arr[i], arr[j]] = [arr[j], arr[i]];
-            }
-        }
+        /* ---------- WIRE EVENTS ---------- */
+        dom.wheelWrapper.addEventListener("pointerdown", handleWheelPointerDown);
+        dom.wheelWrapper.addEventListener("pointermove", handleWheelPointerMove);
+        dom.wheelWrapper.addEventListener("pointerup", handleWheelPointerEnd);
+        dom.wheelWrapper.addEventListener("pointercancel", handleWheelPointerEnd);
+        // Ensure older mobile WebViews never scroll vertically while finger starts on the wheel
+        dom.wheelWrapper.addEventListener("touchmove", (e) => {
+            if (state.isDragging) e.preventDefault();
+        }, { passive: false });
 
-        dom.wheelWrapper.addEventListener("mousedown", handlePointerDown);
-        window.addEventListener("mousemove", handlePointerMove);
-        window.addEventListener("mouseup", handlePointerUp);
-        dom.wheelWrapper.addEventListener("touchstart", handlePointerDown, { passive: false });
-        window.addEventListener("touchmove", handlePointerMove, { passive: false });
-        window.addEventListener("touchend", handlePointerUp);
-
-        document.getElementById("btn-shuffle").addEventListener("click", shuffleWheel);
-        document.getElementById("btn-hint").addEventListener("click", useHint);
-        document.getElementById("btn-mute").addEventListener("click", () => { sound.muted = !sound.muted; updateMuteIcon(); saveProgress(); });
-        document.getElementById("btn-levels").addEventListener("click", openLevelsModal);
-        document.getElementById("close-levels").addEventListener("click", () => { dom.modalLevels.classList.add("hidden"); dom.modalLevels.classList.remove("flex"); });
-        document.getElementById("btn-bonus").addEventListener("click", openBonusModal);
-        document.getElementById("close-bonus").addEventListener("click", () => { dom.modalBonus.classList.add("hidden"); dom.modalBonus.classList.remove("flex"); });
-        dom.btnClues.addEventListener("click", openCluesModal);
-        document.getElementById("close-clues").addEventListener("click", () => { dom.modalClues.classList.add("hidden"); dom.modalClues.classList.remove("flex"); });
-
-        document.getElementById("btn-endless").addEventListener("click", () => {
-            if (edtechraBridge.active) return;
-            state.endlessCount = state.isEndless ? state.endlessCount + 1 : 1;
-            loadLevel(0, true); showToast("Endless Puzzle Loaded!", "text-indigo-300");
+        document.getElementById("btn-shuffle").addEventListener("click", handleShuffle);
+        document.getElementById("btn-hint").addEventListener("click", handleHint);
+        document.getElementById("btn-sound").addEventListener("click", toggleSound);
+        document.getElementById("btn-pause").addEventListener("click", openPauseModal);
+        document.getElementById("btn-resume").addEventListener("click", closePauseModal);
+        document.getElementById("btn-pause-sound").addEventListener("click", toggleSound);
+        document.getElementById("btn-restart-puzzle").addEventListener("click", () => {
+            closePauseModal();
+            startLevelWithPuzzles(state.puzzles, {
+                levelNumber: edtechraBridge.levelNumber,
+                levelTitle: edtechraBridge.levelTitle,
+                title: edtechraBridge.title
+            });
         });
-        document.getElementById("modal-btn-endless").addEventListener("click", () => {
-            dom.modalLevels.classList.add("hidden"); dom.modalLevels.classList.remove("flex");
-            state.endlessCount = 1; loadLevel(0, true);
+
+        document.getElementById("btn-clues-orb").addEventListener("click", openCluesModal);
+        document.getElementById("btn-close-clues").addEventListener("click", () => {
+            dom.modalClues.classList.add("hidden");
         });
-        document.getElementById("btn-next-level").addEventListener("click", () => {
-            dom.modalComplete.classList.add("hidden"); dom.modalComplete.classList.remove("flex");
-            if (edtechraBridge.active && state.isCustom && edtechraBridge.customLevel) {
-                loadCustomLevel(edtechraBridge.customLevel);
-            } else if (state.isEndless) {
-                state.endlessCount += 1; loadLevel(0, true);
+
+        dom.btnContinuePuzzle.addEventListener("click", () => {
+            dom.modalComplete.classList.add("hidden");
+            if (state.puzzleIndex < state.puzzles.length - 1) {
+                loadPuzzleAtIndex(state.puzzleIndex + 1);
             } else {
-                loadLevel((state.currentLevelIndex + 1) % CURATED_LEVELS.length, false);
+                startLevelWithPuzzles(state.puzzles, {
+                    levelNumber: edtechraBridge.levelNumber,
+                    levelTitle: edtechraBridge.levelTitle,
+                    title: edtechraBridge.title
+                });
             }
         });
 
         window.addEventListener("resize", () => {
-            if (state.activeLevelData) { buildCrosswordBoard(); renderWheel(); }
+            if (currentPuzzle()) renderWheel();
         });
 
+        /* ---------- EDTECHRA INTEGRATION BRIDGE ---------- */
         window.onload = () => {
             if (window.self === window.top) {
-                loadProgress();
-                loadLevel(state.currentLevelIndex, false);
+                startLevelWithPuzzles(DEMO_LEVEL_PUZZLES, {
+                    levelNumber: 1,
+                    levelTitle: "Beginner",
+                    title: "Lumina Words"
+                });
             }
             window.parent.postMessage({ type: "EDTECHRA_GAME_READY", gameId: "lumina-words" }, "*");
         };
 
-        /* ---------- EDTECHRA INTEGRATION BRIDGE ---------- */
-        window.addEventListener("message", ev => {
+        window.addEventListener("message", (ev) => {
             const msg = ev.data;
             if (!msg || msg.type !== "EDTECHRA_INIT_GAME") return;
-            const p = msg.payload || {}, cfg = p.config || {};
+
+            const p = msg.payload && typeof msg.payload === "object" ? msg.payload : msg;
+            const cfg = p.config || {};
+
             edtechraBridge.active = true;
             edtechraBridge.mode = p.mode || "student";
+            edtechraBridge.title = (cfg.title || p.title || "Lumina Words").trim();
+            edtechraBridge.levelNumber = Number(p.levelNumber) || 1;
+            edtechraBridge.levelTitle = (p.levelTitle || edtechraBridge.title || "Challenge").trim();
             edtechraBridge.maxPoints = Number(p.maxPoints) || 100;
-            edtechraBridge.reported = false;
 
-            if (p.mode === "student" || p.mode === "preview") {
-                document.getElementById("btn-endless").classList.add("hidden");
-                document.getElementById("btn-bonus").classList.add("hidden");
-                document.getElementById("btn-levels").classList.add("hidden");
+            let puzzles = [];
+            if (Array.isArray(cfg.puzzles) && cfg.puzzles.length > 0) {
+                // Validate incoming pre-generated puzzles adhere to <=5 words & <=8 wheel letters
+                const validPrebuilt = cfg.puzzles.every(
+                    (pz) =>
+                        Array.isArray(pz.words) &&
+                        pz.words.length > 0 &&
+                        pz.words.length <= MAX_WORDS_PER_PUZZLE &&
+                        Array.isArray(pz.letters) &&
+                        pz.letters.length <= MAX_WHEEL_LETTERS
+                );
+                if (validPrebuilt) {
+                    puzzles = cfg.puzzles.map((pz, i) => ({
+                        puzzleNumber: pz.puzzleNumber || i + 1,
+                        letters: pz.letters.slice(0, MAX_WHEEL_LETTERS),
+                        words: sanitizeWordEntries(pz.words)
+                    }));
+                }
             }
 
-            const words = Array.isArray(cfg.words) ? cfg.words : [];
-            const custom = generateCustomLuminaLevel(cfg.title || p.title || "Lumina Words", words);
-            if (custom) {
-                edtechraBridge.customLevel = custom;
-                loadCustomLevel(custom);
+            if (puzzles.length === 0) {
+                puzzles = generateLuminaPuzzles(Array.isArray(cfg.words) ? cfg.words : []);
+            }
+
+            if (puzzles.length > 0) {
+                startLevelWithPuzzles(puzzles, {
+                    levelNumber: edtechraBridge.levelNumber,
+                    levelTitle: edtechraBridge.levelTitle,
+                    title: edtechraBridge.title
+                });
             }
         });
     </script>

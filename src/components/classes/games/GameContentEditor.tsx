@@ -1,6 +1,13 @@
 import React from 'react';
-import { ImagePlus, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { AlertTriangle, ImagePlus, Layers, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { getDemoConfigForGame } from '@/services/gameLibraryService';
+import {
+  LUMINA_MAX_WHEEL_LETTERS,
+  LUMINA_MAX_WORD_LENGTH,
+  LUMINA_MAX_WORDS_PER_PUZZLE,
+  generateLuminaPuzzles,
+  validateLuminaWords
+} from '@/utils/luminaPuzzleGenerator';
 import type {
   ClassroomJigsawConfig,
   GameConfig,
@@ -57,6 +64,14 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
   onChange,
   onError
 }) => {
+  const luminaSummary = React.useMemo(() => {
+    if (gameId !== 'lumina-words') return null;
+    const c = config as LuminaWordsConfig;
+    const nonEmpty = c.words.filter((w) => w.word.trim().length > 0);
+    const validation = validateLuminaWords(nonEmpty);
+    const puzzles = generateLuminaPuzzles(validation.validWords);
+    return { validation, puzzles };
+  }, [gameId, config]);
   const handleBulkImport = (rows: ParsedBulkRow[], mode: 'append' | 'replace') => {
     if (gameId === 'liquid-sentences') {
       const incoming = rows.map((r) => ({ text: r.primary, hint: r.secondary }));
@@ -607,6 +622,9 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
 
   // lumina-words
   const c = config as LuminaWordsConfig;
+  const luminaValidation = luminaSummary?.validation;
+  const luminaPuzzles = luminaSummary?.puzzles || [];
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -615,7 +633,7 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
             Words & Relevant Clues ({c.words.length})
           </h4>
           <p className="text-[11px] text-slate-500">
-            Automatically builds a crossword grid and letter wheel from your list.
+            Max {LUMINA_MAX_WORD_LENGTH} letters per word. Automatically organizes words into playable puzzles (up to {LUMINA_MAX_WORDS_PER_PUZZLE} words &amp; {LUMINA_MAX_WHEEL_LETTERS} wheel letters each).
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -634,54 +652,165 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
         </div>
       </div>
 
+      {luminaValidation && luminaValidation.tooLongWords.length > 0 && (
+        <div className="p-3 rounded-2xl border border-amber-300 bg-amber-50 text-amber-900 text-xs flex items-start gap-2.5">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-bold">
+              Word length limit exceeded (max {LUMINA_MAX_WORD_LENGTH} characters)
+            </p>
+            <p className="text-amber-800">
+              Please shorten or replace:{' '}
+              {luminaValidation.tooLongWords.map((w, i) => (
+                <span key={`${w.clean}-${i}`} className="font-extrabold">
+                  &ldquo;{w.clean}&rdquo; ({w.length} chars)
+                  {i < luminaValidation.tooLongWords.length - 1 ? ', ' : ''}
+                </span>
+              ))}
+              .
+            </p>
+          </div>
+        </div>
+      )}
+
       {c.words.length === 0 ? (
         renderEmptyState('words', 'Add Word', () =>
           onChange({ ...c, words: [{ word: '', clue: '' }] })
         )
       ) : (
-        c.words.map((item, idx) => (
-          <div
-            key={idx}
-            className="p-3 rounded-2xl border border-slate-200 bg-white grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center"
-          >
-            <div className="sm:col-span-4">
-              <input
-                type="text"
-                value={item.word}
-                onChange={(e) => {
-                  const next = [...c.words];
-                  next[idx] = { ...next[idx], word: e.target.value.toUpperCase() };
-                  onChange({ ...c, words: next });
-                }}
-                placeholder="WORD (e.g. ORBIT)"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 text-sm font-bold uppercase"
-              />
+        c.words.map((item, idx) => {
+          const cleanLetters = item.word.replace(/[^a-zA-Z]/g, '').toUpperCase();
+          const isTooLong = cleanLetters.length > LUMINA_MAX_WORD_LENGTH;
+          const isTooShort = item.word.trim().length > 0 && cleanLetters.length < 2;
+          return (
+            <div
+              key={idx}
+              className={`p-3 rounded-2xl border bg-white space-y-1.5 ${
+                isTooLong
+                  ? 'border-amber-400 bg-amber-50/40'
+                  : isTooShort
+                    ? 'border-rose-300'
+                    : 'border-slate-200'
+              }`}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+                <div className="sm:col-span-4 relative">
+                  <input
+                    type="text"
+                    value={item.word}
+                    onChange={(e) => {
+                      const next = [...c.words];
+                      next[idx] = { ...next[idx], word: e.target.value.toUpperCase() };
+                      onChange({ ...c, words: next });
+                    }}
+                    placeholder="WORD (2-8 letters)"
+                    className={`w-full px-3 py-2 pr-12 rounded-xl border text-sm font-bold uppercase ${
+                      isTooLong
+                        ? 'border-amber-400 bg-white text-amber-900'
+                        : 'border-slate-200 bg-slate-50/50'
+                    }`}
+                  />
+                  <span
+                    className={`absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold ${
+                      isTooLong ? 'text-amber-600' : 'text-slate-400'
+                    }`}
+                  >
+                    {cleanLetters.length}/{LUMINA_MAX_WORD_LENGTH}
+                  </span>
+                </div>
+                <div className="sm:col-span-7">
+                  <input
+                    type="text"
+                    value={item.clue}
+                    onChange={(e) => {
+                      const next = [...c.words];
+                      next[idx] = { ...next[idx], clue: e.target.value };
+                      onChange({ ...c, words: next });
+                    }}
+                    placeholder="Clue (optional, e.g. Curved path around a star)"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 text-xs"
+                  />
+                </div>
+                <div className="sm:col-span-1 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => onChange({ ...c, words: c.words.filter((_, i) => i !== idx) })}
+                    className="text-rose-500 hover:text-rose-700 p-1.5"
+                    aria-label="Remove word"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              {isTooLong && (
+                <p className="text-[11px] font-semibold text-amber-700 px-1">
+                  &ldquo;{cleanLetters}&rdquo; has {cleanLetters.length} characters (maximum{' '}
+                  {LUMINA_MAX_WORD_LENGTH}). Please shorten or replace it.
+                </p>
+              )}
+              {isTooShort && (
+                <p className="text-[11px] font-semibold text-rose-600 px-1">
+                  Target words must have at least 2 letters (A–Z).
+                </p>
+              )}
             </div>
-            <div className="sm:col-span-7">
-              <input
-                type="text"
-                value={item.clue}
-                onChange={(e) => {
-                  const next = [...c.words];
-                  next[idx] = { ...next[idx], clue: e.target.value };
-                  onChange({ ...c, words: next });
-                }}
-                placeholder="Clue (e.g. Curved path around a star)"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 text-xs"
-              />
+          );
+        })
+      )}
+
+      {luminaPuzzles.length > 0 && (
+        <div className="p-3.5 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50/80 to-orange-50/60 space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-amber-700" />
+              <span className="text-xs font-extrabold text-amber-950">
+                Generated Puzzles Preview ({luminaPuzzles.length}{' '}
+                {luminaPuzzles.length === 1 ? 'Puzzle' : 'Puzzles'})
+              </span>
             </div>
-            <div className="sm:col-span-1 flex justify-end">
-              <button
-                type="button"
-                onClick={() => onChange({ ...c, words: c.words.filter((_, i) => i !== idx) })}
-                className="text-rose-500 hover:text-rose-700 p-1.5"
-                aria-label="Remove word"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white text-amber-800 border border-amber-200">
+              Max {LUMINA_MAX_WORDS_PER_PUZZLE} words · Max {LUMINA_MAX_WHEEL_LETTERS} wheel tiles
+            </span>
           </div>
-        ))
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {luminaPuzzles.map((puzzle) => (
+              <div
+                key={puzzle.puzzleNumber}
+                className="p-2.5 rounded-xl bg-white border border-amber-200/80 shadow-xs space-y-1.5"
+              >
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-extrabold text-slate-800">
+                    Puzzle {puzzle.puzzleNumber} of {luminaPuzzles.length}
+                  </span>
+                  <span className="text-slate-500 font-semibold">
+                    {puzzle.words.length} {puzzle.words.length === 1 ? 'word' : 'words'} ·{' '}
+                    {puzzle.letters.length} wheel letters
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {puzzle.letters.map((letter, li) => (
+                    <span
+                      key={`${puzzle.puzzleNumber}-l-${li}`}
+                      className="w-6 h-6 rounded-md bg-amber-100 border border-amber-300 text-amber-950 text-[11px] font-extrabold inline-flex items-center justify-center"
+                    >
+                      {letter}
+                    </span>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-1 pt-0.5">
+                  {puzzle.words.map((w) => (
+                    <span
+                      key={`${puzzle.puzzleNumber}-w-${w.word}`}
+                      className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold tracking-wide"
+                    >
+                      {w.word}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

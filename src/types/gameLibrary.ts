@@ -52,9 +52,16 @@ export interface LuminaWordItem {
   clue: string;
 }
 
+export interface LuminaPuzzleDefinition {
+  puzzleNumber: number;
+  letters: string[];
+  words: LuminaWordItem[];
+}
+
 export interface LuminaWordsConfig {
   title?: string;
   words: LuminaWordItem[];
+  puzzles?: LuminaPuzzleDefinition[];
 }
 
 export type GameConfig =

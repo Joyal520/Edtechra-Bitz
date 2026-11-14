@@ -75,13 +75,13 @@ function getTemplateMeta(gameId: GameId) {
     case 'lumina-words':
       return {
         title: 'Bulk Upload Words & Clues',
-        formatHint: 'One word per line (3-12 letters A-Z). Optional clue after "|" or comma.',
+        formatHint: 'One word per line (2–8 letters A–Z). Optional clue after "|" or comma.',
         placeholder:
           'PLANET | Orbits a star\nATOM | Basic unit of matter\nORBIT | Curved path around a celestial body\nSOLAR | Relating to the sun',
         sampleFilename: 'lumina-words-template.csv',
         sampleContent:
           'PLANET | Orbits a star\nATOM | Basic unit of matter\nORBIT | Curved path around a celestial body\nSOLAR | Relating to the sun\n',
-        primaryLabel: 'Word (3-12 A-Z)',
+        primaryLabel: 'Word (2–8 A–Z)',
         secondaryLabel: 'Clue (Optional)',
         minPrimaryWords: 1
       };
@@ -175,8 +175,14 @@ export const BulkContentUploader: React.FC<BulkContentUploaderProps> = ({
         valid.push({ primary: url, secondary: rawSecondary });
       } else if (gameId === 'lumina-words') {
         const cleanWord = rawPrimary.replace(/[^a-zA-Z]/g, '').toUpperCase();
-        if (cleanWord.length < 3 || cleanWord.length > 12) {
-          errors.push(`Line ${lineNum}: "${rawPrimary}" must be 3 to 12 letters (A-Z).`);
+        if (cleanWord.length < 2) {
+          errors.push(`Line ${lineNum}: "${rawPrimary}" must have at least 2 letters (A-Z).`);
+          return;
+        }
+        if (cleanWord.length > 8) {
+          errors.push(
+            `Line ${lineNum}: "${cleanWord}" has ${cleanWord.length} characters (maximum 8). Please shorten or replace it.`
+          );
           return;
         }
         valid.push({ primary: cleanWord, secondary: rawSecondary });
