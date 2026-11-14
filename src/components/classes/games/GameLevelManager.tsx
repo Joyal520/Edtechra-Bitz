@@ -12,7 +12,7 @@ import {
   Trophy,
   Unlock
 } from 'lucide-react';
-import { getDefaultConfigForGame } from '@/services/gameLibraryService';
+import { getEmptyConfigForGame } from '@/services/gameLibraryService';
 import type {
   GameConfig,
   GameId,
@@ -73,7 +73,7 @@ export const GameLevelManager: React.FC<GameLevelManagerProps> = ({
       points: 25,
       isManuallyLocked: false,
       unlockAt: null,
-      config: getDefaultConfigForGame(gameId)
+      config: getEmptyConfigForGame(gameId)
     };
     updateLevelsRenumbered([...levels, newLevel]);
     setActiveLevelId(newId);

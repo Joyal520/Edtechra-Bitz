@@ -1451,7 +1451,7 @@
                             maxAvailablePoints: edtechraBridge.maxPoints,
                             completionStatus: "completed",
                             timeTakenSeconds: timeSec,
-                            details: { wordsSolved: totalTargetWords, hintsUsed: edtechraBridge.hintsUsed }
+                            details: { wordsSolved: totalTargetWords, totalWords: totalTargetWords, questionsCompleted: totalTargetWords, correctAnswers: totalTargetWords, hintsUsed: edtechraBridge.hintsUsed }
                         }
                     }, "*");
                 }
@@ -1464,7 +1464,13 @@
                 dom.completeBonus.textContent = `${state.foundBonusWords.size}`;
 
                 if (edtechraBridge.active) {
-                    document.getElementById("btn-next-level").textContent = "Play Again ↻";
+                    const nextBtn = document.getElementById("btn-next-level");
+                    if (edtechraBridge.mode === "student") {
+                        nextBtn.classList.add("hidden");
+                    } else {
+                        nextBtn.classList.remove("hidden");
+                        nextBtn.textContent = "Play Again ↻";
+                    }
                 }
 
                 dom.modalComplete.classList.remove("hidden");
@@ -1587,8 +1593,10 @@
         });
 
         window.onload = () => {
-            loadProgress();
-            loadLevel(state.currentLevelIndex, false);
+            if (window.self === window.top) {
+                loadProgress();
+                loadLevel(state.currentLevelIndex, false);
+            }
             window.parent.postMessage({ type: "EDTECHRA_GAME_READY", gameId: "lumina-words" }, "*");
         };
 
@@ -1598,12 +1606,14 @@
             if (!msg || msg.type !== "EDTECHRA_INIT_GAME") return;
             const p = msg.payload || {}, cfg = p.config || {};
             edtechraBridge.active = true;
+            edtechraBridge.mode = p.mode || "student";
             edtechraBridge.maxPoints = Number(p.maxPoints) || 100;
             edtechraBridge.reported = false;
 
             if (p.mode === "student" || p.mode === "preview") {
                 document.getElementById("btn-endless").classList.add("hidden");
                 document.getElementById("btn-bonus").classList.add("hidden");
+                document.getElementById("btn-levels").classList.add("hidden");
             }
 
             const words = Array.isArray(cfg.words) ? cfg.words : [];

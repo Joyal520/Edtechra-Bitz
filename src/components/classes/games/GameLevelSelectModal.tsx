@@ -13,6 +13,8 @@ import type { Assignment } from '@/types/classroom';
 import type { GameId, GameLevelDefinition, LevelUnlockMode } from '@/types/gameLibrary';
 import {
   evaluateLevelsForStudent,
+  getLevelQuestionCount,
+  isAssignmentPublished,
   normalizeAssignmentLevels,
   parseStudentLevelProgress
 } from '@/utils/gameLevelUtils';
@@ -22,6 +24,7 @@ interface GameLevelSelectModalProps {
   onClose: () => void;
   assignment: Assignment;
   classroomTimezone?: string;
+  isUnavailable?: boolean;
   onPlayLevel: (level: GameLevelDefinition) => void;
 }
 
@@ -30,10 +33,12 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
   onClose,
   assignment,
   classroomTimezone = 'UTC',
+  isUnavailable = false,
   onPlayLevel
 }) => {
   if (!isOpen) return null;
 
+  const isPublished = !isUnavailable && isAssignmentPublished(assignment);
   const gameId = (assignment.settings?.game_id as GameId) || 'liquid-sentences';
   const catalogItem = getGameCatalogItem(gameId);
   const levels = normalizeAssignmentLevels(assignment);
@@ -126,9 +131,31 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
 
         {/* Level List */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-3 flex-1">
-          {evaluated.map(({ level, status, lockReason, completionRecord }) => {
+          {!isPublished ? (
+            <div className="p-6 rounded-2xl bg-amber-50 border border-amber-200 text-center space-y-3 my-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
+                <Lock className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-black text-slate-900">
+                  This game is currently unavailable
+                </h3>
+                <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
+                  Your teacher has unpublished this assignment. You cannot start new attempts or access levels right now, and your existing progress and leaderboard scores have been preserved.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer"
+              >
+                Back to Classroom
+              </button>
+            </div>
+          ) : evaluated.map(({ level, status, lockReason, completionRecord }) => {
             const isCompleted = status === 'completed';
             const isAvailable = status === 'available';
+            const itemCount = getLevelQuestionCount(gameId, level.config);
 
             return (
               <div
@@ -173,6 +200,11 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
                   <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
                     {level.title}
                   </h3>
+                  {itemCount > 0 && (
+                    <p className="text-[11px] font-semibold text-slate-500">
+                      {itemCount} {itemCount === 1 ? 'item' : 'items'} in this level
+                    </p>
+                  )}
 
                   {level.instructions && isAvailable && (
                     <p className="text-xs text-slate-600 leading-relaxed">

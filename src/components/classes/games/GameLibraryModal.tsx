@@ -16,10 +16,11 @@ import {
 import {
   GAME_CATALOG,
   gameLibraryService,
-  getDefaultConfigForGame,
+  getEmptyConfigForGame,
   getGameCatalogItem,
   type TeacherClassroomOption
 } from '@/services/gameLibraryService';
+import { isAssignmentPublished } from '@/utils/gameLevelUtils';
 import type { Assignment } from '@/types/classroom';
 import type {
   ClassroomJigsawConfig,
@@ -63,7 +64,7 @@ function createInitialLevels(gameId: GameId): GameLevelDefinition[] {
       points: 25,
       isManuallyLocked: false,
       unlockAt: null,
-      config: getDefaultConfigForGame(gameId)
+      config: getEmptyConfigForGame(gameId)
     }
   ];
 }
@@ -234,11 +235,13 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
         }
       });
     }
-  }, [isOpen, classroomId, classroomName, isTeacher, initialGameId]);
+  }, [isOpen, classroomId, classroomName, isTeacher, initialGameId, editingSavedGame]);
 
   if (!isOpen) return null;
 
-  const gameAssignments = assignments.filter((a) => Boolean(a.settings?.is_game_library));
+  const gameAssignments = assignments.filter(
+    (a) => Boolean(a.settings?.is_game_library) && (isTeacher || isAssignmentPublished(a))
+  );
 
   // Student-only view: never expose teacher configuration screens
   if (!isTeacher) {

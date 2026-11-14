@@ -10,7 +10,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { getGameCatalogItem } from '@/services/gameLibraryService';
 import type { GameId } from '@/types/gameLibrary';
-import { normalizeAssignmentLevels, parseStudentLevelProgress } from '@/utils/gameLevelUtils';
+import {
+  isAssignmentPublished,
+  normalizeAssignmentLevels,
+  parseStudentLevelProgress
+} from '@/utils/gameLevelUtils';
 import {
   Send,
   Pin,
@@ -185,17 +189,31 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
       return false;
     };
 
-    // If server-provided authoritative announcements are supplied, connect actions and filter out user-read items
+    // If server-provided authoritative announcements are supplied, connect actions and filter out user-read/unpublished items
     if (announcements && announcements.length > 0) {
       return announcements
-        .filter((item) => !isMarkedRead(item.id, item.rawId))
+        .filter((item) => {
+          if (isMarkedRead(item.id, item.rawId)) return false;
+          if (item.type === 'game' || item.type === 'task') {
+            const liveTask = assignments.find((a) => a.id === item.rawId);
+            const candidate = liveTask || item.rawItem;
+            if (!isTeacher) {
+              if (!liveTask || !isAssignmentPublished(candidate)) return false;
+            }
+          }
+          return true;
+        })
         .map((item) => {
           let onAction: (() => void) | undefined = undefined;
           let resolvedType = item.type;
           let resolvedRawItem = item.rawItem;
+          let statusBadge = item.statusBadge;
 
           if (item.type === 'game' || item.type === 'task') {
             const task = assignments.find((a) => a.id === item.rawId) || item.rawItem;
+            if (isTeacher && task && !isAssignmentPublished(task)) {
+              statusBadge = 'Unpublished';
+            }
             if (task?.settings?.is_game_library) {
               resolvedType = 'game';
               resolvedRawItem = task;
@@ -215,6 +233,7 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
           return {
             ...item,
             type: resolvedType,
+            statusBadge,
             rawItem: resolvedRawItem,
             onAction
           };
@@ -228,6 +247,7 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
 
     // 1. Tasks / Assignments
     (assignments || []).forEach((a) => {
+      if (!isTeacher && !isAssignmentPublished(a)) return;
       const key = `task-${a.id}`;
       if (seenKeys.has(key) || isMarkedRead(key, a.id)) return;
 
@@ -303,7 +323,7 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
         : 'Start Task';
 
       if (isTeacher) {
-        statusBadge = 'Active';
+        statusBadge = isAssignmentPublished(a) ? 'Published' : 'Unpublished';
         scoreText = `${a.submission_count ?? 0} Submissions`;
         actionLabel = isGameLibrary ? 'View Results' : 'Review Work';
       }

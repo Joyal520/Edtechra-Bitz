@@ -86,7 +86,39 @@ export function getGameCatalogItem(gameId: GameId): GameCatalogItem {
   return GAME_CATALOG.find((g) => g.id === gameId) || GAME_CATALOG[0];
 }
 
-export function getDefaultConfigForGame(gameId: GameId): GameConfig {
+export function getEmptyConfigForGame(gameId: GameId): GameConfig {
+  switch (gameId) {
+    case 'liquid-sentences':
+      return { sentences: [] };
+    case 'save-the-balloon':
+      return {
+        difficulty: 'medium',
+        lives: 6,
+        showTimer: true,
+        allowHints: true,
+        words: []
+      };
+    case 'memory-match':
+      return {
+        themeName: '',
+        pairs: []
+      };
+    case 'classroom-jigsaw':
+      return {
+        imageDataUrl: '',
+        images: [],
+        gridSize: 3,
+        title: ''
+      };
+    case 'lumina-words':
+      return {
+        title: '',
+        words: []
+      };
+  }
+}
+
+export function getDemoConfigForGame(gameId: GameId): GameConfig {
   switch (gameId) {
     case 'liquid-sentences':
       return {

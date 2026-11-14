@@ -1,10 +1,51 @@
 import type { Assignment, AssignmentSubmission } from '@/types/classroom';
 import type {
+  ClassroomJigsawConfig,
   CompletedLevelRecord,
   GameConfig,
+  GameId,
   GameLevelDefinition,
-  LevelUnlockMode
+  LevelUnlockMode,
+  LiquidSentencesConfig,
+  LuminaWordsConfig,
+  MemoryMatchConfig,
+  SaveTheBalloonConfig
 } from '@/types/gameLibrary';
+
+export function isAssignmentPublished(assignment?: Assignment | null): boolean {
+  if (!assignment || assignment.is_deleted) return false;
+  if (assignment.status !== 'published') return false;
+  if (assignment.settings?.is_unpublished === true) return false;
+  return true;
+}
+
+export function getLevelQuestionCount(gameId: GameId, cfg?: GameConfig | null): number {
+  if (!cfg) return 0;
+  switch (gameId) {
+    case 'liquid-sentences':
+      return Array.isArray((cfg as LiquidSentencesConfig).sentences)
+        ? (cfg as LiquidSentencesConfig).sentences.length
+        : 0;
+    case 'save-the-balloon':
+      return Array.isArray((cfg as SaveTheBalloonConfig).words)
+        ? (cfg as SaveTheBalloonConfig).words.length
+        : 0;
+    case 'memory-match':
+      return Array.isArray((cfg as MemoryMatchConfig).pairs)
+        ? (cfg as MemoryMatchConfig).pairs.length
+        : 0;
+    case 'classroom-jigsaw': {
+      const jc = cfg as ClassroomJigsawConfig;
+      return jc.images?.length || (jc.imageDataUrl ? 1 : 0);
+    }
+    case 'lumina-words':
+      return Array.isArray((cfg as LuminaWordsConfig).words)
+        ? (cfg as LuminaWordsConfig).words.length
+        : 0;
+    default:
+      return 0;
+  }
+}
 
 export interface EvaluatedLevel {
   level: GameLevelDefinition;

@@ -29,12 +29,27 @@ import {
 import { GameLibraryModal } from '@/components/classes/games/GameLibraryModal';
 import { GamePlayerModal } from '@/components/classes/games/GamePlayerModal';
 import { GameLevelSelectModal } from '@/components/classes/games/GameLevelSelectModal';
-import type { GameConfig, GameId, GameLevelDefinition, SavedLibraryGame } from '@/types/gameLibrary';
+import type {
+  CompletedLevelRecord,
+  GameConfig,
+  GameId,
+  GameLevelDefinition,
+  LevelUnlockMode,
+  SavedLibraryGame
+} from '@/types/gameLibrary';
+import {
+  evaluateLevelsForStudent,
+  getLevelQuestionCount,
+  isAssignmentPublished,
+  normalizeAssignmentLevels,
+  parseStudentLevelProgress
+} from '@/utils/gameLevelUtils';
 import {
   Classroom,
   ClassroomMember,
   ClassroomInvite,
   Assignment,
+  AssignmentSubmission,
   ClassroomMessage,
   ContentBucket,
   ClassroomExam,
@@ -173,15 +188,23 @@ export const ClassroomDetailPage: React.FC = () => {
   const [editingSavedGame, setEditingSavedGame] = useState<SavedLibraryGame | null>(null);
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
   const [activeGameAssignment, setActiveGameAssignment] = useState<Assignment | null>(null);
+  const [publishingAssignmentId, setPublishingAssignmentId] = useState<string | null>(null);
+  const [recentLevelCompletions, setRecentLevelCompletions] = useState<
+    Record<string, Record<string, CompletedLevelRecord>>
+  >({});
   const [activeGamePlay, setActiveGamePlay] = useState<{
     gameId: GameId;
     title: string;
     config: GameConfig;
     assignmentId?: string;
     levelId?: string;
+    levelNumber?: number;
+    levelTitle?: string;
+    questionCount?: number;
     maxPoints: number;
     isPreview: boolean;
     alreadyCompletedScore?: number | null;
+    alreadyCompletedRecord?: CompletedLevelRecord | null;
   } | null>(null);
 
   // Quick Assignment Creation Inline State
@@ -727,6 +750,28 @@ export const ClassroomDetailPage: React.FC = () => {
       await loadAllClassroomData();
     } catch (err) {
       alert('Failed to delete assignment');
+    }
+  };
+
+  const handleToggleAssignmentPublish = async (assignment: Assignment, publish: boolean) => {
+    setPublishingAssignmentId(assignment.id);
+    try {
+      const res = await assignmentService.setAssignmentPublishStatus(assignment.id, publish);
+      if (res.error) {
+        alert(res.error);
+        return;
+      }
+      setToastMessage(
+        publish
+          ? `"${assignment.title}" published to classroom!`
+          : `"${assignment.title}" unpublished. Student progress preserved.`
+      );
+      setTimeout(() => setToastMessage(null), 4000);
+      await loadAllClassroomData(true);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update publishing status');
+    } finally {
+      setPublishingAssignmentId(null);
     }
   };
 
@@ -2137,6 +2182,8 @@ export const ClassroomDetailPage: React.FC = () => {
                     }
                   }}
                   onDeleteAssignment={handleDeleteAssignment}
+                  onTogglePublish={handleToggleAssignmentPublish}
+                  publishingAssignmentId={publishingAssignmentId}
                 />
               </div>
             )}
@@ -2624,7 +2671,11 @@ export const ClassroomDetailPage: React.FC = () => {
         isTeacher={isTeacher}
         onClose={() => setChallengeListModalOpen(false)}
         onUpdated={() => loadAllClassroomData(true)}
-        gameAssignments={assignments.filter((a) => Boolean(a.settings?.is_game_library))}
+        gameAssignments={assignments.filter(
+          (a) => Boolean(a.settings?.is_game_library) && (isTeacher || isAssignmentPublished(a))
+        )}
+        onTogglePublish={handleToggleAssignmentPublish}
+        publishingAssignmentId={publishingAssignmentId}
         onOpenGameLibrary={(gameId) => {
           setEditingSavedGame(null);
           setInitialGameIdForLibrary(gameId || null);
@@ -2789,59 +2840,195 @@ export const ClassroomDetailPage: React.FC = () => {
       )}
 
       {/* Student Level Selection Modal */}
-      {classroom && activeGameAssignment && (
-        <GameLevelSelectModal
-          isOpen={Boolean(activeGameAssignment)}
-          onClose={() => setActiveGameAssignment(null)}
-          assignment={
-            assignments.find((a) => a.id === activeGameAssignment.id) || activeGameAssignment
-          }
-          classroomTimezone={classroom.leaderboard_timezone || 'UTC'}
-          onPlayLevel={(level: GameLevelDefinition) => {
-            const latestAssignment =
-              assignments.find((a) => a.id === activeGameAssignment.id) || activeGameAssignment;
-            setActiveGamePlay({
-              gameId: (latestAssignment.settings?.game_id as GameId) || 'liquid-sentences',
-              title: `${latestAssignment.title} — ${level.title}`,
-              config: level.config,
-              assignmentId: latestAssignment.id,
-              levelId: level.id,
-              maxPoints: level.points,
-              isPreview: false,
-              alreadyCompletedScore: null
-            });
-          }}
-        />
-      )}
+      {classroom && activeGameAssignment && (() => {
+        const matchedAssignment = assignments.find((a) => a.id === activeGameAssignment.id);
+        const latestAssignment = matchedAssignment || activeGameAssignment;
+        const optimisticMap = recentLevelCompletions[latestAssignment.id] || {};
+        const parsedProgress = parseStudentLevelProgress(latestAssignment.my_submission);
+        const mergedMap: Record<string, CompletedLevelRecord> = {
+          ...parsedProgress.completedMap,
+          ...optimisticMap
+        };
+        const mergedSubmission: AssignmentSubmission | null | undefined =
+          Object.keys(optimisticMap).length > 0
+            ? {
+                ...(latestAssignment.my_submission || {
+                  id: 'optimistic',
+                  assignment_id: latestAssignment.id,
+                  classroom_id: classroom.id,
+                  student_id: user?.id || '',
+                  status: 'submitted' as const,
+                  points_awarded: 0,
+                  file_urls: [],
+                  submitted_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                }),
+                text_response: JSON.stringify({
+                  levels_completed: mergedMap
+                })
+              }
+            : latestAssignment.my_submission;
+        const assignmentWithProgress: Assignment = {
+          ...latestAssignment,
+          my_submission: mergedSubmission
+        };
+        const isGameUnavailable =
+          !isTeacher && !loading && (!matchedAssignment || !isAssignmentPublished(matchedAssignment));
+
+        return (
+          <GameLevelSelectModal
+            isOpen={Boolean(activeGameAssignment)}
+            onClose={() => setActiveGameAssignment(null)}
+            assignment={assignmentWithProgress}
+            classroomTimezone={classroom.leaderboard_timezone || 'UTC'}
+            isUnavailable={isGameUnavailable}
+            onPlayLevel={(level: GameLevelDefinition) => {
+              const gId = (assignmentWithProgress.settings?.game_id as GameId) || 'liquid-sentences';
+              const existingRec = mergedMap[level.id] || null;
+              setActiveGamePlay({
+                gameId: gId,
+                title: `${assignmentWithProgress.title} — ${level.title}`,
+                config: level.config,
+                assignmentId: assignmentWithProgress.id,
+                levelId: level.id,
+                levelNumber: level.levelNumber,
+                levelTitle: level.title,
+                questionCount: getLevelQuestionCount(gId, level.config),
+                maxPoints: level.points,
+                isPreview: false,
+                alreadyCompletedScore: existingRec ? existingRec.scoreEarned : null,
+                alreadyCompletedRecord: existingRec
+              });
+            }}
+          />
+        );
+      })()}
 
       {/* Game Player Modal (Runs preserved HTML5 game in iframe) */}
-      {classroom && activeGamePlay && (
-        <GamePlayerModal
-          isOpen={Boolean(activeGamePlay)}
-          onClose={() => setActiveGamePlay(null)}
-          gameId={activeGamePlay.gameId}
-          title={activeGamePlay.title}
-          config={activeGamePlay.config}
-          classroomId={classroom.id}
-          assignmentId={activeGamePlay.assignmentId}
-          levelId={activeGamePlay.levelId}
-          maxPoints={activeGamePlay.maxPoints}
-          isPreview={activeGamePlay.isPreview}
-          alreadyCompletedScore={activeGamePlay.alreadyCompletedScore}
-          onSubmitted={(result) => {
-            if (result.success) {
-              setToastMessage(
-                result.alreadySubmitted
-                  ? 'Game completed (score already recorded).'
-                  : `+${result.pointsAwarded} points added to leaderboard!`
-              );
-              setTimeout(() => setToastMessage(null), 4000);
-              loadAllClassroomData(true);
-              refreshLeaderboard();
-            }
-          }}
-        />
-      )}
+      {classroom && activeGamePlay && (() => {
+        const matchedPlayAssignment = activeGamePlay.assignmentId
+          ? assignments.find((a) => a.id === activeGamePlay.assignmentId)
+          : undefined;
+        const playAssignment = matchedPlayAssignment || activeGameAssignment || undefined;
+        const playUnavailable =
+          !activeGamePlay.isPreview &&
+          !isTeacher &&
+          Boolean(activeGamePlay.assignmentId) &&
+          !loading &&
+          (!matchedPlayAssignment || !isAssignmentPublished(matchedPlayAssignment));
+
+        const optimisticMap = playAssignment
+          ? recentLevelCompletions[playAssignment.id] || {}
+          : {};
+        const parsedPlayProg = playAssignment
+          ? parseStudentLevelProgress(playAssignment.my_submission)
+          : { completedMap: {} as Record<string, CompletedLevelRecord> };
+        const mergedPlayMap: Record<string, CompletedLevelRecord> = {
+          ...parsedPlayProg.completedMap,
+          ...optimisticMap
+        };
+
+        const levels = playAssignment ? normalizeAssignmentLevels(playAssignment) : [];
+        const unlockMode: LevelUnlockMode =
+          (playAssignment?.settings?.unlock_mode as LevelUnlockMode) || 'sequential';
+        const dailyLimit = Number(playAssignment?.settings?.daily_limit || 1);
+        const evaluated = evaluateLevelsForStudent(
+          levels,
+          unlockMode,
+          dailyLimit,
+          mergedPlayMap,
+          classroom.leaderboard_timezone || 'UTC'
+        );
+        const currentIdx = evaluated.findIndex((e) => e.level.id === activeGamePlay.levelId);
+        const nextEval =
+          currentIdx >= 0 && currentIdx + 1 < evaluated.length ? evaluated[currentIdx + 1] : null;
+
+        const openNextLevel = (nextLvl: GameLevelDefinition) => {
+          if (!playAssignment) return;
+          const gId = (playAssignment.settings?.game_id as GameId) || activeGamePlay.gameId;
+          const existingRec = mergedPlayMap[nextLvl.id] || null;
+          setActiveGamePlay({
+            gameId: gId,
+            title: `${playAssignment.title} — ${nextLvl.title}`,
+            config: nextLvl.config,
+            assignmentId: playAssignment.id,
+            levelId: nextLvl.id,
+            levelNumber: nextLvl.levelNumber,
+            levelTitle: nextLvl.title,
+            questionCount: getLevelQuestionCount(gId, nextLvl.config),
+            maxPoints: nextLvl.points,
+            isPreview: false,
+            alreadyCompletedScore: existingRec ? existingRec.scoreEarned : null,
+            alreadyCompletedRecord: existingRec
+          });
+        };
+
+        return (
+          <GamePlayerModal
+            isOpen={Boolean(activeGamePlay)}
+            onClose={() => setActiveGamePlay(null)}
+            gameId={activeGamePlay.gameId}
+            title={activeGamePlay.title}
+            config={activeGamePlay.config}
+            classroomId={classroom.id}
+            assignmentId={activeGamePlay.assignmentId}
+            levelId={activeGamePlay.levelId}
+            levelNumber={activeGamePlay.levelNumber}
+            levelTitle={activeGamePlay.levelTitle}
+            questionCount={activeGamePlay.questionCount}
+            maxPoints={activeGamePlay.maxPoints}
+            isPreview={activeGamePlay.isPreview}
+            isUnavailable={playUnavailable}
+            alreadyCompletedScore={activeGamePlay.alreadyCompletedScore}
+            alreadyCompletedRecord={activeGamePlay.alreadyCompletedRecord}
+            nextLevel={nextEval?.level || null}
+            nextLevelStatus={nextEval?.status || null}
+            nextLevelLockReason={nextEval?.lockReason}
+            onBackToLevelMap={() => {
+              if (playAssignment) {
+                setActiveGameAssignment(playAssignment);
+              }
+              setActiveGamePlay(null);
+            }}
+            onContinueToNextLevel={openNextLevel}
+            onSubmitted={(result) => {
+              if (result.success) {
+                if (activeGamePlay.assignmentId && activeGamePlay.levelId) {
+                  const earnedVal = result.alreadySubmitted
+                    ? result.existingScore ?? activeGamePlay.alreadyCompletedScore ?? 0
+                    : result.pointsAwarded;
+                  const newRec: CompletedLevelRecord = {
+                    levelId: activeGamePlay.levelId,
+                    levelNumber: activeGamePlay.levelNumber || 1,
+                    title: activeGamePlay.levelTitle || activeGamePlay.title,
+                    scoreEarned: earnedVal,
+                    maxPoints: activeGamePlay.maxPoints,
+                    percentage: result.percentage ?? 100,
+                    timeTakenSeconds: result.timeTakenSeconds ?? 0,
+                    completedAt: new Date().toISOString()
+                  };
+                  setRecentLevelCompletions((prev) => ({
+                    ...prev,
+                    [activeGamePlay.assignmentId!]: {
+                      ...(prev[activeGamePlay.assignmentId!] || {}),
+                      [activeGamePlay.levelId!]: newRec
+                    }
+                  }));
+                }
+
+                setToastMessage(
+                  result.alreadySubmitted
+                    ? 'Game completed (score already recorded).'
+                    : `+${result.pointsAwarded} points added to leaderboard!`
+                );
+                setTimeout(() => setToastMessage(null), 4000);
+                loadAllClassroomData(true);
+                refreshLeaderboard();
+              }
+            }}
+          />
+        );
+      })()}
 
       {/* Subtle, non-intrusive success notification */}
       {toastMessage && (

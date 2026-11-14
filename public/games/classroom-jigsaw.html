@@ -214,11 +214,14 @@ function win(){if(g.pieces.some(p=>!p.locked))return;g.solved=true;clearInterval
   const hasNext=multi&&edtechraBridge.index+1<edtechraBridge.images.length;
   if(edtechraBridge.active&&!edtechraBridge.reported&&!hasNext){edtechraBridge.reported=true;
     const totalSec=(edtechraBridge.totalSec||0)+g.sec;
-    window.parent.postMessage({type:"EDTECHRA_GAME_COMPLETE",payload:{gameId:"classroom-jigsaw",scoreEarned:edtechraBridge.maxPoints,maxAvailablePoints:edtechraBridge.maxPoints,completionStatus:"completed",timeTakenSeconds:totalSec,details:{gridSize:g.N,pieces:g.N*g.N,puzzlesCompleted:multi?edtechraBridge.images.length:1}}},"*")}
+    const totalPuz=multi?edtechraBridge.images.length:1;
+    window.parent.postMessage({type:"EDTECHRA_GAME_COMPLETE",payload:{gameId:"classroom-jigsaw",scoreEarned:edtechraBridge.maxPoints,maxAvailablePoints:edtechraBridge.maxPoints,completionStatus:"completed",timeTakenSeconds:totalSec,details:{gridSize:g.N,pieces:g.N*g.N,puzzlesCompleted:totalPuz,totalPuzzles:totalPuz,questionsCompleted:totalPuz,correctAnswers:totalPuz}}},"*")}
   for(let i=0;i<6;i++)setTimeout(()=>spark(g.board.x+Math.random()*g.board.size,g.board.y+Math.random()*g.board.size,26),i*150);
   setTimeout(()=>{$("winTime").textContent=fmt(g.sec);$("winTimeBox").classList.toggle("hidden",!g.timer);$("winGrid").textContent=`${g.N}×${g.N} (${g.N*g.N})`;
     const bAgain=$("bAgain");
-    if(hasNext){bAgain.textContent=`Next Puzzle (${edtechraBridge.index+2}/${edtechraBridge.images.length}) →`}else{bAgain.textContent="Play Again"}
+    if(hasNext){bAgain.classList.remove("hidden");bAgain.textContent=`Next Puzzle (${edtechraBridge.index+2}/${edtechraBridge.images.length}) →`}
+    else if(edtechraBridge.active&&edtechraBridge.mode==="student"){bAgain.classList.add("hidden")}
+    else{bAgain.classList.remove("hidden");bAgain.textContent="Play Again"}
     $("win").classList.remove("hidden")},700)}
 function updHud(){$("hProg").textContent=`${g.pieces.filter(p=>p.locked).length} / ${g.pieces.length}`}
 const fmt=s=>String(s/60|0).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
@@ -282,11 +285,11 @@ function loadBridgePuzzle(idx){
   if(src){
     const im=new Image();
     im.onload=()=>{setupImg=prepImage(im);startGame()};
-    im.onerror=()=>{samplePicture();startGame()};
+    im.onerror=()=>{$("hTitle").textContent="Unable to load puzzle image";["hud"].forEach(i=>$(i).classList.remove("hidden"))};
     im.src=src;
   }else{
-    samplePicture();
-    startGame();
+    $("hTitle").textContent="No puzzle image configured";
+    ["hud"].forEach(i=>$(i).classList.remove("hidden"));
   }
 }
 
@@ -296,6 +299,7 @@ window.addEventListener("message",ev=>{
   if(!msg||msg.type!=="EDTECHRA_INIT_GAME")return;
   const p=msg.payload||msg||{},cfg=p.config||{};
   edtechraBridge.active=true;
+  edtechraBridge.mode=p.mode||"student";
   edtechraBridge.maxPoints=Number(p.maxPoints)||100;
   edtechraBridge.reported=false;
   edtechraBridge.index=0;

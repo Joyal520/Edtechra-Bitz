@@ -1,5 +1,6 @@
 import React from 'react';
-import { ImagePlus, Plus, Trash2 } from 'lucide-react';
+import { ImagePlus, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { getDemoConfigForGame } from '@/services/gameLibraryService';
 import type {
   ClassroomJigsawConfig,
   GameConfig,
@@ -72,6 +73,17 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
       const incoming = rows.map((r) => ({ term: r.primary, definition: r.secondary }));
       const base = mode === 'replace' ? [] : c.pairs.filter((p) => p.term.trim().length > 0);
       onChange({ ...c, pairs: [...base, ...incoming] });
+    } else if (gameId === 'classroom-jigsaw') {
+      const c = config as ClassroomJigsawConfig;
+      const incoming = rows.map((r) => r.primary.trim()).filter(Boolean);
+      const existing =
+        c.images && c.images.length > 0 ? c.images : c.imageDataUrl ? [c.imageDataUrl] : [];
+      const merged = mode === 'replace' ? incoming : [...existing, ...incoming];
+      onChange({
+        ...c,
+        images: merged,
+        imageDataUrl: merged[0] || ''
+      });
     } else if (gameId === 'lumina-words') {
       const c = config as LuminaWordsConfig;
       const incoming = rows.map((r) => ({ word: r.primary, clue: r.secondary }));
@@ -79,6 +91,43 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
       onChange({ ...c, words: [...base, ...incoming] });
     }
   };
+
+  const renderEmptyState = (
+    itemPlural: string,
+    manualButtonLabel: string,
+    onAddManual: () => void,
+    showDemoButton = true
+  ) => (
+    <div className="p-5 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/70 text-center space-y-3">
+      <div className="space-y-1">
+        <p className="text-sm font-bold text-slate-800">No {itemPlural} added yet</p>
+        <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+          Use <strong>Bulk Upload / Paste</strong> above to import your list from CSV or TXT, or click{' '}
+          <strong>{manualButtonLabel}</strong> to create items manually.
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <button
+          type="button"
+          onClick={onAddManual}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition cursor-pointer"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          {manualButtonLabel}
+        </button>
+        {showDemoButton && (
+          <button
+            type="button"
+            onClick={() => onChange(getDemoConfigForGame(gameId))}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold transition cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+            Load Demo Sample
+          </button>
+        )}
+      </div>
+    </div>
+  );
 
   const handleJigsawMultiUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -122,19 +171,24 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
 
   if (gameId === 'liquid-sentences') {
     const c = config as LiquidSentencesConfig;
+    const validCount = c.sentences.filter((s) => s.text.trim().length > 0).length;
     return (
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h4 className="text-xs sm:text-sm font-bold text-slate-900">
-              Sentences & Optional Hints
+              Sentences & Optional Hints ({c.sentences.length})
             </h4>
             <p className="text-[11px] text-slate-500">
               Each sentence is scrambled into floating word tiles.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <BulkContentUploader gameId="liquid-sentences" onConfirmImport={handleBulkImport} />
+            <BulkContentUploader
+              gameId="liquid-sentences"
+              existingCount={validCount}
+              onConfirmImport={handleBulkImport}
+            />
             <button
               type="button"
               onClick={() => onChange({ sentences: [...c.sentences, { text: '', hint: '' }] })}
@@ -144,14 +198,18 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
             </button>
           </div>
         </div>
-        {c.sentences.map((item, idx) => (
-          <div
-            key={idx}
-            className="p-3 rounded-2xl border border-slate-200 bg-white space-y-2"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-500">Sentence #{idx + 1}</span>
-              {c.sentences.length > 1 && (
+        {c.sentences.length === 0 ? (
+          renderEmptyState('sentences', 'Add Sentence', () =>
+            onChange({ sentences: [{ text: '', hint: '' }] })
+          )
+        ) : (
+          c.sentences.map((item, idx) => (
+            <div
+              key={idx}
+              className="p-3 rounded-2xl border border-slate-200 bg-white space-y-2"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-500">Sentence #{idx + 1}</span>
                 <button
                   type="button"
                   onClick={() =>
@@ -162,8 +220,7 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
-              )}
-            </div>
+              </div>
             <input
               type="text"
               value={item.text}
@@ -187,7 +244,8 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
               className="w-full px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50/50 text-xs text-slate-600"
             />
           </div>
-        ))}
+          ))
+        )}
       </div>
     );
   }
@@ -244,9 +302,15 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h4 className="text-xs sm:text-sm font-bold text-slate-900">Words & Optional Clues</h4>
+          <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+            Words & Optional Clues ({c.words.length})
+          </h4>
           <div className="flex flex-wrap items-center gap-2">
-            <BulkContentUploader gameId="save-the-balloon" onConfirmImport={handleBulkImport} />
+            <BulkContentUploader
+              gameId="save-the-balloon"
+              existingCount={c.words.filter((w) => w.word.trim().length > 0).length}
+              onConfirmImport={handleBulkImport}
+            />
             <button
               type="button"
               onClick={() => onChange({ ...c, words: [...c.words, { word: '', hint: '' }] })}
@@ -257,39 +321,43 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
           </div>
         </div>
 
-        {c.words.map((item, idx) => (
-          <div
-            key={idx}
-            className="p-3 rounded-2xl border border-slate-200 bg-white grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center"
-          >
-            <div className="sm:col-span-4">
-              <input
-                type="text"
-                value={item.word}
-                onChange={(e) => {
-                  const next = [...c.words];
-                  next[idx] = { ...next[idx], word: e.target.value.toUpperCase() };
-                  onChange({ ...c, words: next });
-                }}
-                placeholder="WORD (e.g. GRAVITY)"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 text-sm font-bold uppercase"
-              />
-            </div>
-            <div className="sm:col-span-7">
-              <input
-                type="text"
-                value={item.hint || ''}
-                onChange={(e) => {
-                  const next = [...c.words];
-                  next[idx] = { ...next[idx], hint: e.target.value };
-                  onChange({ ...c, words: next });
-                }}
-                placeholder="Optional clue for students"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 text-xs"
-              />
-            </div>
-            <div className="sm:col-span-1 flex justify-end">
-              {c.words.length > 1 && (
+        {c.words.length === 0 ? (
+          renderEmptyState('words', 'Add Word', () =>
+            onChange({ ...c, words: [{ word: '', hint: '' }] })
+          )
+        ) : (
+          c.words.map((item, idx) => (
+            <div
+              key={idx}
+              className="p-3 rounded-2xl border border-slate-200 bg-white grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center"
+            >
+              <div className="sm:col-span-4">
+                <input
+                  type="text"
+                  value={item.word}
+                  onChange={(e) => {
+                    const next = [...c.words];
+                    next[idx] = { ...next[idx], word: e.target.value.toUpperCase() };
+                    onChange({ ...c, words: next });
+                  }}
+                  placeholder="WORD (e.g. GRAVITY)"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 text-sm font-bold uppercase"
+                />
+              </div>
+              <div className="sm:col-span-7">
+                <input
+                  type="text"
+                  value={item.hint || ''}
+                  onChange={(e) => {
+                    const next = [...c.words];
+                    next[idx] = { ...next[idx], hint: e.target.value };
+                    onChange({ ...c, words: next });
+                  }}
+                  placeholder="Optional clue for students"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 text-xs"
+                />
+              </div>
+              <div className="sm:col-span-1 flex justify-end">
                 <button
                   type="button"
                   onClick={() => onChange({ ...c, words: c.words.filter((_, i) => i !== idx) })}
@@ -298,10 +366,10 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
-              )}
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     );
   }
@@ -324,7 +392,11 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
             />
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <BulkContentUploader gameId="memory-match" onConfirmImport={handleBulkImport} />
+            <BulkContentUploader
+              gameId="memory-match"
+              existingCount={c.pairs.filter((p) => p.term.trim().length > 0).length}
+              onConfirmImport={handleBulkImport}
+            />
             <button
               type="button"
               onClick={() => onChange({ ...c, pairs: [...c.pairs, { term: '', definition: '' }] })}
@@ -335,11 +407,15 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
           </div>
         </div>
 
-        {c.pairs.map((pair, idx) => (
-          <div key={idx} className="p-3 rounded-2xl border border-slate-200 bg-white space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-500">Pair #{idx + 1}</span>
-              {c.pairs.length > 2 && (
+        {c.pairs.length === 0 ? (
+          renderEmptyState('matching pairs', 'Add Pair', () =>
+            onChange({ ...c, pairs: [{ term: '', definition: '' }, { term: '', definition: '' }] })
+          )
+        ) : (
+          c.pairs.map((pair, idx) => (
+            <div key={idx} className="p-3 rounded-2xl border border-slate-200 bg-white space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-500">Pair #{idx + 1}</span>
                 <button
                   type="button"
                   onClick={() => onChange({ ...c, pairs: c.pairs.filter((_, i) => i !== idx) })}
@@ -348,8 +424,7 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
-              )}
-            </div>
+              </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <input
                 type="text"
@@ -414,7 +489,8 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
               )}
             </div>
           </div>
-        ))}
+          ))
+        )}
       </div>
     );
   }
@@ -426,6 +502,22 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
 
     return (
       <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+              Puzzle Images ({jigsawImages.length})
+            </h4>
+            <p className="text-[11px] text-slate-500">
+              Upload local images or import puzzle image URLs in bulk.
+            </p>
+          </div>
+          <BulkContentUploader
+            gameId="classroom-jigsaw"
+            existingCount={jigsawImages.length}
+            onConfirmImport={handleBulkImport}
+          />
+        </div>
+
         <div className="p-4 rounded-2xl border-2 border-dashed border-slate-300 bg-white text-center space-y-3">
           <label className="block py-3 cursor-pointer space-y-1.5">
             <ImagePlus className="w-8 h-8 text-emerald-600 mx-auto" />
@@ -519,13 +611,19 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h4 className="text-xs sm:text-sm font-bold text-slate-900">Words & Relevant Clues</h4>
+          <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+            Words & Relevant Clues ({c.words.length})
+          </h4>
           <p className="text-[11px] text-slate-500">
             Automatically builds a crossword grid and letter wheel from your list.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <BulkContentUploader gameId="lumina-words" onConfirmImport={handleBulkImport} />
+          <BulkContentUploader
+            gameId="lumina-words"
+            existingCount={c.words.filter((w) => w.word.trim().length > 0).length}
+            onConfirmImport={handleBulkImport}
+          />
           <button
             type="button"
             onClick={() => onChange({ ...c, words: [...c.words, { word: '', clue: '' }] })}
@@ -536,39 +634,43 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
         </div>
       </div>
 
-      {c.words.map((item, idx) => (
-        <div
-          key={idx}
-          className="p-3 rounded-2xl border border-slate-200 bg-white grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center"
-        >
-          <div className="sm:col-span-4">
-            <input
-              type="text"
-              value={item.word}
-              onChange={(e) => {
-                const next = [...c.words];
-                next[idx] = { ...next[idx], word: e.target.value.toUpperCase() };
-                onChange({ ...c, words: next });
-              }}
-              placeholder="WORD (e.g. ORBIT)"
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 text-sm font-bold uppercase"
-            />
-          </div>
-          <div className="sm:col-span-7">
-            <input
-              type="text"
-              value={item.clue}
-              onChange={(e) => {
-                const next = [...c.words];
-                next[idx] = { ...next[idx], clue: e.target.value };
-                onChange({ ...c, words: next });
-              }}
-              placeholder="Clue (e.g. Curved path around a star)"
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 text-xs"
-            />
-          </div>
-          <div className="sm:col-span-1 flex justify-end">
-            {c.words.length > 2 && (
+      {c.words.length === 0 ? (
+        renderEmptyState('words', 'Add Word', () =>
+          onChange({ ...c, words: [{ word: '', clue: '' }] })
+        )
+      ) : (
+        c.words.map((item, idx) => (
+          <div
+            key={idx}
+            className="p-3 rounded-2xl border border-slate-200 bg-white grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center"
+          >
+            <div className="sm:col-span-4">
+              <input
+                type="text"
+                value={item.word}
+                onChange={(e) => {
+                  const next = [...c.words];
+                  next[idx] = { ...next[idx], word: e.target.value.toUpperCase() };
+                  onChange({ ...c, words: next });
+                }}
+                placeholder="WORD (e.g. ORBIT)"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 text-sm font-bold uppercase"
+              />
+            </div>
+            <div className="sm:col-span-7">
+              <input
+                type="text"
+                value={item.clue}
+                onChange={(e) => {
+                  const next = [...c.words];
+                  next[idx] = { ...next[idx], clue: e.target.value };
+                  onChange({ ...c, words: next });
+                }}
+                placeholder="Clue (e.g. Curved path around a star)"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 text-xs"
+              />
+            </div>
+            <div className="sm:col-span-1 flex justify-end">
               <button
                 type="button"
                 onClick={() => onChange({ ...c, words: c.words.filter((_, i) => i !== idx) })}
@@ -577,10 +679,10 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
               >
                 <Trash2 className="w-4 h-4" />
               </button>
-            )}
+            </div>
           </div>
-        </div>
-      ))}
+        ))
+      )}
     </div>
   );
 };

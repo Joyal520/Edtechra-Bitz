@@ -7,9 +7,17 @@ import {
   ArrowRight,
   FileText,
   Trash2,
-  Users
+  Users,
+  EyeOff,
+  RotateCcw,
+  Globe
 } from 'lucide-react';
 import { Assignment } from '@/types/classroom';
+import {
+  isAssignmentPublished,
+  normalizeAssignmentLevels,
+  parseStudentLevelProgress
+} from '@/utils/gameLevelUtils';
 
 interface AssignmentCardProps {
   assignment: Assignment;
@@ -17,6 +25,8 @@ interface AssignmentCardProps {
   onOpenSubmissions?: (assignment: Assignment) => void;
   onSubmitWork?: (assignment: Assignment) => void;
   onDeleteAssignment?: (assignmentId: string) => void;
+  onRequestPublishToggle?: (assignment: Assignment, nextPublish: boolean) => void;
+  isPublishBusy?: boolean;
 }
 
 export const AssignmentCard: React.FC<AssignmentCardProps> = ({
@@ -24,13 +34,28 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
   isTeacher,
   onOpenSubmissions,
   onSubmitWork,
-  onDeleteAssignment
+  onDeleteAssignment,
+  onRequestPublishToggle,
+  isPublishBusy = false
 }) => {
+  const isPublished = isAssignmentPublished(assignment);
+  const isGameLibrary = Boolean(assignment.settings?.is_game_library);
+  const gameLevels = isGameLibrary ? normalizeAssignmentLevels(assignment) : [];
+  const gameProgress = isGameLibrary ? parseStudentLevelProgress(assignment.my_submission) : null;
   const sub = assignment.my_submission;
-  const isGraded = sub?.status === 'graded' || sub?.points_awarded != null || (sub && sub.final_score != null);
+  const isGameFullyCompleted = Boolean(
+    isGameLibrary && gameLevels.length > 0 && gameProgress && gameProgress.completedCount >= gameLevels.length
+  );
+  const isGraded = isGameLibrary
+    ? isGameFullyCompleted
+    : sub?.status === 'graded' || sub?.points_awarded != null || (sub && sub.final_score != null);
   const isEvaluating = !isGraded && (sub?.status === 'evaluating' || sub?.status === 'processing');
-  const isSubmitted = Boolean(sub);
-  const score = sub?.points_awarded ?? sub?.final_score;
+  const isSubmitted = isGameLibrary
+    ? Boolean(gameProgress && gameProgress.completedCount > 0)
+    : Boolean(sub);
+  const score = isGameLibrary
+    ? gameProgress?.totalPointsEarned ?? 0
+    : sub?.points_awarded ?? sub?.final_score;
 
   const dueDateFormatted = assignment.due_date
     ? new Date(assignment.due_date).toLocaleDateString(undefined, {
@@ -57,6 +82,17 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
                 ? String(assignment.settings.game_name || 'Game')
                 : assignment.assignment_type}
             </span>
+            {isTeacher && (
+              <span
+                className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                  isPublished
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-amber-50 text-amber-800 border-amber-200'
+                }`}
+              >
+                {isPublished ? 'Published' : 'Unpublished'}
+              </span>
+            )}
             <span className="text-xs text-slate-500 font-extrabold flex items-center gap-1">
               <Award className="w-3.5 h-3.5 text-amber-500" />
               <span>{assignment.points} pts</span>
@@ -73,14 +109,48 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
         </div>
 
         {/* Teacher Actions */}
-        {isTeacher && onDeleteAssignment && (
-          <button
-            onClick={() => onDeleteAssignment(assignment.id)}
-            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-            title="Delete Assignment"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+        {isTeacher && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            {onRequestPublishToggle && (
+              <button
+                type="button"
+                disabled={isPublishBusy}
+                onClick={() => onRequestPublishToggle(assignment, !isPublished)}
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-extrabold border transition cursor-pointer disabled:opacity-50 ${
+                  isPublished
+                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                }`}
+                title={isPublished ? 'Unpublish assignment' : 'Republish assignment'}
+              >
+                {isPublished ? (
+                  <>
+                    <EyeOff className="w-3.5 h-3.5" />
+                    <span>Unpublish</span>
+                  </>
+                ) : assignment.settings?.is_unpublished ? (
+                  <>
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Republish</span>
+                  </>
+                ) : (
+                  <>
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>Publish</span>
+                  </>
+                )}
+              </button>
+            )}
+            {onDeleteAssignment && (
+              <button
+                onClick={() => onDeleteAssignment(assignment.id)}
+                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                title="Delete Assignment"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -154,8 +224,10 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
                 <FileText className="w-3.5 h-3.5" />
                 <span>
                   {assignment.settings?.is_game_library
-                    ? isGraded || isSubmitted
+                    ? isGameFullyCompleted
                       ? 'Completed'
+                      : isSubmitted
+                      ? `Continue (${gameProgress?.completedCount || 0}/${gameLevels.length})`
                       : 'Play Game'
                     : isGraded
                     ? 'View Result'

@@ -218,7 +218,7 @@ function summary(){clearInterval(S.tick);const ok=S.results.filter(r=>r.ok).leng
   if(edtechraBridge.active&&!edtechraBridge.reported){edtechraBridge.reported=true;
     const ratio=ok/Math.max(1,S.results.length);
     const earned=Math.round(ratio*edtechraBridge.maxPoints);
-    window.parent.postMessage({type:"EDTECHRA_GAME_COMPLETE",payload:{gameId:"save-the-balloon",scoreEarned:earned,maxAvailablePoints:edtechraBridge.maxPoints,completionStatus:"completed",timeTakenSeconds:S.sec,details:{solved:ok,total:S.results.length,rawScore:S.score}}},"*")}}
+    window.parent.postMessage({type:"EDTECHRA_GAME_COMPLETE",payload:{gameId:"save-the-balloon",scoreEarned:earned,maxAvailablePoints:edtechraBridge.maxPoints,completionStatus:"completed",timeTakenSeconds:S.sec,details:{solved:ok,total:S.results.length,questionsCompleted:S.results.length,correctAnswers:ok,rawScore:S.score}}},"*")}}
 $("bAgain").onclick=begin;$("bEdit").onclick=()=>{$("end").classList.add("hidden");$("game").classList.add("hidden");$("setup").classList.remove("hidden")};
 $("bMenu").onclick=()=>{$("setup").classList.remove("hidden")};
 $("bMute").onclick=e=>{A.muted=!A.muted;e.currentTarget.textContent=A.muted?"🔇":"🔊";if(A.out)A.out.gain.setTargetAtTime(A.muted?0:1,A.ctx.currentTime,.1)};
@@ -251,12 +251,14 @@ window.addEventListener("message",ev=>{
   if(!msg||msg.type!=="EDTECHRA_INIT_GAME")return;
   const p=msg.payload||msg||{},cfg=p.config||{};
   edtechraBridge.active=true;
+  edtechraBridge.mode=p.mode||"student";
   edtechraBridge.maxPoints=Number(p.maxPoints)||100;
   edtechraBridge.reported=false;
   if(p.mode==="student"||p.mode==="preview"){
     $("setup").classList.add("hidden");
     $("bMenu").classList.add("hidden");
     $("bEdit").classList.add("hidden");
+    $("bAgain").classList.toggle("hidden",p.mode==="student");
   }
   const items=Array.isArray(cfg.words)?cfg.words:[];
   const parsed=items.map(it=>{

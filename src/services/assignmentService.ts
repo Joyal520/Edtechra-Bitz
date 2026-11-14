@@ -10,12 +10,38 @@ import {
   AssignmentAttachment
 } from '@/types/classroom';
 import { classroomPointsService } from './classroomPointsService';
+import { isAssignmentPublished } from '@/utils/gameLevelUtils';
 
 class AssignmentService {
   private async getUserId(): Promise<string | null> {
     if (!supabase) return null;
     const { data: { session } } = await supabase.auth.getSession();
     return session?.user?.id || null;
+  }
+
+  private async isTeacherForClassroom(classroomId: string, userId: string | null): Promise<boolean> {
+    if (!supabase || !userId) return false;
+    try {
+      const [{ data: classroomRow }, { data: memberRow }, { data: profileRow }] = await Promise.all([
+        supabase.from('classrooms').select('teacher_id').eq('id', classroomId).maybeSingle(),
+        supabase
+          .from('classroom_members')
+          .select('role')
+          .eq('classroom_id', classroomId)
+          .eq('profile_id', userId)
+          .maybeSingle(),
+        supabase.from('profiles').select('role').eq('id', userId).maybeSingle()
+      ]);
+
+      return (
+        classroomRow?.teacher_id === userId ||
+        memberRow?.role === 'teacher' ||
+        memberRow?.role === 'co-teacher' ||
+        profileRow?.role === 'admin'
+      );
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -26,16 +52,23 @@ class AssignmentService {
     const userId = await this.getUserId();
 
     try {
-      const { data, error } = await supabase
-        .from('assignments')
-        .select('*')
-        .eq('classroom_id', classroomId)
-        .eq('is_deleted', false)
-        .order('due_date', { ascending: true, nullsFirst: false });
+      const [{ data, error }, userIsTeacher] = await Promise.all([
+        supabase
+          .from('assignments')
+          .select('*')
+          .eq('classroom_id', classroomId)
+          .eq('is_deleted', false)
+          .order('due_date', { ascending: true, nullsFirst: false }),
+        this.isTeacherForClassroom(classroomId, userId)
+      ]);
 
       if (error) throw error;
 
-      const assignments = data || [];
+      // Enforce publication visibility at service layer: students only receive published assignments
+      const rawAssignments = data || [];
+      const assignments = userIsTeacher
+        ? rawAssignments
+        : rawAssignments.filter((a) => isAssignmentPublished(a));
       if (assignments.length === 0) return [];
 
       const assignmentIds = assignments.map((a) => a.id);
@@ -142,6 +175,55 @@ class AssignmentService {
       return {};
     } catch (err: any) {
       return { error: err.message || 'Failed to update assignment.' };
+    }
+  }
+
+  /**
+   * Publishes, unpublishes, or republishes an assignment without deleting
+   * game configuration, library copy, student submissions, or leaderboard points.
+   */
+  async setAssignmentPublishStatus(
+    assignmentId: string,
+    publish: boolean
+  ): Promise<{ assignment?: Assignment; error?: string }> {
+    if (!supabase) return { error: 'Supabase is not configured' };
+
+    try {
+      const { data: existing, error: fetchErr } = await supabase
+        .from('assignments')
+        .select('id, settings, status, is_deleted')
+        .eq('id', assignmentId)
+        .eq('is_deleted', false)
+        .single();
+
+      if (fetchErr || !existing) {
+        return { error: fetchErr?.message || 'Assignment not found.' };
+      }
+
+      const nowIso = new Date().toISOString();
+      const prevSettings =
+        existing.settings && typeof existing.settings === 'object' ? existing.settings : {};
+      const nextSettings = {
+        ...prevSettings,
+        is_unpublished: !publish,
+        ...(publish ? { republished_at: nowIso } : { unpublished_at: nowIso })
+      };
+
+      const { data: updated, error: updErr } = await supabase
+        .from('assignments')
+        .update({
+          status: publish ? 'published' : 'draft',
+          settings: nextSettings,
+          updated_at: nowIso
+        })
+        .eq('id', assignmentId)
+        .select('*')
+        .single();
+
+      if (updErr) throw updErr;
+      return { assignment: updated as Assignment };
+    } catch (err: any) {
+      return { error: err.message || 'Failed to update publishing status.' };
     }
   }
 

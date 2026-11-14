@@ -16,11 +16,12 @@ export interface ParsedBulkRow {
 }
 
 interface BulkContentUploaderProps {
-  gameId: Exclude<GameId, 'classroom-jigsaw'>;
+  gameId: GameId;
+  existingCount?: number;
   onConfirmImport: (rows: ParsedBulkRow[], mode: 'append' | 'replace') => void;
 }
 
-function getTemplateMeta(gameId: Exclude<GameId, 'classroom-jigsaw'>) {
+function getTemplateMeta(gameId: GameId) {
   switch (gameId) {
     case 'liquid-sentences':
       return {
@@ -58,6 +59,17 @@ function getTemplateMeta(gameId: Exclude<GameId, 'classroom-jigsaw'>) {
           'Apple,Red fruit\nDog,Puppy\nSun,Solar\nEvaporation,Liquid turning into vapor\n',
         primaryLabel: 'First Item',
         secondaryLabel: 'Matching Item',
+        minPrimaryWords: 1
+      };
+    case 'classroom-jigsaw':
+      return {
+        title: 'Bulk Upload Puzzle Image URLs',
+        formatHint: 'One image URL (https:// or data:image/...) per line.',
+        placeholder: 'https://example.com/map.jpg\nhttps://example.com/cell-diagram.png',
+        sampleFilename: 'classroom-jigsaw-urls.csv',
+        sampleContent: 'https://example.com/puzzle-1.jpg\nhttps://example.com/puzzle-2.jpg\n',
+        primaryLabel: 'Image URL',
+        secondaryLabel: 'Label (Optional)',
         minPrimaryWords: 1
       };
     case 'lumina-words':
@@ -98,13 +110,14 @@ function splitCsvOrPipeLine(line: string): [string, string] {
 
 export const BulkContentUploader: React.FC<BulkContentUploaderProps> = ({
   gameId,
+  existingCount = 0,
   onConfirmImport
 }) => {
   const [open, setOpen] = useState(false);
   const [rawText, setRawText] = useState('');
   const [previewRows, setPreviewRows] = useState<ParsedBulkRow[]>([]);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
-  const [importMode, setImportMode] = useState<'append' | 'replace'>('append');
+  const [importMode, setImportMode] = useState<'append' | 'replace'>('replace');
 
   const meta = getTemplateMeta(gameId);
 
@@ -123,7 +136,7 @@ export const BulkContentUploader: React.FC<BulkContentUploaderProps> = ({
       // Skip obvious CSV header row
       if (
         index === 0 &&
-        /^(sentence|word|term|first item|item1)\s*[|,]/i.test(line)
+        /^(sentence|word|term|first item|item1|image\s*url|url)\s*[|,]/i.test(line)
       ) {
         return;
       }
@@ -153,6 +166,13 @@ export const BulkContentUploader: React.FC<BulkContentUploaderProps> = ({
           return;
         }
         valid.push({ primary: rawPrimary, secondary: rawSecondary });
+      } else if (gameId === 'classroom-jigsaw') {
+        const url = rawPrimary.trim();
+        if (!/^(https?:\/\/|data:image\/)/i.test(url)) {
+          errors.push(`Line ${lineNum}: "${rawPrimary}" must be a valid http(s):// or data:image/ URL.`);
+          return;
+        }
+        valid.push({ primary: url, secondary: rawSecondary });
       } else if (gameId === 'lumina-words') {
         const cleanWord = rawPrimary.replace(/[^a-zA-Z]/g, '').toUpperCase();
         if (cleanWord.length < 3 || cleanWord.length > 12) {
@@ -197,7 +217,7 @@ export const BulkContentUploader: React.FC<BulkContentUploaderProps> = ({
 
   const handleConfirm = () => {
     if (previewRows.length === 0) return;
-    onConfirmImport(previewRows, importMode);
+    onConfirmImport(previewRows, existingCount === 0 ? 'replace' : importMode);
     setRawText('');
     setPreviewRows([]);
     setParseErrors([]);
@@ -288,26 +308,32 @@ export const BulkContentUploader: React.FC<BulkContentUploaderProps> = ({
               <CheckCircle2 className="w-4 h-4" />
               Preview: {previewRows.length} valid {previewRows.length === 1 ? 'item' : 'items'} ready
             </span>
-            <div className="flex items-center gap-2 text-[11px] font-bold">
-              <label className="inline-flex items-center gap-1 cursor-pointer">
-                <input
-                  type="radio"
-                  name={`import-mode-${gameId}`}
-                  checked={importMode === 'append'}
-                  onChange={() => setImportMode('append')}
-                />
-                Add to list
-              </label>
-              <label className="inline-flex items-center gap-1 cursor-pointer">
-                <input
-                  type="radio"
-                  name={`import-mode-${gameId}`}
-                  checked={importMode === 'replace'}
-                  onChange={() => setImportMode('replace')}
-                />
-                Replace list
-              </label>
-            </div>
+            {existingCount > 0 ? (
+              <div className="flex items-center gap-2 text-[11px] font-bold">
+                <label className="inline-flex items-center gap-1 cursor-pointer">
+                  <input
+                    type="radio"
+                    name={`import-mode-${gameId}`}
+                    checked={importMode === 'replace'}
+                    onChange={() => setImportMode('replace')}
+                  />
+                  Replace existing ({existingCount})
+                </label>
+                <label className="inline-flex items-center gap-1 cursor-pointer">
+                  <input
+                    type="radio"
+                    name={`import-mode-${gameId}`}
+                    checked={importMode === 'append'}
+                    onChange={() => setImportMode('append')}
+                  />
+                  Add to existing
+                </label>
+              </div>
+            ) : (
+              <span className="text-[11px] font-bold text-slate-600">
+                Adds only these {previewRows.length} imported items
+              </span>
+            )}
           </div>
 
           <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1">

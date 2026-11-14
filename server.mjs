@@ -11228,6 +11228,10 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
     const activeItems = [];
     const seen = new Set();
 
+    // Helper for announcement assignment publication check
+    const isAssignmentPublished = (row) =>
+      Boolean(row && !row.is_deleted && row.status === 'published' && !row.settings?.is_unpublished);
+
     // Helper for questions count
     const extractQuestionCount = (e) => {
       if (!e) return 0;
@@ -11248,6 +11252,7 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
 
     // A. Tasks
     (tasks || []).forEach(t => {
+      if (!isTeacher && !isAssignmentPublished(t)) return;
       const key = `task-${t.id}`;
       if (seen.has(key) || isMarkedRead(key, t.id)) return;
 
@@ -11472,7 +11477,7 @@ app.get('/api/classes/:classroomId/tasks', async (req, res) => {
       query = query.eq('category', category);
     }
 
-    const [{ data: tasks, error: tErr }, { data: students, error: sErr }, { data: studentOcrEvals }] = await Promise.all([
+    const [{ data: tasks, error: tErr }, { data: students, error: sErr }, { data: studentOcrEvals }, { data: classroomRow }, { data: memberRow }] = await Promise.all([
       query,
       serverSupabase
         .from('classroom_students')
@@ -11482,14 +11487,35 @@ app.get('/api/classes/:classroomId/tasks', async (req, res) => {
         .from('ocr_evaluations')
         .select('*')
         .eq('class_id', classroomId)
-        .eq('student_id', authData.user.id)
+        .eq('student_id', authData.user.id),
+      serverSupabase
+        .from('classrooms')
+        .select('teacher_id')
+        .eq('id', classroomId)
+        .maybeSingle(),
+      serverSupabase
+        .from('classroom_members')
+        .select('role')
+        .eq('classroom_id', classroomId)
+        .eq('profile_id', authData.user.id)
+        .maybeSingle()
     ]);
 
     if (tErr) throw tErr;
 
+    const userIsTeacher =
+      classroomRow?.teacher_id === authData.user.id ||
+      memberRow?.role === 'teacher' ||
+      memberRow?.role === 'co-teacher' ||
+      authData.isTeacher;
+
+    const visibleTasks = userIsTeacher
+      ? (tasks || [])
+      : (tasks || []).filter((t) => !t.is_deleted && t.status === 'published' && !t.settings?.is_unpublished);
+
     const totalStudents = students ? students.length : 0;
 
-    const formatted = (tasks || []).map((t) => {
+    const formatted = visibleTasks.map((t) => {
       const subs = t.submissions || [];
       const submittedCount = subs.length;
       const completedCount = subs.filter((s) => (s.status === 'graded' || (s.final_score != null && s.status !== 'evaluation_failed' && s.status !== 'ocr_failed'))).length;
@@ -11575,6 +11601,30 @@ app.get('/api/classes/tasks/:id', async (req, res) => {
 
     if (error || !task) {
       return res.status(404).json({ success: false, error: 'Task not found.' });
+    }
+
+    const [{ data: clsRow }, { data: memRow }] = await Promise.all([
+      serverSupabase.from('classrooms').select('teacher_id').eq('id', task.classroom_id).maybeSingle(),
+      serverSupabase
+        .from('classroom_members')
+        .select('role')
+        .eq('classroom_id', task.classroom_id)
+        .eq('profile_id', authData.user.id)
+        .maybeSingle()
+    ]);
+
+    const userIsTeacher =
+      clsRow?.teacher_id === authData.user.id ||
+      memRow?.role === 'teacher' ||
+      memRow?.role === 'co-teacher' ||
+      authData.isTeacher;
+
+    if (!userIsTeacher && (task.status !== 'published' || task.settings?.is_unpublished)) {
+      return res.status(403).json({
+        success: false,
+        code: 'ASSIGNMENT_UNPUBLISHED',
+        error: 'This activity is currently unpublished by your teacher and unavailable.'
+      });
     }
 
     // Check if user has an existing submission
@@ -11677,6 +11727,13 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
     if (tErr || !task) {
       console.warn(`[TaskSubmit] Task not found: ${taskId}`);
       return res.status(404).json({ success: false, error: 'Task not found.', code: 'TASK_NOT_FOUND' });
+    }
+    if (task.status !== 'published' || task.settings?.is_unpublished) {
+      return res.status(403).json({
+        success: false,
+        code: 'ASSIGNMENT_UNPUBLISHED',
+        error: 'This activity is currently unpublished by your teacher and unavailable.'
+      });
     }
 
     // Stage 2 & 3 Deadline Check: Reject new submissions after the task deadline unless late submissions are allowed
@@ -23291,12 +23348,19 @@ app.post('/api/games/submit-score', async (req, res) => {
     // 1. Verify assignment exists and belongs to the classroom as a Game Library assignment
     const { data: assignment, error: assignErr } = await serverSupabase
       .from('assignments')
-      .select('id, classroom_id, title, points, settings')
+      .select('id, classroom_id, title, points, status, is_deleted, settings')
       .eq('id', assignmentId)
       .single();
 
-    if (assignErr || !assignment) {
+    if (assignErr || !assignment || assignment.is_deleted) {
       return res.status(404).json({ success: false, error: 'Game assignment not found' });
+    }
+    if (assignment.status !== 'published' || assignment.settings?.is_unpublished) {
+      return res.status(403).json({
+        success: false,
+        code: 'ASSIGNMENT_UNPUBLISHED',
+        error: 'This game is currently unpublished and unavailable.'
+      });
     }
     if (assignment.classroom_id !== classroomId) {
       return res.status(400).json({ success: false, error: 'Assignment does not belong to this classroom' });

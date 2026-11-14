@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Plus, BookOpen } from 'lucide-react';
 import { Assignment } from '@/types/classroom';
 import { AssignmentCard } from './AssignmentCard';
+import { UnpublishConfirmModal } from './games/UnpublishConfirmModal';
 
 interface AssignmentListProps {
   assignments: Assignment[];
@@ -10,6 +11,8 @@ interface AssignmentListProps {
   onOpenSubmissions?: (assignment: Assignment) => void;
   onSubmitWork?: (assignment: Assignment) => void;
   onDeleteAssignment?: (assignmentId: string) => void;
+  onTogglePublish?: (assignment: Assignment, publish: boolean) => Promise<void> | void;
+  publishingAssignmentId?: string | null;
 }
 
 export const AssignmentList: React.FC<AssignmentListProps> = ({
@@ -18,9 +21,12 @@ export const AssignmentList: React.FC<AssignmentListProps> = ({
   onCreateAssignment,
   onOpenSubmissions,
   onSubmitWork,
-  onDeleteAssignment
+  onDeleteAssignment,
+  onTogglePublish,
+  publishingAssignmentId = null
 }) => {
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [confirmUnpublishTarget, setConfirmUnpublishTarget] = useState<Assignment | null>(null);
 
   const filteredAssignments = assignments.filter((a) => {
     if (filter === 'pending') {
@@ -106,10 +112,34 @@ export const AssignmentList: React.FC<AssignmentListProps> = ({
               onOpenSubmissions={onOpenSubmissions}
               onSubmitWork={onSubmitWork}
               onDeleteAssignment={onDeleteAssignment}
+              onRequestPublishToggle={
+                onTogglePublish
+                  ? (target, nextPublish) => {
+                      if (!nextPublish) {
+                        setConfirmUnpublishTarget(target);
+                      } else {
+                        onTogglePublish(target, true);
+                      }
+                    }
+                  : undefined
+              }
+              isPublishBusy={publishingAssignmentId === assignment.id}
             />
           ))}
         </div>
       )}
+
+      <UnpublishConfirmModal
+        isOpen={Boolean(confirmUnpublishTarget)}
+        gameTitle={confirmUnpublishTarget?.title}
+        loading={Boolean(confirmUnpublishTarget && publishingAssignmentId === confirmUnpublishTarget.id)}
+        onCancel={() => setConfirmUnpublishTarget(null)}
+        onConfirm={async () => {
+          if (!confirmUnpublishTarget || !onTogglePublish) return;
+          await onTogglePublish(confirmUnpublishTarget, false);
+          setConfirmUnpublishTarget(null);
+        }}
+      />
     </div>
   );
 };
