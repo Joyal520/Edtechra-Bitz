@@ -148,6 +148,11 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
         return;
       }
 
+      if (data.type === 'EDTECHRA_GAME_EXIT') {
+        onClose();
+        return;
+      }
+
       if (data.type === 'EDTECHRA_GAME_COMPLETE') {
         const raw = data.payload && typeof data.payload === 'object' ? data.payload : data;
         const payload: GameCompletionPayload = {
@@ -177,7 +182,7 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [isOpen, isPreview, title, maxPoints, config, gameId, assignmentId, levelId, submitScorePayload]);
+  }, [isOpen, isPreview, title, maxPoints, config, gameId, assignmentId, levelId, submitScorePayload, onClose]);
 
   if (!isOpen) return null;
 
@@ -462,7 +467,8 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
             src={catalogItem.htmlPath}
             title={`${catalogItem.name} - ${title}`}
             className="w-full h-full border-0 block"
-            allow="autoplay"
+            allow="autoplay; fullscreen"
+            allowFullScreen
           />
         </div>
       )}
