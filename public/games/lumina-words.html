@@ -250,6 +250,7 @@
             gap: 6px;
             margin-bottom: 10px;
             min-height: 44px;
+            contain: layout style;
         }
 
         .preview-slot {
@@ -270,7 +271,8 @@
             font-size: clamp(17px, 4.8vw, 22px);
             color: var(--ink-brown);
             text-shadow: 0 1px 0 rgba(255, 236, 188, 0.7);
-            transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease;
+            will-change: transform;
+            transition: transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
         .preview-slot.filled {
@@ -477,9 +479,11 @@
             touch-action: none;
             user-select: none;
             -webkit-user-select: none;
+            -webkit-touch-callout: none;
             display: flex;
             align-items: center;
             justify-content: center;
+            contain: layout style;
         }
 
         /* Subtle translucent circular ring hint behind the wooden tiles */
@@ -492,19 +496,19 @@
             pointer-events: none;
         }
 
-        #swipe-canvas-svg {
+        #swipe-line-canvas {
             position: absolute;
-            inset: 0;
-            width: 100%;
-            height: 100%;
+            inset: -24px;
+            width: calc(100% + 48px);
+            height: calc(100% + 48px);
             pointer-events: none;
-            overflow: visible;
             z-index: 8;
+            transform: translateZ(0);
         }
 
         .wheel-tile {
             position: absolute;
-            transform: translate(-50%, -50%);
+            transform: translate3d(-50%, -50%, 0);
             border-radius: 17px;
             background: linear-gradient(180deg, var(--tile-gold-top) 0%, var(--tile-gold-mid) 58%, var(--tile-gold-bot) 100%);
             border: 2.5px solid #fff1b8;
@@ -520,12 +524,14 @@
             color: var(--ink-brown);
             text-shadow: 0 1.5px 0 rgba(255, 240, 194, 0.72);
             cursor: pointer;
+            touch-action: none;
             z-index: 10;
-            transition: transform 0.14s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.14s ease, filter 0.14s ease;
+            will-change: transform;
+            transition: transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
         .wheel-tile.selected {
-            transform: translate(-50%, -50%) scale(1.1);
+            transform: translate3d(-50%, -50%, 0) scale(1.1);
             background: linear-gradient(180deg, #fff6c9 0%, #ffd457 60%, #ee981c 100%);
             border-color: #ffffff;
             box-shadow:
@@ -820,19 +826,7 @@
         <main class="wheel-stage">
             <div id="wheel-wrapper" aria-label="Letter wheel">
                 <div class="wheel-ring-backdrop"></div>
-                <svg id="swipe-canvas-svg">
-                    <defs>
-                        <filter id="glow-line" x="-30%" y="-30%" width="160%" height="160%">
-                            <feGaussianBlur stdDeviation="3.5" result="blur" />
-                            <feMerge>
-                                <feMergeNode in="blur" />
-                                <feMergeNode in="SourceGraphic" />
-                            </feMerge>
-                        </filter>
-                    </defs>
-                    <polyline id="swipe-line-glow" fill="none" stroke="rgba(255, 232, 160, 0.72)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow-line)" />
-                    <polyline id="swipe-line-core" fill="none" stroke="#ffffff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
+                <canvas id="swipe-line-canvas" aria-hidden="true"></canvas>
                 <div id="wheel-tiles-layer"></div>
             </div>
         </main>
@@ -1229,10 +1223,42 @@
             wheelItems: [], // [{ id, char, x, y, r, el }]
             activeIndices: [], // indices into state.wheelItems
             isDragging: false,
-            pointerId: null,
-            pointerPos: { x: 0, y: 0 },
             paused: false,
             totalWordsSolvedAcrossLevel: 0
+        };
+
+        /* High-frequency swipe tracking refs (no React/DOM allocations per pointermove) */
+        const SWIPE_CANVAS_PAD = 24;
+        const SWIPE_HIT_RATIO = 0.88;
+        const SWIPE_SEGMENT_HIT_RATIO = 0.82;
+        const swipeRefs = {
+            isDragging: false,
+            pointerId: null,
+            rectLeft: 0,
+            rectTop: 0,
+            rectSize: 256,
+            rectDirty: true,
+            pointerX: 0,
+            pointerY: 0,
+            prevPointerX: 0,
+            prevPointerY: 0,
+            rafId: 0,
+            lineDirty: false,
+            selectionDirty: false,
+            dragListenersAttached: false,
+            tileCount: 0,
+            tileCentersX: new Float32Array(MAX_WHEEL_LETTERS),
+            tileCentersY: new Float32Array(MAX_WHEEL_LETTERS),
+            hitRadiusSq: new Float32Array(MAX_WHEEL_LETTERS),
+            segHitRadiusSq: new Float32Array(MAX_WHEEL_LETTERS),
+            selectedMask: new Uint8Array(MAX_WHEEL_LETTERS),
+            renderedSelected: new Uint8Array(MAX_WHEEL_LETTERS),
+            slotElements: [],
+            baseSlotCount: 5,
+            renderedSlotWord: "",
+            canvasCtx: null,
+            canvasCssSize: 0,
+            canvasDpr: 0
         };
 
         /* ---------- DOM REFERENCES ---------- */
@@ -1246,8 +1272,7 @@
             feedbackChip: document.getElementById("feedback-chip"),
             wheelWrapper: document.getElementById("wheel-wrapper"),
             wheelTilesLayer: document.getElementById("wheel-tiles-layer"),
-            swipeLineGlow: document.getElementById("swipe-line-glow"),
-            swipeLineCore: document.getElementById("swipe-line-core"),
+            swipeCanvas: document.getElementById("swipe-line-canvas"),
             hintCountBadge: document.getElementById("hint-count-badge"),
             iconSoundOn: document.getElementById("icon-sound-on"),
             iconSoundOff: document.getElementById("icon-sound-off"),
@@ -1265,6 +1290,8 @@
             completeWordTags: document.getElementById("complete-word-tags"),
             btnContinuePuzzle: document.getElementById("btn-continue-puzzle")
         };
+
+        swipeRefs.canvasCtx = dom.swipeCanvas.getContext("2d");
 
         let feedbackTimer = null;
         function setFeedback(text, tone = "neutral") {
@@ -1310,6 +1337,7 @@
         }
 
         function loadPuzzleAtIndex(idx) {
+            cancelActiveSwipe();
             state.puzzleIndex = idx;
             const puzzle = currentPuzzle();
             if (!puzzle) return;
@@ -1317,9 +1345,7 @@
             state.foundWords.clear();
             state.revealedCharIndices.clear();
             state.hintsLeft = STANDALONE_HINTS_PER_PUZZLE;
-            state.activeIndices = [];
-            state.isDragging = false;
-            state.pointerId = null;
+            state.activeIndices.length = 0;
 
             state.wheelItems = puzzle.letters.slice(0, MAX_WHEEL_LETTERS).map((char, i) => ({
                 id: i,
@@ -1335,7 +1361,7 @@
             dom.hudCoins.textContent = String(state.coins);
             dom.hintCountBadge.textContent = String(state.hintsLeft);
 
-            renderActiveSlots("", "idle");
+            initActiveSlotsForPuzzle(puzzle);
             renderStarsRow();
             renderWordPills();
             renderWheel();
@@ -1344,27 +1370,87 @@
         }
 
         /* ---------- RENDERING: BOARD SLOTS, STARS, WORD PILLS ---------- */
-        function renderActiveSlots(word, status = "idle") {
-            const puzzle = currentPuzzle();
+        function ensureSlotPool(targetCount) {
+            while (swipeRefs.slotElements.length < targetCount) {
+                const slot = document.createElement("div");
+                slot.className = "preview-slot";
+                swipeRefs.slotElements.push(slot);
+                dom.activeSlotsRow.appendChild(slot);
+            }
+        }
+
+        function initActiveSlotsForPuzzle(puzzle) {
             const longestWord = puzzle
                 ? Math.max(4, ...puzzle.words.map((w) => w.word.length))
                 : 5;
-            const slotCount = Math.min(MAX_WORD_LEN, Math.max(longestWord, word.length));
-
+            swipeRefs.baseSlotCount = Math.min(MAX_WORD_LEN, longestWord);
+            swipeRefs.renderedSlotWord = "";
             dom.activeSlotsRow.innerHTML = "";
+            dom.activeSlotsRow.classList.remove("shake");
+            swipeRefs.slotElements = [];
+            ensureSlotPool(MAX_WORD_LEN);
+            for (let i = 0; i < MAX_WORD_LEN; i++) {
+                swipeRefs.slotElements[i].classList.toggle("hidden", i >= swipeRefs.baseSlotCount);
+            }
+        }
+
+        function syncActiveSlotsFast(word) {
+            if (word === swipeRefs.renderedSlotWord) return;
+            swipeRefs.renderedSlotWord = word;
+
+            const slotCount = Math.min(MAX_WORD_LEN, Math.max(swipeRefs.baseSlotCount, word.length));
+            if (dom.activeSlotsRow.classList.contains("shake")) {
+                dom.activeSlotsRow.classList.remove("shake");
+            }
+            const pool = swipeRefs.slotElements;
+            for (let i = 0; i < pool.length; i++) {
+                const slot = pool[i];
+                const shouldHide = i >= slotCount;
+                if (slot.classList.contains("hidden") !== shouldHide) {
+                    slot.classList.toggle("hidden", shouldHide);
+                }
+                if (!shouldHide) {
+                    const ch = word[i] || "";
+                    if (slot.textContent !== ch) {
+                        slot.textContent = ch;
+                    }
+                    const isFilled = ch.length > 0;
+                    if (slot.classList.contains("filled") !== isFilled) {
+                        slot.classList.toggle("filled", isFilled);
+                    }
+                    if (slot.classList.contains("pop-success")) slot.classList.remove("pop-success");
+                    if (slot.classList.contains("pop-already")) slot.classList.remove("pop-already");
+                }
+            }
+        }
+
+        function renderActiveSlots(word, status = "idle") {
+            if (status === "idle" && swipeRefs.slotElements.length > 0) {
+                syncActiveSlotsFast(word);
+                return;
+            }
+
+            if (swipeRefs.slotElements.length === 0) {
+                initActiveSlotsForPuzzle(currentPuzzle());
+            }
+
+            const slotCount = Math.min(MAX_WORD_LEN, Math.max(swipeRefs.baseSlotCount, word.length));
+            swipeRefs.renderedSlotWord = status === "idle" ? word : "\0";
             dom.activeSlotsRow.classList.toggle("shake", status === "error");
 
-            for (let i = 0; i < slotCount; i++) {
-                const slot = document.createElement("div");
-                const ch = word[i] || "";
-                slot.className = "preview-slot";
-                if (ch) {
-                    slot.classList.add("filled");
-                    if (status === "success") slot.classList.add("pop-success");
-                    if (status === "already") slot.classList.add("pop-already");
+            const pool = swipeRefs.slotElements;
+            for (let i = 0; i < pool.length; i++) {
+                const slot = pool[i];
+                const shouldHide = i >= slotCount;
+                slot.classList.toggle("hidden", shouldHide);
+                if (!shouldHide) {
+                    const ch = word[i] || "";
+                    slot.textContent = ch;
+                    const hasChar = ch.length > 0;
+                    slot.classList.toggle("filled", hasChar);
+                    slot.classList.toggle("pop-success", hasChar && status === "success");
+                    slot.classList.toggle("pop-already", hasChar && status === "already");
                 }
-                slot.textContent = ch;
-                dom.activeSlotsRow.appendChild(slot);
             }
         }
 
@@ -1443,11 +1529,40 @@
         }
 
         /* ---------- RENDERING: RESPONSIVE CIRCULAR LETTER WHEEL ---------- */
-        function renderWheel() {
+        function refreshWheelRect() {
             const rect = dom.wheelWrapper.getBoundingClientRect();
+            swipeRefs.rectLeft = rect.left;
+            swipeRefs.rectTop = rect.top;
+            swipeRefs.rectSize = rect.width || 256;
+            swipeRefs.rectDirty = false;
+            return rect;
+        }
+
+        function syncSwipeCanvasDimensions(wheelSize) {
+            const cssSize = wheelSize + SWIPE_CANVAS_PAD * 2;
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            if (swipeRefs.canvasCssSize !== cssSize || swipeRefs.canvasDpr !== dpr) {
+                swipeRefs.canvasCssSize = cssSize;
+                swipeRefs.canvasDpr = dpr;
+                dom.swipeCanvas.width = Math.round(cssSize * dpr);
+                dom.swipeCanvas.height = Math.round(cssSize * dpr);
+                if (swipeRefs.canvasCtx) {
+                    swipeRefs.canvasCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                    swipeRefs.canvasCtx.lineCap = "round";
+                    swipeRefs.canvasCtx.lineJoin = "round";
+                }
+            }
+        }
+
+        function renderWheel() {
+            const rect = refreshWheelRect();
             const size = rect.width || 256;
             const n = state.wheelItems.length;
             dom.wheelTilesLayer.innerHTML = "";
+            swipeRefs.tileCount = n;
+            swipeRefs.selectedMask.fill(0);
+            swipeRefs.renderedSelected.fill(0);
+            syncSwipeCanvasDimensions(size);
             if (n === 0) return;
 
             // Spacious tile sizing guaranteed never to overlap up to 8 letters
@@ -1464,10 +1579,18 @@
                 const angle = -Math.PI / 2 + (idx * Math.PI * 2) / n;
                 const x = center + Math.cos(angle) * ringRadius;
                 const y = center + Math.sin(angle) * ringRadius;
+                const r = clampedTile / 2;
 
                 item.x = x;
                 item.y = y;
-                item.r = clampedTile / 2;
+                item.r = r;
+
+                swipeRefs.tileCentersX[idx] = x;
+                swipeRefs.tileCentersY[idx] = y;
+                const directR = r * SWIPE_HIT_RATIO;
+                const segR = r * SWIPE_SEGMENT_HIT_RATIO;
+                swipeRefs.hitRadiusSq[idx] = directR * directR;
+                swipeRefs.segHitRadiusSq[idx] = segR * segR;
 
                 const tile = document.createElement("div");
                 tile.className = "wheel-tile";
@@ -1483,115 +1606,299 @@
             });
         }
 
-        /* ---------- SMOOTH CONTINUOUS SWIPE INTERACTION ---------- */
-        function getWheelLocalPos(clientX, clientY) {
-            const rect = dom.wheelWrapper.getBoundingClientRect();
-            return { x: clientX - rect.left, y: clientY - rect.top };
-        }
-
-        function findHitTileIndex(pos) {
+        /* ---------- HIGH-FPS CONTINUOUS SWIPE INTERACTION (ZERO-ALLOC POINTER + RAF + CANVAS) ---------- */
+        function findDirectHitTileIndex(px, py) {
+            const count = swipeRefs.tileCount;
+            const xs = swipeRefs.tileCentersX;
+            const ys = swipeRefs.tileCentersY;
+            const radSq = swipeRefs.hitRadiusSq;
             let bestIdx = -1;
-            let bestDist = Infinity;
-            for (let i = 0; i < state.wheelItems.length; i++) {
-                const item = state.wheelItems[i];
-                const dx = pos.x - item.x;
-                const dy = pos.y - item.y;
-                const dist = Math.hypot(dx, dy);
-                // Tight hit radius (82% of half-width) prevents accidental neighbor hits
-                if (dist <= item.r * 0.86 && dist < bestDist) {
-                    bestDist = dist;
+            let bestDistSq = Infinity;
+
+            for (let i = 0; i < count; i++) {
+                const dx = px - xs[i];
+                const dy = py - ys[i];
+                const d2 = dx * dx + dy * dy;
+                if (d2 <= radSq[i] && d2 < bestDistSq) {
+                    bestDistSq = d2;
                     bestIdx = i;
                 }
             }
             return bestIdx;
         }
 
-        function updateSwipeVisuals() {
-            const activeWord = state.activeIndices.map((i) => state.wheelItems[i].char).join("");
-            renderActiveSlots(activeWord, "idle");
+        function tryAddSelectedTile(tileIdx) {
+            if (swipeRefs.selectedMask[tileIdx] !== 0) return false;
+            swipeRefs.selectedMask[tileIdx] = 1;
+            state.activeIndices.push(tileIdx);
+            sound.playSelect(state.activeIndices.length - 1);
+            return true;
+        }
 
-            state.wheelItems.forEach((item, idx) => {
-                if (item.el) {
-                    item.el.classList.toggle("selected", state.activeIndices.includes(idx));
+        function sweepSegmentTiles(ax, ay, bx, by, skipTileIdx, directHitIdx) {
+            const abx = bx - ax;
+            const aby = by - ay;
+            const segLenSq = abx * abx + aby * aby;
+            if (segLenSq <= 64) return false;
+
+            const count = swipeRefs.tileCount;
+            const xs = swipeRefs.tileCentersX;
+            const ys = swipeRefs.tileCentersY;
+            const segRadSq = swipeRefs.segHitRadiusSq;
+            const mask = swipeRefs.selectedMask;
+
+            // Track up to 2 intermediate crossed tiles chronologically without array allocation
+            let firstIdx = -1;
+            let firstT = 2;
+            let secondIdx = -1;
+            let secondT = 2;
+
+            for (let i = 0; i < count; i++) {
+                if (mask[i] !== 0 || i === skipTileIdx || i === directHitIdx) continue;
+                const cx = xs[i];
+                const cy = ys[i];
+                const t = ((cx - ax) * abx + (cy - ay) * aby) / segLenSq;
+                if (t <= 0 || t >= 1) continue;
+
+                const projX = ax + abx * t;
+                const projY = ay + aby * t;
+                const dx = cx - projX;
+                const dy = cy - projY;
+                if (dx * dx + dy * dy <= segRadSq[i]) {
+                    if (t < firstT) {
+                        secondIdx = firstIdx;
+                        secondT = firstT;
+                        firstIdx = i;
+                        firstT = t;
+                    } else if (t < secondT) {
+                        secondIdx = i;
+                        secondT = t;
+                    }
                 }
-            });
-
-            if (state.activeIndices.length === 0) {
-                clearSwipeLine();
-                return;
             }
 
-            const points = state.activeIndices.map((idx) => {
-                const it = state.wheelItems[idx];
-                return `${it.x},${it.y}`;
-            });
-            if (state.isDragging) {
-                points.push(`${state.pointerPos.x},${state.pointerPos.y}`);
+            let added = false;
+            if (firstIdx !== -1 && tryAddSelectedTile(firstIdx)) added = true;
+            if (secondIdx !== -1 && tryAddSelectedTile(secondIdx)) added = true;
+            return added;
+        }
+
+        function drawSwipeLine() {
+            const ctx = swipeRefs.canvasCtx;
+            if (!ctx) return;
+            const size = swipeRefs.canvasCssSize;
+            ctx.clearRect(0, 0, size, size);
+
+            const indices = state.activeIndices;
+            const len = indices.length;
+            if (len === 0) return;
+
+            const pad = SWIPE_CANVAS_PAD;
+            const xs = swipeRefs.tileCentersX;
+            const ys = swipeRefs.tileCentersY;
+
+            ctx.beginPath();
+            const first = indices[0];
+            ctx.moveTo(xs[first] + pad, ys[first] + pad);
+            for (let i = 1; i < len; i++) {
+                const idx = indices[i];
+                ctx.lineTo(xs[idx] + pad, ys[idx] + pad);
             }
-            const ptsStr = points.join(" ");
-            dom.swipeLineGlow.setAttribute("points", ptsStr);
-            dom.swipeLineCore.setAttribute("points", ptsStr);
+            if (swipeRefs.isDragging) {
+                ctx.lineTo(swipeRefs.pointerX + pad, swipeRefs.pointerY + pad);
+            }
+
+            // Lightweight 3-pass luminous glow beam (replaces heavy SVG feGaussianBlur)
+            ctx.lineWidth = 17;
+            ctx.strokeStyle = "rgba(255, 224, 128, 0.25)";
+            ctx.stroke();
+
+            ctx.lineWidth = 10.5;
+            ctx.strokeStyle = "rgba(255, 236, 168, 0.68)";
+            ctx.stroke();
+
+            ctx.lineWidth = 5.5;
+            ctx.strokeStyle = "#ffffff";
+            ctx.stroke();
         }
 
         function clearSwipeLine() {
-            dom.swipeLineGlow.setAttribute("points", "");
-            dom.swipeLineCore.setAttribute("points", "");
+            const ctx = swipeRefs.canvasCtx;
+            if (ctx && swipeRefs.canvasCssSize > 0) {
+                ctx.clearRect(0, 0, swipeRefs.canvasCssSize, swipeRefs.canvasCssSize);
+            }
+        }
+
+        function syncTileSelectionClasses() {
+            const count = swipeRefs.tileCount;
+            const mask = swipeRefs.selectedMask;
+            const rendered = swipeRefs.renderedSelected;
+            const items = state.wheelItems;
+
+            for (let i = 0; i < count; i++) {
+                const want = mask[i];
+                if (rendered[i] !== want) {
+                    rendered[i] = want;
+                    if (items[i] && items[i].el) {
+                        items[i].el.classList.toggle("selected", want === 1);
+                    }
+                }
+            }
+        }
+
+        function buildActiveWordString() {
+            const indices = state.activeIndices;
+            let word = "";
+            for (let i = 0; i < indices.length; i++) {
+                word += state.wheelItems[indices[i]].char;
+            }
+            return word;
+        }
+
+        function flushSwipeFrame() {
+            swipeRefs.rafId = 0;
+            if (!swipeRefs.isDragging) return;
+
+            if (swipeRefs.selectionDirty) {
+                syncTileSelectionClasses();
+                syncActiveSlotsFast(buildActiveWordString());
+                swipeRefs.selectionDirty = false;
+            }
+            if (swipeRefs.lineDirty) {
+                drawSwipeLine();
+                swipeRefs.lineDirty = false;
+            }
+        }
+
+        function scheduleSwipeFrame() {
+            if (swipeRefs.rafId === 0) {
+                swipeRefs.rafId = requestAnimationFrame(flushSwipeFrame);
+            }
+        }
+
+        function attachDragListeners() {
+            if (swipeRefs.dragListenersAttached) return;
+            swipeRefs.dragListenersAttached = true;
+            dom.wheelWrapper.addEventListener("pointermove", handleWheelPointerMove, { passive: true });
+            dom.wheelWrapper.addEventListener("pointerup", handleWheelPointerEnd, { passive: true });
+            dom.wheelWrapper.addEventListener("pointercancel", handleWheelPointerEnd, { passive: true });
+            dom.wheelWrapper.addEventListener("lostpointercapture", handleWheelPointerEnd, { passive: true });
+        }
+
+        function detachDragListeners() {
+            if (!swipeRefs.dragListenersAttached) return;
+            swipeRefs.dragListenersAttached = false;
+            dom.wheelWrapper.removeEventListener("pointermove", handleWheelPointerMove);
+            dom.wheelWrapper.removeEventListener("pointerup", handleWheelPointerEnd);
+            dom.wheelWrapper.removeEventListener("pointercancel", handleWheelPointerEnd);
+            dom.wheelWrapper.removeEventListener("lostpointercapture", handleWheelPointerEnd);
+        }
+
+        function cancelActiveSwipe() {
+            if (swipeRefs.rafId !== 0) {
+                cancelAnimationFrame(swipeRefs.rafId);
+                swipeRefs.rafId = 0;
+            }
+            if (swipeRefs.pointerId !== null) {
+                try {
+                    if (dom.wheelWrapper.hasPointerCapture && dom.wheelWrapper.hasPointerCapture(swipeRefs.pointerId)) {
+                        dom.wheelWrapper.releasePointerCapture(swipeRefs.pointerId);
+                    }
+                } catch (_) {}
+            }
+            detachDragListeners();
+            swipeRefs.isDragging = false;
+            state.isDragging = false;
+            swipeRefs.pointerId = null;
+            swipeRefs.lineDirty = false;
+            swipeRefs.selectionDirty = false;
+            state.activeIndices.length = 0;
+            swipeRefs.selectedMask.fill(0);
+            syncTileSelectionClasses();
+            clearSwipeLine();
         }
 
         function handleWheelPointerDown(e) {
-            if (state.paused || !currentPuzzle()) return;
-            const pos = getWheelLocalPos(e.clientX, e.clientY);
-            const hit = findHitTileIndex(pos);
+            if (state.paused || !currentPuzzle() || swipeRefs.isDragging) return;
+            if (e.pointerType === "mouse" && e.button !== 0) return;
+
+            refreshWheelRect();
+            const px = e.clientX - swipeRefs.rectLeft;
+            const py = e.clientY - swipeRefs.rectTop;
+            const hit = findDirectHitTileIndex(px, py);
             if (hit === -1) return;
 
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             try { dom.wheelWrapper.setPointerCapture(e.pointerId); } catch (_) {}
 
+            swipeRefs.isDragging = true;
             state.isDragging = true;
-            state.pointerId = e.pointerId;
-            state.pointerPos = pos;
-            state.activeIndices = [hit];
+            swipeRefs.pointerId = e.pointerId;
+            swipeRefs.pointerX = px;
+            swipeRefs.pointerY = py;
+            swipeRefs.prevPointerX = px;
+            swipeRefs.prevPointerY = py;
+
+            state.activeIndices.length = 0;
+            swipeRefs.selectedMask.fill(0);
+            swipeRefs.selectedMask[hit] = 1;
+            state.activeIndices.push(hit);
+
+            swipeRefs.selectionDirty = true;
+            swipeRefs.lineDirty = true;
+
             sound.playSelect(0);
-            updateSwipeVisuals();
+            attachDragListeners();
+            flushSwipeFrame();
         }
 
         function handleWheelPointerMove(e) {
-            if (!state.isDragging || (state.pointerId !== null && e.pointerId !== state.pointerId)) return;
-            e.preventDefault();
+            if (!swipeRefs.isDragging || (swipeRefs.pointerId !== null && e.pointerId !== swipeRefs.pointerId)) return;
 
-            const pos = getWheelLocalPos(e.clientX, e.clientY);
-            state.pointerPos = pos;
+            if (swipeRefs.rectDirty) refreshWheelRect();
+            const px = e.clientX - swipeRefs.rectLeft;
+            const py = e.clientY - swipeRefs.rectTop;
 
-            const hit = findHitTileIndex(pos);
-            if (hit !== -1) {
-                const existingPos = state.activeIndices.indexOf(hit);
-                if (existingPos === -1) {
-                    state.activeIndices.push(hit);
-                    sound.playSelect(state.activeIndices.length - 1);
-                } else if (
-                    state.activeIndices.length >= 2 &&
-                    existingPos === state.activeIndices.length - 2
-                ) {
-                    // Backtrack one letter smoothly
-                    state.activeIndices.pop();
-                    sound.playSelect(state.activeIndices.length - 1);
+            const directHit = findDirectHitTileIndex(px, py);
+            let skippedBacktrackTile = -1;
+            let selectionChanged = false;
+
+            const len = state.activeIndices.length;
+            if (
+                directHit !== -1 &&
+                len >= 2 &&
+                directHit === state.activeIndices[len - 2]
+            ) {
+                // Backtrack one letter smoothly without re-selecting removed tile
+                skippedBacktrackTile = state.activeIndices.pop();
+                swipeRefs.selectedMask[skippedBacktrackTile] = 0;
+                sound.playSelect(state.activeIndices.length - 1);
+                selectionChanged = true;
+            } else {
+                // Catch fast continuous swipes that jump across intermediate tiles
+                if (sweepSegmentTiles(swipeRefs.prevPointerX, swipeRefs.prevPointerY, px, py, skippedBacktrackTile, directHit)) {
+                    selectionChanged = true;
+                }
+                if (directHit !== -1 && tryAddSelectedTile(directHit)) {
+                    selectionChanged = true;
                 }
             }
 
-            updateSwipeVisuals();
+            swipeRefs.prevPointerX = px;
+            swipeRefs.prevPointerY = py;
+            swipeRefs.pointerX = px;
+            swipeRefs.pointerY = py;
+
+            if (selectionChanged) swipeRefs.selectionDirty = true;
+            swipeRefs.lineDirty = true;
+            scheduleSwipeFrame();
         }
 
         function handleWheelPointerEnd(e) {
-            if (!state.isDragging || (state.pointerId !== null && e.pointerId !== state.pointerId)) return;
-            try { dom.wheelWrapper.releasePointerCapture(e.pointerId); } catch (_) {}
+            if (!swipeRefs.isDragging || (swipeRefs.pointerId !== null && e.pointerId !== swipeRefs.pointerId)) return;
 
-            const formedWord = state.activeIndices.map((i) => state.wheelItems[i].char).join("");
-            state.isDragging = false;
-            state.pointerId = null;
-            state.activeIndices = [];
-
-            state.wheelItems.forEach((item) => item.el && item.el.classList.remove("selected"));
-            clearSwipeLine();
+            const formedWord = buildActiveWordString();
+            cancelActiveSwipe();
 
             if (formedWord.length >= MIN_WORD_LEN) {
                 evaluateSubmittedWord(formedWord);
@@ -1610,14 +1917,18 @@
                 sound.playError();
                 renderActiveSlots(word, "error");
                 setFeedback(`"${word}" is not in this puzzle`, "error");
-                setTimeout(() => renderActiveSlots("", "idle"), 360);
+                setTimeout(() => {
+                    if (!swipeRefs.isDragging) renderActiveSlots("", "idle");
+                }, 360);
                 return;
             }
 
             if (state.foundWords.has(word)) {
                 renderActiveSlots(word, "already");
                 setFeedback(`"${word}" already found!`, "neutral");
-                setTimeout(() => renderActiveSlots("", "idle"), 420);
+                setTimeout(() => {
+                    if (!swipeRefs.isDragging) renderActiveSlots("", "idle");
+                }, 420);
                 return;
             }
 
@@ -1643,7 +1954,7 @@
             );
 
             setTimeout(() => {
-                if (!state.isDragging) renderActiveSlots("", "idle");
+                if (!swipeRefs.isDragging) renderActiveSlots("", "idle");
             }, 460);
 
             if (state.foundWords.size >= puzzle.words.length) {
@@ -1771,6 +2082,7 @@
         }
 
         function openPauseModal() {
+            cancelActiveSwipe();
             state.paused = true;
             dom.btnRestartPuzzle.classList.toggle(
                 "hidden",
@@ -1782,6 +2094,7 @@
         function closePauseModal() {
             state.paused = false;
             dom.modalPause.classList.add("hidden");
+            swipeRefs.rectDirty = true;
         }
 
         function openCluesModal() {
@@ -1804,14 +2117,8 @@
         }
 
         /* ---------- WIRE EVENTS ---------- */
+        // Unified Pointer Events: active drag listeners are attached only during a swipe and detached on end/cancel.
         dom.wheelWrapper.addEventListener("pointerdown", handleWheelPointerDown);
-        dom.wheelWrapper.addEventListener("pointermove", handleWheelPointerMove);
-        dom.wheelWrapper.addEventListener("pointerup", handleWheelPointerEnd);
-        dom.wheelWrapper.addEventListener("pointercancel", handleWheelPointerEnd);
-        // Ensure older mobile WebViews never scroll vertically while finger starts on the wheel
-        dom.wheelWrapper.addEventListener("touchmove", (e) => {
-            if (state.isDragging) e.preventDefault();
-        }, { passive: false });
 
         document.getElementById("btn-shuffle").addEventListener("click", handleShuffle);
         document.getElementById("btn-hint").addEventListener("click", handleHint);
@@ -1848,7 +2155,14 @@
 
         window.addEventListener("resize", () => {
             if (currentPuzzle()) renderWheel();
-        });
+            else swipeRefs.rectDirty = true;
+        }, { passive: true });
+
+        window.addEventListener("scroll", () => {
+            swipeRefs.rectDirty = true;
+        }, { passive: true });
+
+        window.addEventListener("blur", cancelActiveSwipe, { passive: true });
 
         /* ---------- EDTECHRA INTEGRATION BRIDGE ---------- */
         window.onload = () => {
