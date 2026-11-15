@@ -405,37 +405,91 @@
   }
 }
 
-/* Mobile adjustments: nearly full-screen card experience, no horizontal overflow */
-@media (max-width: 640px) {
+/* Banner animations */
+.tm-banner-mascot {
+  animation: tmMascotFloat 4.2s ease-in-out infinite;
+  will-change: transform;
+}
+
+.tm-banner-stack {
+  animation: tmStackFloat 4.8s ease-in-out infinite;
+  will-change: transform;
+}
+
+.tm-banner-sparkle {
+  animation: tmSparkle 3.4s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.tm-banner-sparkle-delay {
+  animation: tmSparkle 3.4s ease-in-out 1.5s infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes tmMascotFloat {
+  0%,
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-4px) rotate(-1.5deg);
+  }
+}
+
+@keyframes tmStackFloat {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+/* Mobile adjustments: ONLY show the active motivational card + close button */
+@media (max-width: 639px) {
   .tm-motivation-overlay {
-    padding: max(8px, env(safe-area-inset-top, 8px)) 8px max(8px, env(safe-area-inset-bottom, 8px));
+    padding: max(12px, env(safe-area-inset-top, 12px)) 14px max(12px, env(safe-area-inset-bottom, 12px));
   }
 
   .tm-motivation-dialog {
-    border-radius: 24px;
-    padding: 18px 12px 18px;
-    max-height: calc(100dvh - 16px);
+    border-radius: 26px;
+    padding: 48px 16px 24px;
+    max-width: 390px;
+    max-height: calc(100dvh - 24px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .tm-modal-header,
+  .tm-nav-btn,
+  .tm-ghost,
+  .tm-controls-row,
+  .tm-days-nav,
+  .tm-ambient-sparkle {
+    display: none !important;
   }
 
   .tm-stage {
-    gap: 8px;
-    padding: 14px 2px 8px;
+    width: 100%;
+    gap: 0;
+    padding: 4px 0;
   }
 
-  .tm-nav-btn {
-    width: 38px;
-    height: 38px;
-    font-size: 20px;
+  .tm-stack-wrap {
+    width: 100%;
   }
 
   .tm-stack {
-    width: min(260px, 66vw);
+    width: min(300px, 82vw);
+    max-height: 70dvh;
   }
 
-  .tm-day-btn {
-    width: 34px;
-    height: 34px;
-    font-size: 13px;
+  .tm-card-text {
+    font-size: clamp(20px, 5.4vw, 24px);
+    padding: 0 18px 22px;
   }
 }
 
@@ -447,6 +501,10 @@
   .tm-ambient-sparkle,
   .tm-star-twinkle,
   .tm-star-twinkle-delay,
+  .tm-banner-mascot,
+  .tm-banner-stack,
+  .tm-banner-sparkle,
+  .tm-banner-sparkle-delay,
   .tm-nav-btn,
   .tm-pill-btn,
   .tm-day-btn,

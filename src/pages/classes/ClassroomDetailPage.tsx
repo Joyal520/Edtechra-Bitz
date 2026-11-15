@@ -1312,9 +1312,6 @@ export const ClassroomDetailPage: React.FC = () => {
 
               </div>
 
-              {/* Compact Today's Motivation Banner */}
-              <TodaysMotivationBanner />
-
             </div>
 
             {/* RIGHT on Desktop: Open scenic space framing the full-bleed header artwork with optional teacher edit pill */}
@@ -1338,6 +1335,9 @@ export const ClassroomDetailPage: React.FC = () => {
             </div>
 
           </div>
+
+          {/* Full-width Today's Motivation Banner */}
+          <TodaysMotivationBanner />
 
         </section>
 

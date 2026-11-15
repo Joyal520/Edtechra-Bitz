@@ -447,9 +447,6 @@ export const ClassroomHeader: React.FC<ClassroomHeaderProps> = ({
               </div>
             )}
           </div>
-
-          {/* Compact Today's Motivation Banner */}
-          <TodaysMotivationBanner />
         </div>
 
         {/* RIGHT on Desktop: Open scenic space framing the full-bleed header artwork with optional teacher edit pill */}
@@ -469,6 +466,9 @@ export const ClassroomHeader: React.FC<ClassroomHeaderProps> = ({
           )}
         </div>
       </div>
+
+      {/* Full-width Today's Motivation Banner */}
+      <TodaysMotivationBanner />
     </div>
   );
 };
