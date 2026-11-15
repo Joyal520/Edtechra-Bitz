@@ -26,6 +26,30 @@ interface ConfettiPieceConfig {
   delay: string;
 }
 
+interface DustParticleConfig {
+  left: string;
+  size: number;
+  dur: string;
+  delay: string;
+  op: number;
+  drift: string;
+}
+
+const GOLDEN_DUST_PARTICLES: DustParticleConfig[] = [
+  { left: '12%', size: 3, dur: '7.8s', delay: '-1.2s', op: 0.55, drift: '10px' },
+  { left: '22%', size: 4, dur: '9.4s', delay: '-4.5s', op: 0.65, drift: '-12px' },
+  { left: '31%', size: 2.5, dur: '6.9s', delay: '-2.1s', op: 0.5, drift: '8px' },
+  { left: '40%', size: 3.5, dur: '8.6s', delay: '-6.0s', op: 0.7, drift: '-9px' },
+  { left: '47%', size: 4.5, dur: '7.2s', delay: '-0.8s', op: 0.78, drift: '14px' },
+  { left: '53%', size: 3, dur: '9.8s', delay: '-3.4s', op: 0.68, drift: '-11px' },
+  { left: '61%', size: 4, dur: '8.1s', delay: '-5.2s', op: 0.65, drift: '9px' },
+  { left: '69%', size: 2.5, dur: '7.4s', delay: '-1.9s', op: 0.52, drift: '-10px' },
+  { left: '78%', size: 3.5, dur: '10.2s', delay: '-4.0s', op: 0.6, drift: '12px' },
+  { left: '88%', size: 3, dur: '8.4s', delay: '-2.7s', op: 0.55, drift: '-8px' },
+  { left: '17%', size: 2.5, dur: '11.0s', delay: '-7.5s', op: 0.45, drift: '6px' },
+  { left: '83%', size: 4, dur: '9.0s', delay: '-6.3s', op: 0.6, drift: '-14px' },
+];
+
 const CONFETTI_BURST_PIECES: ConfettiPieceConfig[] = [
   { left: '46%', top: '34%', tx: '-96px', ty: '-64px', rot: '-140deg', color: '#fbbf24', size: 8, delay: '0ms' },
   { left: '54%', top: '34%', tx: '92px', ty: '-68px', rot: '165deg', color: '#8b5cf6', size: 8, delay: '30ms' },
@@ -36,6 +60,31 @@ const CONFETTI_BURST_PIECES: ConfettiPieceConfig[] = [
   { left: '44%', top: '38%', tx: '-118px', ty: '-36px', rot: '-90deg', color: '#60a5fa', size: 6, delay: '70ms' },
   { left: '56%', top: '38%', tx: '114px', ty: '-40px', rot: '130deg', color: '#f472b6', size: 6, delay: '50ms' },
 ];
+
+const GoldenDustOverlay: React.FC = () => (
+  <div
+    className="absolute inset-0 overflow-hidden pointer-events-none select-none z-20"
+    aria-hidden="true"
+  >
+    {GOLDEN_DUST_PARTICLES.map((p, idx) => (
+      <span
+        key={idx}
+        className="cc-dust-particle"
+        style={
+          {
+            left: p.left,
+            width: `${p.size}px`,
+            height: `${p.size}px`,
+            '--cc-dur': p.dur,
+            '--cc-delay': p.delay,
+            '--cc-op': String(p.op),
+            '--cc-drift': p.drift,
+          } as React.CSSProperties
+        }
+      />
+    ))}
+  </div>
+);
 
 const getInitials = (name: string): string => {
   const parts = sanitizeLeaderboardStudentName(name).trim().split(/\s+/);
@@ -67,14 +116,14 @@ const ChampionAvatar: React.FC<ChampionAvatarProps> = ({ entry, rank, isCurrentU
     rank === 1
       ? 'p-[3px] bg-gradient-to-br from-yellow-100 via-amber-400 to-amber-600 shadow-[0_8px_18px_rgba(245,158,11,0.42)]'
       : rank === 2
-        ? 'p-[3px] bg-gradient-to-br from-white via-sky-300 to-blue-500 shadow-[0_6px_14px_rgba(59,130,246,0.3)]'
+        ? 'p-[3px] bg-gradient-to-br from-white via-slate-300 to-slate-500 shadow-[0_6px_14px_rgba(71,85,105,0.3)]'
         : 'p-[3px] bg-gradient-to-br from-amber-100 via-orange-300 to-orange-600 shadow-[0_6px_14px_rgba(234,88,12,0.3)]';
 
   const initialsBgClass =
     rank === 1
       ? 'from-amber-400 to-orange-500'
       : rank === 2
-        ? 'from-sky-400 to-blue-600'
+        ? 'from-slate-400 to-slate-600'
         : 'from-orange-400 to-amber-600';
 
   if (!entry) {
@@ -126,6 +175,7 @@ interface PodiumSpotConfig {
   columnClass: string;
   pillarClass: string;
   pillarHeightClass: string;
+  topCapClass: string;
   xpTextClass: string;
   numeralClass: string;
   delayClass: string;
@@ -177,9 +227,10 @@ export const ClassChampionsPodium: React.FC<ClassChampionsPodiumProps> = ({
     {
       rank: 2,
       entry: rank2,
-      columnClass: 'flex-1 min-w-0 max-w-[104px]',
-      pillarClass: 'cc-pillar-silver border border-blue-200/80',
+      columnClass: 'flex-1 min-w-0 max-w-[106px]',
+      pillarClass: 'cc-pillar-silver border border-slate-200/80',
       pillarHeightClass: 'h-[112px] sm:h-[130px]',
+      topCapClass: 'bg-slate-100/80 border-slate-200',
       xpTextClass: 'text-blue-600',
       numeralClass: 'text-2xl sm:text-[28px]',
       delayClass: 'cc-fade-up-delay-2',
@@ -187,9 +238,10 @@ export const ClassChampionsPodium: React.FC<ClassChampionsPodiumProps> = ({
     {
       rank: 1,
       entry: rank1,
-      columnClass: 'flex-[1.15] min-w-0 max-w-[120px] z-10',
+      columnClass: 'flex-[1.15] min-w-0 max-w-[122px] z-10',
       pillarClass: 'cc-pillar-gold border border-amber-200/80',
-      pillarHeightClass: 'h-[140px] sm:h-[164px]',
+      pillarHeightClass: 'h-[142px] sm:h-[166px]',
+      topCapClass: 'bg-yellow-100/85 border-amber-200',
       xpTextClass: 'text-amber-600',
       numeralClass: 'text-[28px] sm:text-[34px]',
       delayClass: 'cc-fade-up-delay-1',
@@ -197,9 +249,10 @@ export const ClassChampionsPodium: React.FC<ClassChampionsPodiumProps> = ({
     {
       rank: 3,
       entry: rank3,
-      columnClass: 'flex-1 min-w-0 max-w-[104px]',
+      columnClass: 'flex-1 min-w-0 max-w-[106px]',
       pillarClass: 'cc-pillar-bronze border border-orange-200/80',
       pillarHeightClass: 'h-[98px] sm:h-[116px]',
+      topCapClass: 'bg-orange-100/80 border-orange-200',
       xpTextClass: 'text-orange-600',
       numeralClass: 'text-2xl sm:text-[28px]',
       delayClass: 'cc-fade-up-delay-3',
@@ -209,6 +262,7 @@ export const ClassChampionsPodium: React.FC<ClassChampionsPodiumProps> = ({
   return (
     <div className="cc-podium-card p-3.5 sm:p-5 flex flex-col justify-between h-full">
       <div className="cc-podium-rays" aria-hidden="true" />
+      <div className="cc-ambient-gold-glow" aria-hidden="true" />
 
       {/* Subtle Clouds & Decorative Shapes */}
       <svg
@@ -223,7 +277,6 @@ export const ClassChampionsPodium: React.FC<ClassChampionsPodiumProps> = ({
           <ellipse cx="352" cy="128" rx="36" ry="16" fill="#ffffff" />
           <ellipse cx="330" cy="122" rx="20" ry="12" fill="#ffffff" />
         </g>
-        {/* Confetti ribbons matching Class Champions composition */}
         <path d="M52 84 C60 76, 68 86, 76 78" stroke="#a855f7" strokeWidth="4" strokeLinecap="round" opacity="0.7" fill="none" />
         <path d="M332 78 C340 86, 348 76, 356 84" stroke="#f59e0b" strokeWidth="4" strokeLinecap="round" opacity="0.75" fill="none" />
         <path d="M342 152 C349 144, 357 154, 364 146" stroke="#ec4899" strokeWidth="3.5" strokeLinecap="round" opacity="0.7" fill="none" />
@@ -232,7 +285,10 @@ export const ClassChampionsPodium: React.FC<ClassChampionsPodiumProps> = ({
         <circle cx="40" cy="184" r="3" fill="#f472b6" opacity="0.75" />
       </svg>
 
-      {/* One-shot Celebration Burst (never re-runs on unrelated renders) */}
+      {/* Independent Live Golden Dust Animation */}
+      <GoldenDustOverlay />
+
+      {/* One-shot Celebration Burst */}
       {burstKey > 0 && (
         <div key={burstKey} className="absolute inset-0 pointer-events-none z-30" aria-hidden="true">
           {CONFETTI_BURST_PIECES.map((piece, idx) => (
@@ -263,7 +319,7 @@ export const ClassChampionsPodium: React.FC<ClassChampionsPodiumProps> = ({
         onClick={triggerCelebration}
         title="Celebrate Class Champions"
         aria-label="Celebrate Class Champions"
-        className="absolute top-3 right-3 z-20 p-1.5 rounded-full bg-white/80 hover:bg-amber-50 border border-amber-200/70 text-amber-500 hover:text-amber-600 shadow-sm transition-colors"
+        className="absolute top-3 right-3 z-30 p-1.5 rounded-full bg-white/85 hover:bg-amber-50 border border-amber-200/70 text-amber-500 hover:text-amber-600 shadow-sm transition-colors"
       >
         <Sparkles className="w-3.5 h-3.5 cc-sparkle" />
       </button>
@@ -285,7 +341,6 @@ export const ClassChampionsPodium: React.FC<ClassChampionsPodiumProps> = ({
 
       {/* 3-Position Podium Stage */}
       <div className="relative z-10 pt-3 pb-1">
-        {/* Decorative Leaves */}
         <div
           className="hidden xs:block sm:block absolute left-0 bottom-3 w-12 h-16 sm:w-14 sm:h-20 pointer-events-none opacity-90 z-0"
           aria-hidden="true"
@@ -314,8 +369,26 @@ export const ClassChampionsPodium: React.FC<ClassChampionsPodiumProps> = ({
                 className={`cc-podium-column cc-fade-up ${spot.delayClass} ${spot.columnClass} flex flex-col items-center`}
               >
                 {spot.rank === 1 && (
-                  <div className="cc-crown-float w-10 h-7 sm:w-12 sm:h-8 -mb-1.5 relative z-20 drop-shadow-sm">
-                    <GoldCrownIllustration className="w-full h-full" />
+                  <div className="relative -mb-1.5 z-20">
+                    {/* Tiny crown sparkles */}
+                    <svg
+                      viewBox="0 0 16 16"
+                      className="w-3 h-3 cc-crown-sparkle -left-2.5 top-0"
+                      aria-hidden="true"
+                    >
+                      <path d="M8 0L9.8 6.2L16 8L9.8 9.8L8 16L6.2 9.8L0 8L6.2 6.2Z" fill="#fde047" />
+                    </svg>
+                    <svg
+                      viewBox="0 0 16 16"
+                      className="w-2.5 h-2.5 cc-crown-sparkle -right-2 top-1"
+                      style={{ animationDelay: '1.4s' }}
+                      aria-hidden="true"
+                    >
+                      <path d="M8 0L9.8 6.2L16 8L9.8 9.8L8 16L6.2 9.8L0 8L6.2 6.2Z" fill="#fef08a" />
+                    </svg>
+                    <div className="cc-crown-float w-10 h-7 sm:w-12 sm:h-8 drop-shadow-sm">
+                      <GoldCrownIllustration className="w-full h-full" />
+                    </div>
                   </div>
                 )}
 
@@ -325,24 +398,32 @@ export const ClassChampionsPodium: React.FC<ClassChampionsPodiumProps> = ({
                   isCurrentUser={isCurrent}
                 />
 
-                {/* Cylindrical Podium Pillar */}
+                {/* 3D Cylindrical Podium Pillar */}
                 <div
-                  className={`w-full ${spot.pillarHeightClass} ${spot.pillarClass} rounded-t-[18px] -mt-2.5 pt-3.5 pb-2 px-1.5 sm:px-2 flex flex-col items-center justify-between relative`}
+                  className={`w-full ${spot.pillarHeightClass} ${spot.pillarClass} rounded-t-[18px] -mt-2.5 pt-3 pb-2 px-1.5 sm:px-2 flex flex-col items-center justify-between relative`}
                 >
-                  {/* Top cylindrical rim sheen */}
+                  {/* 3D top elliptical cap rim */}
                   <div
-                    className="w-[82%] h-1.5 rounded-full bg-white/40 absolute top-1.5 left-1/2 -translate-x-1/2 pointer-events-none"
+                    className={`w-[92%] h-2 rounded-[50%] ${spot.topCapClass} border absolute top-0.5 left-1/2 -translate-x-1/2 pointer-events-none opacity-80`}
                     aria-hidden="true"
                   />
 
-                  <span
-                    className={`${spot.numeralClass} font-black text-white leading-none drop-shadow-[0_2px_4px_rgba(15,23,42,0.22)] mt-1`}
-                  >
-                    {spot.rank}
-                  </span>
+                  <div className="relative z-10 flex items-center justify-center gap-0.5 mt-1.5">
+                    {spot.rank === 1 && (
+                      <GoldLaurelSprig side="left" className="w-3.5 h-5 sm:w-4 sm:h-6 opacity-90" />
+                    )}
+                    <span
+                      className={`${spot.numeralClass} font-black text-white leading-none drop-shadow-[0_2px_4px_rgba(15,23,42,0.28)]`}
+                    >
+                      {spot.rank}
+                    </span>
+                    {spot.rank === 1 && (
+                      <GoldLaurelSprig side="right" className="w-3.5 h-5 sm:w-4 sm:h-6 opacity-90" />
+                    )}
+                  </div>
 
                   {/* Nameplate */}
-                  <div className="w-full bg-white/95 rounded-xl px-1.5 py-1.5 shadow-[0_4px_12px_rgba(15,23,42,0.12)] border border-white text-center">
+                  <div className="relative z-10 w-full bg-white/95 rounded-xl px-1.5 py-1.5 shadow-[0_4px_12px_rgba(15,23,42,0.12)] border border-white text-center">
                     <p
                       className={`text-[11px] sm:text-xs font-extrabold leading-tight line-clamp-2 break-words ${
                         spot.entry ? 'text-slate-900' : 'text-slate-400'
@@ -365,7 +446,7 @@ export const ClassChampionsPodium: React.FC<ClassChampionsPodiumProps> = ({
           })}
         </div>
 
-        {/* Golden Base Stage Platform */}
+        {/* Illuminated Golden Base Stage Platform */}
         <div className="cc-stage-platform h-3.5 sm:h-4 rounded-full mx-2 sm:mx-4 -mt-1 relative z-10 flex items-center justify-around px-6">
           {[0, 1, 2, 3, 4].map((dot) => (
             <span

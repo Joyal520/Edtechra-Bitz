@@ -944,12 +944,12 @@ export const ClassroomDetailPage: React.FC = () => {
               }}
             />
             {/* Multi-stop frosted gradient overlay for crystal-clear text readability */}
-            <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/82 to-white/20 backdrop-blur-[1px]" />
-            <div className="absolute inset-0 bg-gradient-to-b from-white/40 via-transparent to-white/40" />
+            <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/80 to-white/20 backdrop-blur-[1px]" />
+            <div className="absolute inset-0 bg-gradient-to-b from-white/35 via-transparent to-white/35" />
           </div>
 
-          {/* Mobile & Small-Tablet Contained Hero Card (becomes transparent wrapper on md+) */}
-          <div className="relative rounded-[22px] p-3.5 sm:p-5 border border-slate-200/80 shadow-[0_4px_20px_-4px_rgba(15,23,42,0.06)] overflow-hidden bg-white md:rounded-none md:p-0 md:border-0 md:shadow-none md:overflow-visible md:bg-transparent">
+          {/* Mobile & Small-Tablet Contained Hero Card (transparent wrapper on md+; no bg-white to avoid Bootstrap !important override) */}
+          <div className="relative rounded-[22px] p-3.5 sm:p-5 border border-slate-200/80 shadow-[0_4px_20px_-4px_rgba(15,23,42,0.06)] overflow-hidden md:rounded-none md:p-0 md:border-0 md:shadow-none md:overflow-visible">
             {/* Subtle Contained Mobile Background Artwork (< 768px) */}
             <div className="md:hidden absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
               <img
@@ -960,17 +960,17 @@ export const ClassroomDetailPage: React.FC = () => {
                   e.currentTarget.src = DEFAULT_CLASSROOM_HEADER_IMAGE;
                 }}
               />
-              <div className="absolute inset-0 bg-gradient-to-r from-white/96 via-white/82 to-white/20" />
-              <div className="absolute inset-0 bg-gradient-to-b from-white/30 via-transparent to-white/90" />
+              <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/85 to-white/30" />
+              <div className="absolute inset-0 bg-gradient-to-b from-white/40 via-white/10 to-white/80" />
             </div>
 
             {/* Top Bar for Mobile (< 640px): Back on Left, Options on Right */}
             <div className="flex sm:hidden items-center justify-between gap-2 mb-2 relative z-20">
               <Link
                 to="/classes"
-                className="group inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white/95 hover:bg-white px-3 py-1 rounded-full transition-all duration-200 border border-slate-200/80 shadow-2xs active:scale-95 cursor-pointer backdrop-blur-xs"
+                className="group inline-flex items-center gap-1.5 text-xs font-bold text-slate-800 hover:text-slate-900 bg-white/95 hover:bg-white px-3 py-1 rounded-full transition-all duration-200 border border-slate-200/90 shadow-2xs active:scale-95 cursor-pointer backdrop-blur-xs"
               >
-                <ArrowLeft className="w-3.5 h-3.5 text-slate-600 group-hover:-translate-x-0.5 transition-transform" />
+                <ArrowLeft className="w-3.5 h-3.5 text-slate-700 group-hover:-translate-x-0.5 transition-transform" />
                 <span>Classes</span>
               </Link>
 
@@ -985,7 +985,7 @@ export const ClassroomDetailPage: React.FC = () => {
                   className={`w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-200 shadow-2xs cursor-pointer active:scale-95 shrink-0 ${
                     optionsMenuSource === 'mobile'
                       ? 'bg-sky-50 border-sky-300 text-[#0284c7]'
-                      : 'bg-slate-50 hover:bg-slate-100 border-slate-200/80 text-slate-600 hover:text-slate-900'
+                      : 'bg-white/95 hover:bg-white border-slate-200/90 text-slate-700 hover:text-slate-900'
                   }`}
                   title="Classroom options"
                   aria-label="Classroom options"

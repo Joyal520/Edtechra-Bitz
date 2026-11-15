@@ -73,7 +73,7 @@ export const SharedChampionsCertificatePage: React.FC = () => {
     if (!snapshot || !svgRef.current) return;
     setIsDownloading(true);
     try {
-      const blob = await renderCertificateSvgToPngBlob(svgRef.current, 1200, 1300);
+      const blob = await renderCertificateSvgToPngBlob(svgRef.current, 1200, 1500);
       downloadCertificateBlob(blob, snapshot.classroomName);
     } finally {
       setIsDownloading(false);

@@ -186,7 +186,7 @@ export const ShareLeaderboardModal: React.FC<ShareLeaderboardModalProps> = ({
     try {
       saveSnapshotToGallery(snapshot);
       refreshGallery();
-      const blob = await renderCertificateSvgToPngBlob(svgRef.current, 1200, 1300);
+      const blob = await renderCertificateSvgToPngBlob(svgRef.current, 1200, 1500);
       downloadCertificateBlob(blob, snapshot.classroomName);
       onShowToast?.('Achievement certificate downloaded!');
     } catch {
@@ -202,7 +202,7 @@ export const ShareLeaderboardModal: React.FC<ShareLeaderboardModalProps> = ({
     setErrorMsg(null);
     try {
       const shareUrl = buildShareLinkForSnapshot(snapshot);
-      const blob = await renderCertificateSvgToPngBlob(svgRef.current, 1200, 1300);
+      const blob = await renderCertificateSvgToPngBlob(svgRef.current, 1200, 1500);
       const mode = await shareCertificateOnWhatsApp({
         blob,
         classroomName: snapshot.classroomName,

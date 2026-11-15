@@ -82,12 +82,12 @@ export async function preloadCertificateAssets(
 
 /**
  * Renders the certificate SVG DOM node onto an offscreen canvas and exports
- * a crisp high-resolution PNG Blob (default 1200 x 1300).
+ * a crisp high-resolution PNG Blob (default 1200 x 1500).
  */
 export async function renderCertificateSvgToPngBlob(
   svgElement: SVGSVGElement,
   width = 1200,
-  height = 1300
+  height = 1500
 ): Promise<Blob> {
   const clone = svgElement.cloneNode(true) as SVGSVGElement;
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
