@@ -1,0 +1,213 @@
+/* Isolated styles for EdTechra Digital Classroom Splash Screen */
+
+.edsplash-root {
+  position: relative;
+  min-height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  background: radial-gradient(
+    ellipse 85% 65% at 50% 34%,
+    #ffffff 0%,
+    #f3f8ff 46%,
+    #dceeff 82%,
+    #cfe6ff 100%
+  );
+  font-family: 'Plus Jakarta Sans', 'Manrope', system-ui, -apple-system, sans-serif;
+  user-select: none;
+  padding-top: max(16px, env(safe-area-inset-top, 16px));
+}
+
+/* Entrance choreography */
+.edsplash-enter-logo {
+  animation: edsplashFadeScale 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.edsplash-enter-brand {
+  animation: edsplashFadeUp 480ms cubic-bezier(0.22, 1, 0.36, 1) 110ms both;
+}
+
+.edsplash-enter-progress {
+  animation: edsplashFadeUp 480ms cubic-bezier(0.22, 1, 0.36, 1) 210ms both;
+}
+
+.edsplash-enter-scene {
+  animation: edsplashFadeUp 560ms cubic-bezier(0.22, 1, 0.36, 1) 290ms both;
+}
+
+/* Gentle continuous ambient motion */
+.edsplash-logo-float {
+  animation: edsplashLogoFloat 4.6s ease-in-out infinite;
+  will-change: transform;
+}
+
+.edsplash-wave-slow {
+  animation: edsplashWaveDrift 14s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.edsplash-wave-fast {
+  animation: edsplashWaveDrift 10s ease-in-out infinite alternate-reverse;
+  will-change: transform;
+}
+
+.edsplash-cloud-drift {
+  animation: edsplashCloudDrift 9s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.edsplash-book-float {
+  animation: edsplashBookFloat 4.4s ease-in-out infinite;
+  will-change: transform;
+}
+
+.edsplash-icon-float-1 {
+  animation: edsplashIconFloat 4.2s ease-in-out 0s infinite;
+  will-change: transform;
+}
+
+.edsplash-icon-float-2 {
+  animation: edsplashIconFloat 4.5s ease-in-out 0.45s infinite;
+  will-change: transform;
+}
+
+.edsplash-icon-float-3 {
+  animation: edsplashIconFloat 4s ease-in-out 0.9s infinite;
+  will-change: transform;
+}
+
+.edsplash-icon-float-4 {
+  animation: edsplashIconFloat 4.6s ease-in-out 1.35s infinite;
+  will-change: transform;
+}
+
+.edsplash-icon-float-5 {
+  animation: edsplashIconFloat 4.3s ease-in-out 1.8s infinite;
+  will-change: transform;
+}
+
+.edsplash-sparkle {
+  animation: edsplashSparkle 3.1s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.edsplash-sparkle-delay {
+  animation: edsplashSparkle 3.1s ease-in-out 1.4s infinite;
+  will-change: transform, opacity;
+}
+
+.edsplash-progress-fill {
+  background: linear-gradient(90deg, #0072e5 0%, #0ea5e9 55%, #22d3ee 100%);
+  box-shadow: 0 0 14px rgba(14, 165, 233, 0.45);
+  transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes edsplashFadeScale {
+  from {
+    opacity: 0;
+    transform: scale(0.88) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes edsplashFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes edsplashLogoFloat {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes edsplashWaveDrift {
+  0% {
+    transform: translateX(-12px);
+  }
+  100% {
+    transform: translateX(12px);
+  }
+}
+
+@keyframes edsplashCloudDrift {
+  0% {
+    transform: translateX(-8px) translateY(0px);
+  }
+  100% {
+    transform: translateX(8px) translateY(-3px);
+  }
+}
+
+@keyframes edsplashBookFloat {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes edsplashIconFloat {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes edsplashSparkle {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edsplash-enter-logo,
+  .edsplash-enter-brand,
+  .edsplash-enter-progress,
+  .edsplash-enter-scene,
+  .edsplash-logo-float,
+  .edsplash-wave-slow,
+  .edsplash-wave-fast,
+  .edsplash-cloud-drift,
+  .edsplash-book-float,
+  .edsplash-icon-float-1,
+  .edsplash-icon-float-2,
+  .edsplash-icon-float-3,
+  .edsplash-icon-float-4,
+  .edsplash-icon-float-5,
+  .edsplash-sparkle,
+  .edsplash-sparkle-delay {
+    animation: none !important;
+  }
+
+  .edsplash-progress-fill {
+    transition: none !important;
+  }
+}

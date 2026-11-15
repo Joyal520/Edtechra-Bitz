@@ -110,6 +110,8 @@ import { DEFAULT_CLASSROOM_HEADER_IMAGE, getClassroomHeaderImage } from '@/utils
 import { ClassroomCoursesSection } from '@/components/classes/ClassroomCoursesSection';
 import { AssignCourseToClassModal } from '@/components/classes/AssignCourseToClassModal';
 import { TodaysMotivationBanner } from '@/components/classes/motivation/TodaysMotivationBanner';
+import { ClassroomSplashScreen } from '@/components/classes/ClassroomSplashScreen';
+import { ClassroomOptionsDropdown } from '@/components/classes/ClassroomOptionsDropdown';
 
 type TabType = 'overview' | 'assignments' | 'roster' | 'stream' | 'resources' | 'leaderboard' | 'exams' | 'courses';
 
@@ -138,12 +140,14 @@ export const ClassroomDetailPage: React.FC = () => {
   });
 
   const [loading, setLoading] = useState(true);
+  const [loadProgress, setLoadProgress] = useState(12);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType | null>(null);
 
   // Invite code copied feedback
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
-  const [optionsMenuOpen, setOptionsMenuOpen] = useState(false);
+  const [optionsMenuSource, setOptionsMenuSource] = useState<'mobile' | 'desktop' | null>(null);
   const optionsMenuRef = useRef<HTMLDivElement>(null);
   const mobileOptionsMenuRef = useRef<HTMLDivElement>(null);
 
@@ -410,9 +414,22 @@ export const ClassroomDetailPage: React.FC = () => {
     if (!id) return;
     if (!silent && !classroom) {
       setLoading(true);
+      setLoadError(null);
+      setLoadProgress(18);
     }
 
     try {
+      const totalTasks = 12;
+      let completedTasks = 0;
+      const trackTask = <T,>(promise: Promise<T>): Promise<T> =>
+        promise.finally(() => {
+          completedTasks += 1;
+          if (!silent) {
+            const pct = 18 + Math.round((completedTasks / totalTasks) * 78);
+            setLoadProgress((prev) => Math.max(prev, pct));
+          }
+        });
+
       const [
         classData,
         inviteData,
@@ -427,18 +444,18 @@ export const ClassroomDetailPage: React.FC = () => {
         challengesData,
         announcementsData
       ] = await Promise.all([
-        classroomService.getClassroomById(id),
-        classroomService.getOrCreateInvite(id),
-        classroomService.getClassroomMembers(id),
-        assignmentService.getAssignmentsByClassroom(id),
-        classroomMessageService.getMessages(id),
-        classroomResourceService.getBucketsByClassroom(id),
-        classroomExamService.getExamsByClassroom(id),
-        classroomPointsService.getClassroomLeaderboard(id),
-        classroomService.getClassroomStats(id),
-        user ? courseStudioService.getClassroomCourses(id).catch(() => []) : Promise.resolve([]),
-        aiChallengeService.getChallenges(id).catch(() => []),
-        classroomMessageService.getActiveAnnouncements(id).catch(() => [])
+        trackTask(classroomService.getClassroomById(id)),
+        trackTask(classroomService.getOrCreateInvite(id)),
+        trackTask(classroomService.getClassroomMembers(id)),
+        trackTask(assignmentService.getAssignmentsByClassroom(id)),
+        trackTask(classroomMessageService.getMessages(id)),
+        trackTask(classroomResourceService.getBucketsByClassroom(id)),
+        trackTask(classroomExamService.getExamsByClassroom(id)),
+        trackTask(classroomPointsService.getClassroomLeaderboard(id)),
+        trackTask(classroomService.getClassroomStats(id)),
+        trackTask(user ? courseStudioService.getClassroomCourses(id).catch(() => []) : Promise.resolve([])),
+        trackTask(aiChallengeService.getChallenges(id).catch(() => [])),
+        trackTask(classroomMessageService.getActiveAnnouncements(id).catch(() => []))
       ]);
 
       if (!classData) {
@@ -462,8 +479,12 @@ export const ClassroomDetailPage: React.FC = () => {
           ? announcementsData
           : announcementsData?.announcements || []
       );
-    } catch (err) {
+      setLoadProgress(100);
+    } catch (err: any) {
       console.error('Error loading classroom:', err);
+      if (!silent && !classroom) {
+        setLoadError(err?.message || 'Unable to load classroom right now. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -859,32 +880,7 @@ export const ClassroomDetailPage: React.FC = () => {
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  // Close floating options menu on click outside or Escape key
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      const insideDesktop = optionsMenuRef.current && optionsMenuRef.current.contains(target);
-      const insideMobile = mobileOptionsMenuRef.current && mobileOptionsMenuRef.current.contains(target);
-      if (!insideDesktop && !insideMobile) {
-        setOptionsMenuOpen(false);
-      }
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setOptionsMenuOpen(false);
-      }
-    };
-
-    if (optionsMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleKeyDown);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [optionsMenuOpen]);
+  // Close floating options menu handled by ClassroomOptionsDropdown portal
 
   const handleCopyCodeOnly = () => {
     navigator.clipboard.writeText(inviteCode);
@@ -907,10 +903,17 @@ export const ClassroomDetailPage: React.FC = () => {
 
   if (loading || !classroom) {
     return (
-      <div className="min-h-screen bg-[#f9f7f1] flex flex-col items-center justify-center space-y-4">
-        <div className="w-12 h-12 border-4 border-[#0a213c] border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm font-extrabold text-slate-700">Loading EdTechra Digital Classroom...</p>
-      </div>
+      <ClassroomSplashScreen
+        progress={authLoading ? 12 : loadProgress}
+        statusText={
+          authLoading
+            ? 'Connecting to your account...'
+            : 'Loading EdTechra Digital Classroom...'
+        }
+        errorMessage={loadError}
+        onRetry={() => loadAllClassroomData()}
+        onBack={() => navigate('/classes')}
+      />
     );
   }
 
@@ -960,115 +963,120 @@ export const ClassroomDetailPage: React.FC = () => {
               <div className="relative inline-block" ref={mobileOptionsMenuRef}>
                 <button
                   type="button"
-                  onClick={() => setOptionsMenuOpen(prev => !prev)}
+                  onClick={() =>
+                    setOptionsMenuSource((prev) => (prev === 'mobile' ? null : 'mobile'))
+                  }
                   className={`w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-200 shadow-2xs cursor-pointer active:scale-95 shrink-0 ${
-                    optionsMenuOpen
+                    optionsMenuSource === 'mobile'
                       ? 'bg-sky-50 border-sky-300 text-[#0284c7]'
                       : 'bg-slate-50 hover:bg-slate-100 border-slate-200/80 text-slate-600 hover:text-slate-900'
                   }`}
                   title="Classroom options"
                   aria-label="Classroom options"
-                  aria-expanded={optionsMenuOpen}
+                  aria-expanded={optionsMenuSource === 'mobile'}
                   aria-haspopup="true"
                 >
                   <MoreHorizontal className="w-4 h-4 stroke-[2.2]" />
                 </button>
 
-                {optionsMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-60 rounded-2xl bg-white border border-slate-200 shadow-[0_12px_32px_-4px_rgba(15,23,42,0.18)] p-2 z-50 animate-in fade-in zoom-in-95 duration-150 divide-y divide-slate-100 text-slate-800">
-                    <div className="py-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          handleCopyCodeOnly();
-                          setOptionsMenuOpen(false);
-                        }}
-                        className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-700 hover:text-[#0284c7] hover:bg-sky-50 rounded-xl transition-colors text-left cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <Copy className="w-4 h-4 text-sky-500" />
-                          <span>Copy Class Code</span>
-                        </div>
-                        <span className="font-mono text-[11px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                          {copiedCode ? 'Copied!' : inviteCode}
+                <ClassroomOptionsDropdown
+                  isOpen={optionsMenuSource === 'mobile'}
+                  onClose={() => setOptionsMenuSource(null)}
+                  anchorRef={mobileOptionsMenuRef}
+                  preferredAlign="right"
+                  widthPx={240}
+                >
+                  <div className="py-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleCopyCodeOnly();
+                        setOptionsMenuSource(null);
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-700 hover:text-[#0284c7] hover:bg-sky-50 rounded-xl transition-colors text-left cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Copy className="w-4 h-4 text-sky-500" />
+                        <span>Copy Class Code</span>
+                      </div>
+                      <span className="font-mono text-[11px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                        {copiedCode ? 'Copied!' : inviteCode}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleCopyInvite();
+                        setOptionsMenuSource(null);
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-700 hover:text-[#0284c7] hover:bg-sky-50 rounded-xl transition-colors text-left cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Link2 className="w-4 h-4 text-blue-500" />
+                        <span>Copy Class Link</span>
+                      </div>
+                      {copiedInvite && (
+                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                          Copied!
                         </span>
-                      </button>
+                      )}
+                    </button>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          handleCopyInvite();
-                          setOptionsMenuOpen(false);
-                        }}
-                        className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-700 hover:text-[#0284c7] hover:bg-sky-50 rounded-xl transition-colors text-left cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <Link2 className="w-4 h-4 text-blue-500" />
-                          <span>Copy Class Link</span>
-                        </div>
-                        {copiedInvite && (
-                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
-                            Copied!
-                          </span>
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          handleWhatsAppShare();
-                          setOptionsMenuOpen(false);
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition-colors text-left cursor-pointer"
-                      >
-                        <MessageSquareShare className="w-4 h-4 text-emerald-500" />
-                        <span>Share via WhatsApp</span>
-                      </button>
-                    </div>
-
-                    <div className="py-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          handleCopyInvite();
-                          alert(`Class Invite Link copied!\n\nShare with students:\n${inviteUrl}\nClass Code: ${inviteCode}`);
-                          setOptionsMenuOpen(false);
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-colors text-left cursor-pointer"
-                      >
-                        <UserPlus className="w-4 h-4 text-indigo-500" />
-                        <span>Invite Students</span>
-                      </button>
-
-                      {/* Customize Header Cover */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOptionsMenuOpen(false);
-                          setEditModalInitialTab('header');
-                          setEditClassroomModalOpen(true);
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-[#0284c7] hover:bg-sky-50 rounded-xl transition-colors text-left cursor-pointer"
-                      >
-                        <Camera className="w-4 h-4 text-sky-500" />
-                        <span>Customize Header Cover</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOptionsMenuOpen(false);
-                          const el = document.getElementById('classroom-danger-zone');
-                          if (el) el.scrollIntoView({ behavior: 'smooth' });
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors text-left cursor-pointer"
-                      >
-                        <Settings className="w-4 h-4 text-slate-400" />
-                        <span>Class Settings</span>
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleWhatsAppShare();
+                        setOptionsMenuSource(null);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition-colors text-left cursor-pointer"
+                    >
+                      <MessageSquareShare className="w-4 h-4 text-emerald-500" />
+                      <span>Share via WhatsApp</span>
+                    </button>
                   </div>
-                )}
+
+                  <div className="py-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleCopyInvite();
+                        alert(`Class Invite Link copied!\n\nShare with students:\n${inviteUrl}\nClass Code: ${inviteCode}`);
+                        setOptionsMenuSource(null);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-colors text-left cursor-pointer"
+                    >
+                      <UserPlus className="w-4 h-4 text-indigo-500" />
+                      <span>Invite Students</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOptionsMenuSource(null);
+                        setEditModalInitialTab('header');
+                        setEditClassroomModalOpen(true);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-[#0284c7] hover:bg-sky-50 rounded-xl transition-colors text-left cursor-pointer"
+                    >
+                      <Camera className="w-4 h-4 text-sky-500" />
+                      <span>Customize Header Cover</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOptionsMenuSource(null);
+                        const el = document.getElementById('classroom-danger-zone');
+                        if (el) el.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors text-left cursor-pointer"
+                    >
+                      <Settings className="w-4 h-4 text-slate-400" />
+                      <span>Class Settings</span>
+                    </button>
+                  </div>
+                </ClassroomOptionsDropdown>
               </div>
             )}
           </div>
@@ -1201,112 +1209,118 @@ export const ClassroomDetailPage: React.FC = () => {
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform stroke-[2.5]" />
                 </button>
 
-                {/* Secondary Options Button: [ ••• ] with Floating Popover Menu — TEACHER ONLY (Desktop) */}
+                {/* Secondary Options Button: [ ••• ] with Floating Portal Menu — TEACHER ONLY (Desktop) */}
                 {!loading && isTeacher && (
                   <div className="hidden sm:inline-block relative" ref={optionsMenuRef}>
                     <button
                       type="button"
-                      onClick={() => setOptionsMenuOpen(prev => !prev)}
+                      onClick={() =>
+                        setOptionsMenuSource((prev) => (prev === 'desktop' ? null : 'desktop'))
+                      }
                       className={`w-11 h-11 rounded-full flex items-center justify-center border transition-all duration-200 shadow-[0_2px_8px_rgba(0,0,0,0.04)] cursor-pointer active:scale-95 shrink-0 ${
-                        optionsMenuOpen
+                        optionsMenuSource === 'desktop'
                           ? 'bg-sky-50 border-sky-300 text-[#0284c7]'
                           : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
                       }`}
                       title="Classroom options"
                       aria-label="Classroom options"
-                      aria-expanded={optionsMenuOpen}
+                      aria-expanded={optionsMenuSource === 'desktop'}
                       aria-haspopup="true"
                     >
                       <MoreHorizontal className="w-5 h-5 stroke-[2.2]" />
                     </button>
 
-                    {/* Floating Dropdown Menu */}
-                    {optionsMenuOpen && (
-                      <div className="absolute left-0 mt-2 w-64 rounded-2xl bg-white border border-slate-200 shadow-[0_16px_36px_-4px_rgba(15,23,42,0.18)] p-2 z-50 animate-in fade-in zoom-in-95 duration-150 divide-y divide-slate-100 text-slate-800">
-                        <div className="py-1">
-                          {/* Copy Code */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleCopyCodeOnly();
-                              setOptionsMenuOpen(false);
-                            }}
-                            className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-700 hover:text-[#0284c7] hover:bg-sky-50 rounded-xl transition-colors text-left cursor-pointer"
-                          >
-                            <div className="flex items-center gap-2.5">
-                              <Copy className="w-4 h-4 text-sky-500" />
-                              <span>Copy Class Code</span>
-                            </div>
-                            <span className="font-mono text-[11px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                              {copiedCode ? 'Copied!' : inviteCode}
+                    {/* Floating Portal Dropdown Menu */}
+                    <ClassroomOptionsDropdown
+                      isOpen={optionsMenuSource === 'desktop'}
+                      onClose={() => setOptionsMenuSource(null)}
+                      anchorRef={optionsMenuRef}
+                      preferredAlign="left"
+                      widthPx={256}
+                    >
+                      <div className="py-1">
+                        {/* Copy Code */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleCopyCodeOnly();
+                            setOptionsMenuSource(null);
+                          }}
+                          className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-700 hover:text-[#0284c7] hover:bg-sky-50 rounded-xl transition-colors text-left cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Copy className="w-4 h-4 text-sky-500" />
+                            <span>Copy Class Code</span>
+                          </div>
+                          <span className="font-mono text-[11px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                            {copiedCode ? 'Copied!' : inviteCode}
+                          </span>
+                        </button>
+
+                        {/* Copy Link */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleCopyInvite();
+                            setOptionsMenuSource(null);
+                          }}
+                          className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-700 hover:text-[#0284c7] hover:bg-sky-50 rounded-xl transition-colors text-left cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Link2 className="w-4 h-4 text-blue-500" />
+                            <span>Copy Class Link</span>
+                          </div>
+                          {copiedInvite && (
+                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                              Copied!
                             </span>
-                          </button>
+                          )}
+                        </button>
 
-                          {/* Copy Link */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleCopyInvite();
-                              setOptionsMenuOpen(false);
-                            }}
-                            className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-700 hover:text-[#0284c7] hover:bg-sky-50 rounded-xl transition-colors text-left cursor-pointer"
-                          >
-                            <div className="flex items-center gap-2.5">
-                              <Link2 className="w-4 h-4 text-blue-500" />
-                              <span>Copy Class Link</span>
-                            </div>
-                            {copiedInvite && (
-                              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
-                                Copied!
-                              </span>
-                            )}
-                          </button>
-
-                          {/* Share WhatsApp */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleWhatsAppShare();
-                              setOptionsMenuOpen(false);
-                            }}
-                            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition-colors text-left cursor-pointer"
-                          >
-                            <MessageSquareShare className="w-4 h-4 text-emerald-500" />
-                            <span>Share via WhatsApp</span>
-                          </button>
-                        </div>
-
-                        <div className="py-1">
-                          {/* Invite Students */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleCopyInvite();
-                              alert(`Class Invite Link copied!\n\nShare with students:\n${inviteUrl}\nClass Code: ${inviteCode}`);
-                              setOptionsMenuOpen(false);
-                            }}
-                            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-colors text-left cursor-pointer"
-                          >
-                            <UserPlus className="w-4 h-4 text-indigo-500" />
-                            <span>Invite Students</span>
-                          </button>
-
-                          {/* Class Settings if teacher */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setOptionsMenuOpen(false);
-                              const el = document.getElementById('classroom-danger-zone');
-                              if (el) el.scrollIntoView({ behavior: 'smooth' });
-                            }}
-                            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors text-left cursor-pointer"
-                          >
-                            <Settings className="w-4 h-4 text-slate-400" />
-                            <span>Class Settings</span>
-                          </button>
-                        </div>
+                        {/* Share WhatsApp */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleWhatsAppShare();
+                            setOptionsMenuSource(null);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition-colors text-left cursor-pointer"
+                        >
+                          <MessageSquareShare className="w-4 h-4 text-emerald-500" />
+                          <span>Share via WhatsApp</span>
+                        </button>
                       </div>
-                    )}
+
+                      <div className="py-1">
+                        {/* Invite Students */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleCopyInvite();
+                            alert(`Class Invite Link copied!\n\nShare with students:\n${inviteUrl}\nClass Code: ${inviteCode}`);
+                            setOptionsMenuSource(null);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-colors text-left cursor-pointer"
+                        >
+                          <UserPlus className="w-4 h-4 text-indigo-500" />
+                          <span>Invite Students</span>
+                        </button>
+
+                        {/* Class Settings if teacher */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOptionsMenuSource(null);
+                            const el = document.getElementById('classroom-danger-zone');
+                            if (el) el.scrollIntoView({ behavior: 'smooth' });
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors text-left cursor-pointer"
+                        >
+                          <Settings className="w-4 h-4 text-slate-400" />
+                          <span>Class Settings</span>
+                        </button>
+                      </div>
+                    </ClassroomOptionsDropdown>
                   </div>
                 )}
 
