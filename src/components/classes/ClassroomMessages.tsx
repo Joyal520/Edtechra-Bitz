@@ -197,9 +197,14 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
           if (item.type === 'game' || item.type === 'task') {
             const liveTask = assignments.find((a) => a.id === item.rawId);
             const candidate = liveTask || item.rawItem;
-            if (!isTeacher) {
-              if (!liveTask || !isAssignmentPublished(candidate)) return false;
-            }
+            if (candidate && !isAssignmentPublished(candidate)) return false;
+            if (!isTeacher && assignments.length > 0 && !liveTask) return false;
+          }
+          if (item.type === 'competition') {
+            const liveCh = challenges.find((c) => c.id === item.rawId);
+            const candidate = liveCh || item.rawItem;
+            const chStatus = String(candidate?.status || '').toLowerCase();
+            if (['draft', 'archived', 'deleted', 'closed'].includes(chStatus)) return false;
           }
           return true;
         })
@@ -247,7 +252,7 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
 
     // 1. Tasks / Assignments
     (assignments || []).forEach((a) => {
-      if (!isTeacher && !isAssignmentPublished(a)) return;
+      if (!isAssignmentPublished(a)) return;
       const key = `task-${a.id}`;
       if (seenKeys.has(key) || isMarkedRead(key, a.id)) return;
 
@@ -436,6 +441,9 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
 
     // 4. Competitions / AI Challenges
     (challenges || []).forEach((c) => {
+      const chStatus = String(c.status || '').toLowerCase();
+      if (['draft', 'archived', 'deleted', 'closed'].includes(chStatus)) return;
+
       const key = `comp-${c.id}`;
       if (seenKeys.has(key) || isMarkedRead(key, c.id)) return;
 

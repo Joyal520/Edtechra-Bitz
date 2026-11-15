@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { supabase } from '@/lib/supabase';
+import { authenticatedFetch } from '@/lib/apiAuth';
 import {
   Assignment,
   AssignmentSubmission,
@@ -186,6 +187,28 @@ class AssignmentService {
     assignmentId: string,
     publish: boolean
   ): Promise<{ assignment?: Assignment; error?: string }> {
+    try {
+      const apiRes = await authenticatedFetch(
+        `/api/games/assignments/${assignmentId}/publish-status`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ publish })
+        }
+      );
+      if (apiRes.ok) {
+        const json = await apiRes.json();
+        if (json?.success && json?.assignment) {
+          return { assignment: json.assignment as Assignment };
+        }
+      } else if (apiRes.status === 403 || apiRes.status === 404) {
+        const errJson = await apiRes.json().catch(() => ({}));
+        return { error: errJson?.error || 'Unable to update publication status.' };
+      }
+    } catch {
+      // Fallback to direct Supabase client below when running offline/without API server
+    }
+
     if (!supabase) return { error: 'Supabase is not configured' };
 
     try {
@@ -224,6 +247,68 @@ class AssignmentService {
       return { assignment: updated as Assignment };
     } catch (err: any) {
       return { error: err.message || 'Failed to update publishing status.' };
+    }
+  }
+
+  /**
+   * Performs a live publication check before opening a game/task from a potentially stale announcement link
+   */
+  async checkAssignmentPublishedLive(
+    assignmentId: string
+  ): Promise<{ published: boolean; assignment?: Assignment; reason?: string }> {
+    if (!supabase || !assignmentId) {
+      return { published: true };
+    }
+    try {
+      const { data, error } = await supabase
+        .from('assignments')
+        .select('*')
+        .eq('id', assignmentId)
+        .maybeSingle();
+
+      if (error || !data || data.is_deleted) {
+        return { published: false, reason: 'This activity is no longer available.' };
+      }
+      if (!isAssignmentPublished(data as Assignment)) {
+        return {
+          published: false,
+          assignment: data as Assignment,
+          reason: 'This activity was unpublished by your teacher and is currently unavailable.'
+        };
+      }
+      return { published: true, assignment: data as Assignment };
+    } catch {
+      return { published: true };
+    }
+  }
+
+  /**
+   * Performs a live publication check for competitions before opening from a cached stream link
+   */
+  async checkChallengePublishedLive(
+    challengeId: string
+  ): Promise<{ published: boolean; reason?: string }> {
+    if (!supabase || !challengeId) return { published: true };
+    try {
+      const { data, error } = await supabase
+        .from('ai_challenges')
+        .select('id, status')
+        .eq('id', challengeId)
+        .maybeSingle();
+
+      if (error || !data) {
+        return { published: false, reason: 'This competition is no longer available.' };
+      }
+      const st = String(data.status || '').toLowerCase();
+      if (['draft', 'archived', 'deleted', 'closed'].includes(st)) {
+        return {
+          published: false,
+          reason: 'This competition was unpublished by your teacher and is currently unavailable.'
+        };
+      }
+      return { published: true };
+    } catch {
+      return { published: true };
     }
   }
 

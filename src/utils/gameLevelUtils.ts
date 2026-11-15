@@ -36,6 +36,12 @@ export function getLevelQuestionCount(gameId: GameId, cfg?: GameConfig | null): 
         : 0;
     case 'classroom-jigsaw': {
       const jc = cfg as ClassroomJigsawConfig;
+      const qCount = jc.questionsEnabled
+        ? Array.isArray(jc.questions) && jc.questions.length > 0
+          ? jc.questions.length
+          : Number(jc.questionCount || 0)
+        : 0;
+      if (qCount > 0) return qCount;
       return jc.images?.length || (jc.imageDataUrl ? 1 : 0);
     }
     case 'lumina-words':

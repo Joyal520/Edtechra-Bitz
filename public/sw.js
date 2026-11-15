@@ -1,4 +1,4 @@
-const CACHE_NAME = 'edtechra-bitz-v13';
+const CACHE_NAME = 'edtechra-bitz-v14';
 
 const STATIC_PRECACHE = [
   '/',
@@ -44,7 +44,7 @@ self.addEventListener('activate', (event) => {
         })
       );
     }).then(() => {
-      console.log('[SW] Cache updated to v13 and clients claimed');
+      console.log('[SW] Cache updated to v14 and clients claimed');
       return self.clients.claim();
     })
   );
@@ -71,7 +71,15 @@ self.addEventListener('fetch', (event) => {
   // Bypass API requests, Supabase auth/data, Cloudflare R2 uploads/media, OAuth redirects, and video media
   if (
     parsedUrl.pathname.startsWith('/api/') ||
+    parsedUrl.pathname.startsWith('/rest/v1/') ||
+    parsedUrl.pathname.startsWith('/auth/v1/') ||
+    parsedUrl.pathname.startsWith('/storage/v1/') ||
+    parsedUrl.pathname.startsWith('/functions/v1/') ||
     parsedUrl.hostname.includes('supabase.co') ||
+    parsedUrl.hostname.includes('supabase.') ||
+    event.request.headers.has('apikey') ||
+    event.request.headers.has('authorization') ||
+    event.request.destination === '' ||
     parsedUrl.hostname.includes('r2.cloudflarestorage.com') ||
     parsedUrl.hostname.includes('cloudflarestorage.com') ||
     parsedUrl.hostname.includes('r2.dev') ||

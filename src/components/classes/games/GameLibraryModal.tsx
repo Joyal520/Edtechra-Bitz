@@ -25,6 +25,7 @@ import {
   generateLuminaPuzzles,
   validateLuminaWords
 } from '@/utils/luminaPuzzleGenerator';
+import { validateJigsawConfig } from '@/utils/jigsawQuestions';
 import type { Assignment } from '@/types/classroom';
 import type {
   ClassroomJigsawConfig,
@@ -125,18 +126,12 @@ function sanitizeLevelConfig(
       return { config: { themeName: (c.themeName || '').trim() || 'Classroom Match', pairs: clean } };
     }
     case 'classroom-jigsaw': {
-      const c = cfg as ClassroomJigsawConfig;
-      const imgs = c.images && c.images.length > 0 ? c.images : c.imageDataUrl ? [c.imageDataUrl] : [];
-      if (imgs.length === 0) {
-        return { error: `${levelLabel}: Please upload at least one picture for the Classroom Jigsaw puzzle.` };
+      const validation = validateJigsawConfig(cfg as ClassroomJigsawConfig, levelLabel);
+      if (validation.error || !validation.normalized) {
+        return { error: validation.error || `${levelLabel}: Invalid Classroom Jigsaw configuration.` };
       }
       return {
-        config: {
-          imageDataUrl: imgs[0],
-          images: imgs,
-          gridSize: ([2, 3, 4].includes(c.gridSize) ? c.gridSize : 3) as 2 | 3 | 4,
-          title: (c.title || '').trim() || levelLabel
-        }
+        config: validation.normalized
       };
     }
     case 'lumina-words': {

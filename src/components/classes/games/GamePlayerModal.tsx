@@ -97,6 +97,10 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
         payload
       });
 
+      if ((result as any)?.details && typeof (result as any).details === 'object') {
+        setCompletedDetails((result as any).details);
+      }
+
       submittingRef.current = false;
       setSubmitting(false);
       setSubmissionResult(result);
@@ -135,6 +139,9 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
           levelNumber,
           levelTitle,
           maxPoints,
+          assignmentId,
+          classroomId,
+          levelId,
           config
         };
         iframeRef.current.contentWindow?.postMessage(
@@ -143,6 +150,90 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
             payload: initPayload,
             ...initPayload
           },
+          '*'
+        );
+        return;
+      }
+
+      if (data.type === 'EDTECHRA_JIGSAW_FETCH_STATE') {
+        const reqId = data.requestId;
+        if (isPreview || !assignmentId) {
+          iframeRef.current.contentWindow?.postMessage(
+            {
+              type: 'EDTECHRA_JIGSAW_RESPONSE',
+              requestId: reqId,
+              data: {
+                success: true,
+                alreadyCompleted: false,
+                questionsEnabled: Boolean((config as any)?.questionsEnabled),
+                questionCount: Array.isArray((config as any)?.questions) ? (config as any).questions.length : 0,
+                inProgress: { puzzleCompleted: false, answers: {}, currentQuestionIndex: 0 },
+                unlockedQuestions: []
+              }
+            },
+            '*'
+          );
+          return;
+        }
+        const result = await gameLibraryService.getJigsawState(assignmentId, levelId);
+        iframeRef.current?.contentWindow?.postMessage(
+          { type: 'EDTECHRA_JIGSAW_RESPONSE', requestId: reqId, data: result },
+          '*'
+        );
+        return;
+      }
+
+      if (data.type === 'EDTECHRA_JIGSAW_UNLOCK_QUESTIONS') {
+        const reqId = data.requestId;
+        if (isPreview || !assignmentId) {
+          const qs = Array.isArray((config as any)?.questions) ? (config as any).questions : [];
+          iframeRef.current.contentWindow?.postMessage(
+            {
+              type: 'EDTECHRA_JIGSAW_RESPONSE',
+              requestId: reqId,
+              data: {
+                success: true,
+                puzzleCompleted: true,
+                questionsEnabled: Boolean((config as any)?.questionsEnabled) && qs.length > 0,
+                questionCount: qs.length,
+                questions: qs,
+                answers: {},
+                currentQuestionIndex: 0
+              }
+            },
+            '*'
+          );
+          return;
+        }
+        const result = await gameLibraryService.unlockJigsawQuestions(assignmentId, levelId);
+        iframeRef.current?.contentWindow?.postMessage(
+          { type: 'EDTECHRA_JIGSAW_RESPONSE', requestId: reqId, data: result },
+          '*'
+        );
+        return;
+      }
+
+      if (data.type === 'EDTECHRA_JIGSAW_SUBMIT_ANSWER') {
+        const reqId = data.requestId;
+        if (isPreview || !assignmentId) {
+          iframeRef.current.contentWindow?.postMessage(
+            {
+              type: 'EDTECHRA_JIGSAW_RESPONSE',
+              requestId: reqId,
+              data: { success: true, previewMode: true }
+            },
+            '*'
+          );
+          return;
+        }
+        const result = await gameLibraryService.submitJigsawAnswer({
+          assignmentId,
+          levelId,
+          questionId: String(data.questionId || ''),
+          submittedAnswer: data.submittedAnswer
+        });
+        iframeRef.current?.contentWindow?.postMessage(
+          { type: 'EDTECHRA_JIGSAW_RESPONSE', requestId: reqId, data: result },
           '*'
         );
         return;
@@ -217,7 +308,8 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
     null;
 
   const resolvedTotalQuestions = Number(
-    activeDetails?.total ??
+    activeDetails?.totalQuestions ??
+      activeDetails?.total ??
       activeDetails?.totalWords ??
       activeDetails?.totalPuzzles ??
       activeDetails?.pairs ??
@@ -225,7 +317,9 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
       0
   );
   const resolvedQuestionsCompleted = Number(
-    activeDetails?.questionsCompleted ?? resolvedTotalQuestions
+    activeDetails?.questionsAnswered ??
+      activeDetails?.questionsCompleted ??
+      resolvedTotalQuestions
   );
   const resolvedCorrectAnswers = Number(
     activeDetails?.correctAnswers ??
@@ -235,6 +329,19 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
       activeDetails?.pairs ??
       resolvedQuestionsCompleted
   );
+  const isJigsawWithQuestions =
+    gameId === 'classroom-jigsaw' && Boolean(activeDetails?.questionsEnabled);
+  const jigsawIncorrectAnswers = Number(
+    activeDetails?.incorrectAnswers ?? Math.max(0, resolvedQuestionsCompleted - resolvedCorrectAnswers)
+  );
+  const jigsawAccuracyPct = Number(
+    activeDetails?.accuracyPct ??
+      (resolvedTotalQuestions > 0
+        ? Math.round((resolvedCorrectAnswers / resolvedTotalQuestions) * 100)
+        : 100)
+  );
+  const jigsawPuzzlePoints = Number(activeDetails?.puzzlePoints ?? 0);
+  const jigsawQuestionPoints = Number(activeDetails?.questionPoints ?? 0);
 
   const displayLevelHeading = levelNumber
     ? `Level ${levelNumber}`
@@ -380,44 +487,101 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 p-4 rounded-2xl bg-slate-50 border border-slate-200 text-left">
-              <div className="p-2.5 rounded-xl bg-white border border-slate-100">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Questions Completed
-                </p>
-                <p className="text-lg font-black text-slate-900 mt-0.5">
-                  {resolvedQuestionsCompleted}
-                  {resolvedTotalQuestions > 0 ? ` / ${resolvedTotalQuestions}` : ''}
-                </p>
+            {isJigsawWithQuestions ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 rounded-2xl bg-slate-50 border border-slate-200 text-left">
+                <div className="p-2.5 rounded-xl bg-white border border-slate-100">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Puzzle Status
+                  </p>
+                  <p className="text-sm sm:text-base font-black text-emerald-700 mt-1 flex items-center gap-1">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    Completed
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white border border-slate-100">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Questions Answered
+                  </p>
+                  <p className="text-lg font-black text-slate-900 mt-0.5">
+                    {resolvedQuestionsCompleted}
+                    {resolvedTotalQuestions > 0 ? ` / ${resolvedTotalQuestions}` : ''}
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white border border-slate-100">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Accuracy
+                  </p>
+                  <p className="text-lg font-black text-indigo-700 mt-0.5">{jigsawAccuracyPct}%</p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white border border-slate-100">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Correct / Incorrect
+                  </p>
+                  <p className="text-base font-black mt-0.5">
+                    <span className="text-emerald-700">{resolvedCorrectAnswers} ✓</span>
+                    <span className="text-slate-300 mx-1.5">/</span>
+                    <span className="text-rose-600">{jigsawIncorrectAnswers} ✗</span>
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white border border-slate-100">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Puzzle / Quiz Pts
+                  </p>
+                  <p className="text-base font-black text-slate-900 mt-0.5">
+                    {jigsawPuzzlePoints} + {jigsawQuestionPoints}
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white border border-slate-100">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Total Points
+                  </p>
+                  <p className="text-lg font-black text-emerald-600 flex items-center gap-1 mt-0.5">
+                    <Award className="w-4 h-4 shrink-0" />
+                    +{submissionResult?.success && !submissionResult.alreadySubmitted ? finalPointsAwarded : finalScoreEarned}
+                    <span className="text-xs font-bold text-slate-400"> / {maxPoints}</span>
+                  </p>
+                </div>
               </div>
-              <div className="p-2.5 rounded-xl bg-white border border-slate-100">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Correct Answers
-                </p>
-                <p className="text-lg font-black text-emerald-700 mt-0.5">
-                  {resolvedCorrectAnswers}
-                  {resolvedTotalQuestions > 0 ? ` / ${resolvedTotalQuestions}` : ''}
-                </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 p-4 rounded-2xl bg-slate-50 border border-slate-200 text-left">
+                <div className="p-2.5 rounded-xl bg-white border border-slate-100">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Questions Completed
+                  </p>
+                  <p className="text-lg font-black text-slate-900 mt-0.5">
+                    {resolvedQuestionsCompleted}
+                    {resolvedTotalQuestions > 0 ? ` / ${resolvedTotalQuestions}` : ''}
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white border border-slate-100">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Correct Answers
+                  </p>
+                  <p className="text-lg font-black text-emerald-700 mt-0.5">
+                    {resolvedCorrectAnswers}
+                    {resolvedTotalQuestions > 0 ? ` / ${resolvedTotalQuestions}` : ''}
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white border border-slate-100">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Score Earned
+                  </p>
+                  <p className="text-lg font-black text-slate-900 mt-0.5">
+                    {finalScoreEarned}
+                    <span className="text-xs font-bold text-slate-400"> / {maxPoints}</span>
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white border border-slate-100">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Points Awarded
+                  </p>
+                  <p className="text-lg font-black text-emerald-600 flex items-center gap-1 mt-0.5">
+                    <Award className="w-4 h-4 shrink-0" />
+                    +{submissionResult?.success && !submissionResult.alreadySubmitted ? finalPointsAwarded : finalScoreEarned}
+                  </p>
+                </div>
               </div>
-              <div className="p-2.5 rounded-xl bg-white border border-slate-100">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Score Earned
-                </p>
-                <p className="text-lg font-black text-slate-900 mt-0.5">
-                  {finalScoreEarned}
-                  <span className="text-xs font-bold text-slate-400"> / {maxPoints}</span>
-                </p>
-              </div>
-              <div className="p-2.5 rounded-xl bg-white border border-slate-100">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Points Awarded
-                </p>
-                <p className="text-lg font-black text-emerald-600 flex items-center gap-1 mt-0.5">
-                  <Award className="w-4 h-4 shrink-0" />
-                  +{submissionResult?.success && !submissionResult.alreadySubmitted ? finalPointsAwarded : finalScoreEarned}
-                </p>
-              </div>
-            </div>
+            )}
 
             <div className="p-3 rounded-xl bg-sky-50 border border-sky-200 text-xs text-sky-800 flex items-center justify-center gap-2 font-semibold">
               <Lock className="w-4 h-4 shrink-0 text-sky-600" />

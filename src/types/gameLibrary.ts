@@ -40,11 +40,77 @@ export interface MemoryMatchConfig {
   pairs: MemoryMatchPairItem[];
 }
 
+export type JigsawQuestionType = 'mcq' | 'true_false' | 'unscramble';
+
+export interface JigsawMcqQuestion {
+  id: string;
+  type: 'mcq';
+  prompt: string;
+  options: [string, string, string, string];
+  correctIndex: 0 | 1 | 2 | 3;
+}
+
+export interface JigsawTrueFalseQuestion {
+  id: string;
+  type: 'true_false';
+  prompt: string;
+  correctAnswer: boolean;
+}
+
+export interface JigsawUnscrambleQuestion {
+  id: string;
+  type: 'unscramble';
+  sentence: string;
+  shuffledTokens?: string[];
+}
+
+export type JigsawQuestion =
+  | JigsawMcqQuestion
+  | JigsawTrueFalseQuestion
+  | JigsawUnscrambleQuestion;
+
+export interface JigsawSanitizedQuestion {
+  id: string;
+  type: JigsawQuestionType;
+  prompt?: string;
+  options?: [string, string, string, string];
+  shuffledTokens?: string[];
+  wordCount?: number;
+}
+
+export interface JigsawAnswerRecord {
+  questionId: string;
+  type: JigsawQuestionType;
+  submittedAnswer: number | boolean | string[];
+  isCorrect: boolean;
+  correctAnswerDisplay: string;
+  correctIndex?: 0 | 1 | 2 | 3;
+  correctBoolean?: boolean;
+  correctSentence?: string;
+  submittedAt: string;
+}
+
+export interface JigsawProgressState {
+  puzzleCompleted: boolean;
+  puzzleCompletedAt?: string;
+  answers: Record<string, JigsawAnswerRecord>;
+  currentQuestionIndex: number;
+  questionsUnlockedCount?: number;
+  puzzlePoints?: number;
+  questionPoints?: number;
+  totalPointsEarned?: number;
+}
+
 export interface ClassroomJigsawConfig {
   imageDataUrl?: string;
   images?: string[];
   gridSize: 2 | 3 | 4;
   title?: string;
+  showTimer?: boolean;
+  questionsEnabled?: boolean;
+  questions?: JigsawQuestion[];
+  questionCount?: number;
+  questionsLocked?: boolean;
 }
 
 export interface LuminaWordItem {

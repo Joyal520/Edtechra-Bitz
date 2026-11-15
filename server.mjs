@@ -10188,7 +10188,7 @@ app.get('/api/classes/:classroomId/challenges', async (req, res) => {
       return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
     }
 
-    const [{ data: challenges, error: cErr }, { data: students, error: sErr }] = await Promise.all([
+    const [{ data: challenges, error: cErr }, { data: students, error: sErr }, { data: classroomRow }, { data: memberRow }] = await Promise.all([
       serverSupabase
         .from('ai_challenges')
         .select(`
@@ -10201,14 +10201,38 @@ app.get('/api/classes/:classroomId/challenges', async (req, res) => {
       serverSupabase
         .from('classroom_students')
         .select('student_id')
+        .eq('classroom_id', classroomId),
+      serverSupabase
+        .from('classrooms')
+        .select('teacher_id')
+        .eq('id', classroomId)
+        .maybeSingle(),
+      serverSupabase
+        .from('classroom_members')
+        .select('role')
         .eq('classroom_id', classroomId)
+        .eq('profile_id', authData.user.id)
+        .maybeSingle()
     ]);
 
     if (cErr) throw cErr;
 
+    const userIsTeacher =
+      classroomRow?.teacher_id === authData.user.id ||
+      memberRow?.role === 'teacher' ||
+      memberRow?.role === 'co-teacher' ||
+      authData.isTeacher;
+
     const totalStudents = students ? students.length : 0;
 
-    const formatted = (challenges || []).map((ch) => {
+    const visibleChallenges = userIsTeacher
+      ? (challenges || [])
+      : (challenges || []).filter((ch) => {
+          const st = String(ch.status || '').toLowerCase();
+          return !['draft', 'archived', 'deleted'].includes(st);
+        });
+
+    const formatted = visibleChallenges.map((ch) => {
       const subs = ch.submissions || [];
       const submittedCount = subs.length;
       const completedCount = subs.filter((s) => s.status === 'completed').length;
@@ -11250,11 +11274,20 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
       return Number(e.total_questions) || Number(e.questions_count) || 0;
     };
 
-    // A. Tasks
+    // A. Tasks & Classroom Games
     (tasks || []).forEach(t => {
-      if (!isTeacher && !isAssignmentPublished(t)) return;
-      const key = `task-${t.id}`;
-      if (seen.has(key) || isMarkedRead(key, t.id)) return;
+      // Unpublished assignments must NEVER remain active announcements
+      if (!isAssignmentPublished(t)) return;
+      const isGame = Boolean(t.settings?.is_game_library);
+      const key = isGame ? `game-${t.id}` : `task-${t.id}`;
+      if (
+        seen.has(key) ||
+        isMarkedRead(key, t.id) ||
+        isMarkedRead(`task-${t.id}`, t.id) ||
+        isMarkedRead(`game-${t.id}`, t.id)
+      ) {
+        return;
+      }
 
       // 1. Completion rule: if student completed, hide from announcement feed
       if (!isTeacher && completedTaskIds.has(t.id)) return;
@@ -11274,9 +11307,13 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
       activeItems.push({
         id: key,
         rawId: t.id,
-        type: 'task',
-        title: t.title || 'Classroom Task',
-        description: t.instructions || 'Complete the assignment and submit your work before the deadline.',
+        type: isGame ? 'game' : 'task',
+        title: t.title || (isGame ? 'Educational Game' : 'Classroom Task'),
+        description:
+          t.instructions ||
+          (isGame
+            ? `Play ${t.settings?.game_name || 'Educational Game'} and climb the classroom leaderboard!`
+            : 'Complete the assignment and submit your work before the deadline.'),
         createdAt: t.created_at || nowIso,
         dueDate: t.due_date || null,
         expiresAt: new Date(expiresMs).toISOString(),
@@ -11356,14 +11393,18 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
 
     // D. Competitions
     (challenges || []).forEach(c => {
+      const chStatus = String(c.status || '').toLowerCase();
+      if (['draft', 'archived', 'deleted', 'closed'].includes(chStatus)) return;
+
       const key = `comp-${c.id}`;
       if (seen.has(key) || isMarkedRead(key, c.id)) return;
 
       if (!isTeacher && completedChallengeIds.has(c.id)) return;
 
+      const rawDeadline = c.deadline_at || c.due_date || null;
       const createdMs = new Date(c.created_at || nowIso).getTime();
-      const expiresMs = c.due_date
-        ? new Date(c.due_date).getTime()
+      const expiresMs = rawDeadline
+        ? new Date(rawDeadline).getTime()
         : createdMs + ANNOUNCEMENT_DEFAULT_TTL_MS;
 
       if (expiresMs <= nowMs) return;
@@ -11376,9 +11417,9 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
         title: c.title || 'Creative Problem Challenge',
         description: c.description || c.instructions || 'Submit your creative work for AI-powered evaluation.',
         createdAt: c.created_at || nowIso,
-        dueDate: c.due_date || null,
+        dueDate: rawDeadline,
         expiresAt: new Date(expiresMs).toISOString(),
-        points: c.points || 100,
+        points: c.max_marks || c.points || 100,
         statusBadge: 'Active',
         rawItem: c
       });
@@ -11419,6 +11460,7 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     return res.json({
       success: true,
       server_time: nowIso,
@@ -23319,6 +23361,792 @@ function getDateKeyInTz(dateInput, timeZone = 'UTC') {
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function getJigsawSealKey() {
+  const secretMaterial =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SESSION_SECRET ||
+    process.env.SUPABASE_ANON_KEY ||
+    'edtechra-jigsaw-default-seal-secret';
+  return crypto.createHash('sha256').update(String(secretMaterial)).digest();
+}
+
+function sealJigsawLevelQuestions(questionsByLevel) {
+  const key = getJigsawSealKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const json = JSON.stringify(questionsByLevel || {});
+  const encrypted = Buffer.concat([cipher.update(json, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${iv.toString('base64url')}.${tag.toString('base64url')}.${encrypted.toString('base64url')}`;
+}
+
+function unsealJigsawLevelQuestions(sealedPayload) {
+  if (!sealedPayload || typeof sealedPayload !== 'string') return null;
+  try {
+    const parts = sealedPayload.split('.');
+    if (parts.length !== 3) return null;
+    const [ivB64, tagB64, dataB64] = parts;
+    const iv = Buffer.from(ivB64, 'base64url');
+    const tag = Buffer.from(tagB64, 'base64url');
+    const data = Buffer.from(dataB64, 'base64url');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', getJigsawSealKey(), iv);
+    decipher.setAuthTag(tag);
+    const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
+    return JSON.parse(decrypted.toString('utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function jigsawTokenizeWords(sentence) {
+  const cleaned = String(sentence || '').trim();
+  if (!cleaned) return [];
+  return cleaned.split(/\s+/).filter(Boolean);
+}
+
+function jigsawNormalizeToken(token) {
+  return String(token || '')
+    .trim()
+    .replace(/[.!?]+$/g, '')
+    .toLowerCase();
+}
+
+function jigsawShuffleTokens(tokens, seedInput) {
+  const arr = [...tokens];
+  if (arr.length <= 1) return arr;
+  const hasDistinct = new Set(arr.map((t) => jigsawNormalizeToken(t))).size > 1;
+  let state = 0;
+  const seed = String(seedInput || 'seed');
+  for (let i = 0; i < seed.length; i += 1) {
+    state = (state * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+  const nextRand = () => {
+    state = (1664525 * state + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const copy = [...arr];
+    for (let i = copy.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(nextRand() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    const sameOrder = copy.every((t, idx) => t === arr[idx]);
+    if (!hasDistinct || !sameOrder) return copy;
+  }
+  if (hasDistinct) {
+    for (let i = 1; i < arr.length; i += 1) {
+      if (jigsawNormalizeToken(arr[i]) !== jigsawNormalizeToken(arr[0])) {
+        const swapped = [...arr];
+        [swapped[0], swapped[i]] = [swapped[i], swapped[0]];
+        return swapped;
+      }
+    }
+  }
+  return arr;
+}
+
+function jigsawValidateUnscramble(studentTokens, targetSentence) {
+  const expected = jigsawTokenizeWords(targetSentence);
+  if (expected.length < 2 || !Array.isArray(studentTokens) || studentTokens.length !== expected.length) {
+    return false;
+  }
+  for (let i = 0; i < expected.length; i += 1) {
+    if (jigsawNormalizeToken(studentTokens[i]) !== jigsawNormalizeToken(expected[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function jigsawComputeBreakdown(maxPoints, totalQuestions, correctCount) {
+  const safeMax = Math.max(0, Math.round(Number(maxPoints) || 0));
+  if (totalQuestions <= 0) {
+    return { puzzlePoints: safeMax, questionPoints: 0, totalPoints: safeMax, accuracyPct: 100 };
+  }
+  const safeCorrect = Math.max(0, Math.min(totalQuestions, Math.round(Number(correctCount) || 0)));
+  const puzzlePoints = safeMax > 0 ? Math.max(1, Math.round(safeMax * 0.25)) : 0;
+  const quizPool = Math.max(0, safeMax - puzzlePoints);
+  const questionPoints =
+    safeCorrect === totalQuestions
+      ? quizPool
+      : Math.round((quizPool * safeCorrect) / totalQuestions);
+  const totalPoints = Math.min(safeMax, puzzlePoints + questionPoints);
+  const accuracyPct = Math.round((safeCorrect / totalQuestions) * 100);
+  return {
+    puzzlePoints,
+    questionPoints: totalPoints - puzzlePoints,
+    totalPoints,
+    accuracyPct
+  };
+}
+
+function sanitizeJigsawQuestionForStudent(q, indexSeed) {
+  if (!q || typeof q !== 'object') return null;
+  if (q.type === 'mcq') {
+    return {
+      id: String(q.id),
+      type: 'mcq',
+      prompt: String(q.prompt || ''),
+      options: Array.isArray(q.options) ? q.options.map((o) => String(o || '')) : []
+    };
+  }
+  if (q.type === 'true_false') {
+    return {
+      id: String(q.id),
+      type: 'true_false',
+      prompt: String(q.prompt || '')
+    };
+  }
+  if (q.type === 'unscramble') {
+    const words = jigsawTokenizeWords(q.sentence || '');
+    const shuffled = Array.isArray(q.shuffledTokens) && q.shuffledTokens.length === words.length
+      ? q.shuffledTokens
+      : jigsawShuffleTokens(words, `${q.id || indexSeed}`);
+    return {
+      id: String(q.id),
+      type: 'unscramble',
+      shuffledTokens: shuffled,
+      wordCount: words.length
+    };
+  }
+  return null;
+}
+
+function gradeJigsawQuestionSubmission(q, submittedAnswer) {
+  if (q.type === 'mcq') {
+    const chosenIndex = Number(submittedAnswer);
+    const correctIndex = Number(q.correctIndex);
+    const isCorrect = Number.isInteger(chosenIndex) && chosenIndex === correctIndex;
+    const labels = ['A', 'B', 'C', 'D'];
+    const optText = Array.isArray(q.options) ? q.options[correctIndex] || '' : '';
+    return {
+      isCorrect,
+      normalizedSubmission: chosenIndex,
+      correctAnswerDisplay: `${labels[correctIndex] || '?'}. ${optText}`,
+      correctIndex
+    };
+  }
+  if (q.type === 'true_false') {
+    let chosenBool;
+    if (typeof submittedAnswer === 'boolean') chosenBool = submittedAnswer;
+    else if (String(submittedAnswer).toLowerCase() === 'true') chosenBool = true;
+    else if (String(submittedAnswer).toLowerCase() === 'false') chosenBool = false;
+    else chosenBool = null;
+    const correctBool = Boolean(q.correctAnswer);
+    return {
+      isCorrect: chosenBool === correctBool,
+      normalizedSubmission: chosenBool,
+      correctAnswerDisplay: correctBool ? 'True' : 'False',
+      correctBoolean: correctBool
+    };
+  }
+  if (q.type === 'unscramble') {
+    const arr = Array.isArray(submittedAnswer)
+      ? submittedAnswer.map((t) => String(t))
+      : jigsawTokenizeWords(String(submittedAnswer || ''));
+    const isCorrect = jigsawValidateUnscramble(arr, q.sentence || '');
+    return {
+      isCorrect,
+      normalizedSubmission: arr,
+      correctAnswerDisplay: String(q.sentence || '').trim(),
+      correctSentence: String(q.sentence || '').trim()
+    };
+  }
+  return {
+    isCorrect: false,
+    normalizedSubmission: submittedAnswer,
+    correctAnswerDisplay: ''
+  };
+}
+
+function parseGameSubmissionPayload(textResponse) {
+  if (!textResponse) return { levelsCompleted: {}, levelsInProgress: {}, raw: null };
+  try {
+    const parsed = JSON.parse(textResponse);
+    const levelsCompleted =
+      parsed?.levels_completed && typeof parsed.levels_completed === 'object'
+        ? { ...parsed.levels_completed }
+        : {};
+    const levelsInProgress =
+      parsed?.levels_in_progress && typeof parsed.levels_in_progress === 'object'
+        ? { ...parsed.levels_in_progress }
+        : {};
+    return { levelsCompleted, levelsInProgress, raw: parsed };
+  } catch {
+    return { levelsCompleted: {}, levelsInProgress: {}, raw: null };
+  }
+}
+
+async function resolveJigsawCanonicalQuestions(assignment, levelId, targetLevel) {
+  const sealedMap = unsealJigsawLevelQuestions(assignment?.settings?.jigsaw_sealed_keys);
+  if (sealedMap && Array.isArray(sealedMap[levelId])) {
+    return {
+      questionsEnabled: sealedMap[levelId].length > 0,
+      questions: sealedMap[levelId]
+    };
+  }
+  try {
+    const { data: keyRow } = await serverSupabase
+      .from('jigsaw_assignment_question_keys')
+      .select('questions_enabled, questions_json, sealed_payload')
+      .eq('assignment_id', assignment.id)
+      .eq('level_id', String(levelId))
+      .maybeSingle();
+    if (keyRow) {
+      const qs = Array.isArray(keyRow.questions_json) ? keyRow.questions_json : [];
+      return { questionsEnabled: Boolean(keyRow.questions_enabled) && qs.length > 0, questions: qs };
+    }
+  } catch {
+    // Table may not exist yet in environments without migration run; fall through cleanly.
+  }
+  const cfg = targetLevel?.config || {};
+  const fallbackQs = Array.isArray(cfg.questions) ? cfg.questions : [];
+  return {
+    questionsEnabled: Boolean(cfg.questionsEnabled) && fallbackQs.length > 0,
+    questions: fallbackQs
+  };
+}
+
+async function verifyJigsawLevelContext(req, assignmentId, levelId) {
+  const auth = await verifyAuthUser(req);
+  if (!auth?.user) {
+    return { status: 401, error: 'Authentication required' };
+  }
+  const studentId = auth.user.id;
+  if (!assignmentId) {
+    return { status: 400, error: 'assignmentId is required' };
+  }
+
+  const { data: assignment, error: assignErr } = await serverSupabase
+    .from('assignments')
+    .select('id, classroom_id, title, points, status, is_deleted, settings')
+    .eq('id', assignmentId)
+    .single();
+
+  if (assignErr || !assignment || assignment.is_deleted) {
+    return { status: 404, error: 'Game assignment not found' };
+  }
+  if (assignment.status !== 'published' || assignment.settings?.is_unpublished) {
+    return { status: 403, error: 'This game is currently unpublished and unavailable.' };
+  }
+  if (!assignment.settings?.is_game_library || assignment.settings?.game_id !== 'classroom-jigsaw') {
+    return { status: 400, error: 'Assignment is not a Classroom Jigsaw activity' };
+  }
+
+  const [{ data: membership }, { data: classroomRow }] = await Promise.all([
+    serverSupabase
+      .from('classroom_members')
+      .select('id, role, status')
+      .eq('classroom_id', assignment.classroom_id)
+      .eq('profile_id', studentId)
+      .maybeSingle(),
+    serverSupabase
+      .from('classrooms')
+      .select('leaderboard_timezone')
+      .eq('id', assignment.classroom_id)
+      .maybeSingle()
+  ]);
+
+  if (!membership || membership.status !== 'active') {
+    return { status: 403, error: 'You are not an active member of this classroom' };
+  }
+
+  const rawLevels =
+    Array.isArray(assignment.settings?.levels) && assignment.settings.levels.length > 0
+      ? [...assignment.settings.levels].sort((a, b) => Number(a.levelNumber || 0) - Number(b.levelNumber || 0))
+      : [
+          {
+            id: assignment.id,
+            levelNumber: 1,
+            title: assignment.title || 'Level 1',
+            points: Number(assignment.points || 100),
+            isManuallyLocked: false,
+            unlockAt: null,
+            config: {}
+          }
+        ];
+
+  const targetIndex = levelId ? rawLevels.findIndex((l) => String(l.id) === String(levelId)) : 0;
+  if (targetIndex === -1) {
+    return { status: 400, error: 'Invalid levelId for this Jigsaw assignment' };
+  }
+  const targetLevel = rawLevels[targetIndex];
+  const resolvedLevelId = String(targetLevel.id);
+
+  const { data: existingSubmission } = await serverSupabase
+    .from('assignment_submissions')
+    .select('id, status, points_awarded, text_response, submitted_at, graded_at, teacher_feedback')
+    .eq('assignment_id', assignmentId)
+    .eq('student_id', studentId)
+    .maybeSingle();
+
+  const { levelsCompleted, levelsInProgress, raw: parsedSubmission } = parseGameSubmissionPayload(
+    existingSubmission?.text_response
+  );
+
+  // Enforce same level unlock rules
+  if (targetLevel.isManuallyLocked) {
+    return { status: 403, error: 'Your teacher has locked this level.' };
+  }
+  const classroomTz = classroomRow?.leaderboard_timezone || 'UTC';
+  const unlockMode = assignment.settings?.unlock_mode || 'sequential';
+  const dailyLimit = Math.max(1, Number(assignment.settings?.daily_limit || 1));
+  if (!levelsCompleted[resolvedLevelId]) {
+    if (unlockMode === 'scheduled' && targetLevel.unlockAt) {
+      const unlockMs = new Date(targetLevel.unlockAt).getTime();
+      if (!isNaN(unlockMs) && Date.now() < unlockMs) {
+        return { status: 403, error: 'This level is scheduled for a future unlock date.' };
+      }
+    } else if (unlockMode === 'daily_limit') {
+      const todayKey = getDateKeyInTz(new Date(), classroomTz);
+      const completedToday = Object.values(levelsCompleted).filter(
+        (rec) => rec?.completedAt && getDateKeyInTz(rec.completedAt, classroomTz) === todayKey
+      ).length;
+      if (completedToday >= dailyLimit) {
+        return { status: 403, error: `Daily limit reached (${dailyLimit} per day).` };
+      }
+      if (targetIndex > 0 && !levelsCompleted[String(rawLevels[targetIndex - 1].id)]) {
+        return { status: 403, error: 'Complete the previous level to unlock this level.' };
+      }
+    } else if (targetIndex > 0 && !levelsCompleted[String(rawLevels[targetIndex - 1].id)]) {
+      return { status: 403, error: 'Complete the previous level to unlock this level.' };
+    }
+  }
+
+  return {
+    status: 200,
+    studentId,
+    assignment,
+    rawLevels,
+    targetIndex,
+    targetLevel,
+    resolvedLevelId,
+    existingSubmission,
+    levelsCompleted,
+    levelsInProgress,
+    parsedSubmission
+  };
+}
+
+async function persistJigsawInProgress(ctx, progressState) {
+  const {
+    studentId,
+    assignment,
+    rawLevels,
+    resolvedLevelId,
+    existingSubmission,
+    levelsCompleted,
+    levelsInProgress,
+    parsedSubmission
+  } = ctx;
+  const nowIso = new Date().toISOString();
+  const updatedInProgress = {
+    ...levelsInProgress,
+    [resolvedLevelId]: progressState
+  };
+  const completedCount = Object.keys(levelsCompleted).length;
+  const totalEarned = Object.values(levelsCompleted).reduce((s, r) => s + Number(r?.scoreEarned || 0), 0);
+  const assignmentTotalMax = rawLevels.reduce((s, l) => s + Math.max(1, Number(l.points || 20)), 0);
+
+  const nextPayload = JSON.stringify({
+    ...(parsedSubmission || {}),
+    game_id: 'classroom-jigsaw',
+    game_name: assignment.settings?.game_name || 'Classroom Jigsaw',
+    is_multi_level: true,
+    student_id: studentId,
+    classroom_id: assignment.classroom_id,
+    assignment_id: assignment.id,
+    total_levels: rawLevels.length,
+    completed_levels_count: completedCount,
+    total_points_earned: totalEarned,
+    max_points: assignmentTotalMax,
+    levels_completed: levelsCompleted,
+    levels_in_progress: updatedInProgress
+  });
+
+  if (existingSubmission) {
+    const { error } = await serverSupabase
+      .from('assignment_submissions')
+      .update({ text_response: nextPayload })
+      .eq('id', existingSubmission.id);
+    if (error) throw error;
+  } else {
+    const { error } = await serverSupabase
+      .from('assignment_submissions')
+      .insert({
+        assignment_id: assignment.id,
+        classroom_id: assignment.classroom_id,
+        student_id: studentId,
+        status: 'draft',
+        text_response: nextPayload,
+        points_awarded: 0
+      });
+    if (error) throw error;
+  }
+
+  try {
+    const answers = progressState?.answers || {};
+    const correctCount = Object.values(answers).filter((a) => a?.isCorrect).length;
+    await serverSupabase
+      .from('jigsaw_student_progress')
+      .upsert(
+        {
+          assignment_id: assignment.id,
+          classroom_id: assignment.classroom_id,
+          student_id: studentId,
+          level_id: resolvedLevelId,
+          puzzle_completed: Boolean(progressState?.puzzleCompleted),
+          puzzle_completed_at: progressState?.puzzleCompletedAt || nowIso,
+          answers_json: answers,
+          current_question_index: Number(progressState?.currentQuestionIndex || 0),
+          correct_count: correctCount,
+          total_questions: Number(progressState?.questionsUnlockedCount || 0),
+          updated_at: nowIso
+        },
+        { onConflict: 'assignment_id,student_id,level_id' }
+      );
+  } catch {
+    // Non-fatal if migration hasn't been applied in Supabase yet.
+  }
+}
+
+app.post('/api/games/jigsaw/seal-config', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth?.user) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const { classroomId, levels, assignmentId } = req.body || {};
+    if (!classroomId || !Array.isArray(levels)) {
+      return res.status(400).json({ success: false, error: 'classroomId and levels array are required' });
+    }
+
+    const [{ data: classroomRow }, { data: membership }] = await Promise.all([
+      serverSupabase.from('classrooms').select('id, teacher_id').eq('id', classroomId).maybeSingle(),
+      serverSupabase
+        .from('classroom_members')
+        .select('role, status')
+        .eq('classroom_id', classroomId)
+        .eq('profile_id', auth.user.id)
+        .maybeSingle()
+    ]);
+
+    const isTeacherOwner = classroomRow && classroomRow.teacher_id === auth.user.id;
+    const isTeacherMember =
+      membership && membership.status === 'active' && ['teacher', 'admin', 'instructor'].includes(membership.role);
+    if (!isTeacherOwner && !isTeacherMember) {
+      return res.status(403).json({ success: false, error: 'Only classroom teachers can publish game configurations.' });
+    }
+
+    const questionsByLevel = {};
+    const sanitizedLevels = levels.map((lvl, idx) => {
+      const levelId = String(lvl?.id || `level-${idx + 1}`);
+      const cfg = lvl?.config && typeof lvl.config === 'object' ? { ...lvl.config } : {};
+      const questionsEnabled = Boolean(cfg.questionsEnabled);
+      const rawQuestions = questionsEnabled && Array.isArray(cfg.questions) ? cfg.questions : [];
+      const canonicalQuestions = rawQuestions.map((q, qIdx) => {
+        const id = String(q?.id || `jq_${idx + 1}_${qIdx + 1}`);
+        if (q?.type === 'unscramble') {
+          const tokens = jigsawTokenizeWords(q.sentence || '');
+          return {
+            id,
+            type: 'unscramble',
+            sentence: String(q.sentence || '').trim().replace(/\s+/g, ' '),
+            shuffledTokens: jigsawShuffleTokens(tokens, id)
+          };
+        }
+        if (q?.type === 'true_false') {
+          return {
+            id,
+            type: 'true_false',
+            prompt: String(q.prompt || '').trim(),
+            correctAnswer: Boolean(q.correctAnswer)
+          };
+        }
+        return {
+          id,
+          type: 'mcq',
+          prompt: String(q?.prompt || '').trim(),
+          options: Array.isArray(q?.options) ? q.options.map((o) => String(o || '').trim()) : ['', '', '', ''],
+          correctIndex: Number(q?.correctIndex ?? 0)
+        };
+      });
+
+      questionsByLevel[levelId] = canonicalQuestions;
+
+      const { questions: _strippedQuestions, ...safeConfig } = cfg;
+      return {
+        ...lvl,
+        id: levelId,
+        config: {
+          ...safeConfig,
+          questionsEnabled: questionsEnabled && canonicalQuestions.length > 0,
+          questionCount: questionsEnabled ? canonicalQuestions.length : 0,
+          questionsLocked: questionsEnabled && canonicalQuestions.length > 0
+        }
+      };
+    });
+
+    const jigsawSealedKeys = sealJigsawLevelQuestions(questionsByLevel);
+
+    if (assignmentId) {
+      try {
+        for (const [lvlId, qs] of Object.entries(questionsByLevel)) {
+          await serverSupabase.from('jigsaw_assignment_question_keys').upsert(
+            {
+              assignment_id: assignmentId,
+              classroom_id: classroomId,
+              teacher_id: auth.user.id,
+              level_id: lvlId,
+              questions_enabled: qs.length > 0,
+              questions_json: qs,
+              sealed_payload: jigsawSealedKeys,
+              updated_at: new Date().toISOString()
+            },
+            { onConflict: 'assignment_id,level_id' }
+          );
+        }
+      } catch {
+        // Non-fatal fallback; jigsawSealedKeys inside assignment.settings guarantees answer safety.
+      }
+    }
+
+    return res.json({
+      success: true,
+      levels: sanitizedLevels,
+      jigsawSealedKeys
+    });
+  } catch (err) {
+    console.error('[games/jigsaw/seal-config] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to seal Jigsaw config' });
+  }
+});
+
+app.get('/api/games/jigsaw/state', async (req, res) => {
+  try {
+    const assignmentId = String(req.query.assignmentId || '');
+    const levelId = req.query.levelId ? String(req.query.levelId) : '';
+    const ctx = await verifyJigsawLevelContext(req, assignmentId, levelId);
+    if (ctx.status !== 200) {
+      return res.status(ctx.status).json({ success: false, error: ctx.error });
+    }
+
+    const { resolvedLevelId, targetLevel, levelsCompleted, levelsInProgress, assignment } = ctx;
+    const { questionsEnabled, questions } = await resolveJigsawCanonicalQuestions(
+      assignment,
+      resolvedLevelId,
+      targetLevel
+    );
+
+    const completionRecord = levelsCompleted[resolvedLevelId] || null;
+    if (completionRecord) {
+      return res.json({
+        success: true,
+        alreadyCompleted: true,
+        completionRecord,
+        questionsEnabled,
+        questionCount: questions.length,
+        inProgress: {
+          puzzleCompleted: true,
+          answers: {},
+          currentQuestionIndex: questions.length
+        },
+        unlockedQuestions: []
+      });
+    }
+
+    const saved = levelsInProgress[resolvedLevelId] || {
+      puzzleCompleted: false,
+      answers: {},
+      currentQuestionIndex: 0
+    };
+    const puzzleCompleted = Boolean(saved.puzzleCompleted);
+
+    // Strictly withhold questions & answers until puzzle is actually completed
+    const unlockedQuestions =
+      puzzleCompleted && questionsEnabled
+        ? questions.map((q, idx) => sanitizeJigsawQuestionForStudent(q, idx)).filter(Boolean)
+        : [];
+
+    return res.json({
+      success: true,
+      alreadyCompleted: false,
+      completionRecord: null,
+      questionsEnabled,
+      questionCount: questions.length,
+      inProgress: {
+        puzzleCompleted,
+        puzzleCompletedAt: saved.puzzleCompletedAt || null,
+        answers: puzzleCompleted ? saved.answers || {} : {},
+        currentQuestionIndex: Number(saved.currentQuestionIndex || 0)
+      },
+      unlockedQuestions
+    });
+  } catch (err) {
+    console.error('[games/jigsaw/state] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to load Jigsaw state' });
+  }
+});
+
+app.post('/api/games/jigsaw/unlock-questions', async (req, res) => {
+  try {
+    const { assignmentId, levelId } = req.body || {};
+    const ctx = await verifyJigsawLevelContext(req, assignmentId, levelId);
+    if (ctx.status !== 200) {
+      return res.status(ctx.status).json({ success: false, error: ctx.error });
+    }
+    const { resolvedLevelId, targetLevel, levelsCompleted, levelsInProgress, assignment } = ctx;
+    if (levelsCompleted[resolvedLevelId]) {
+      return res.status(409).json({ success: false, alreadyCompleted: true, error: 'This level has already been completed.' });
+    }
+
+    const { questionsEnabled, questions } = await resolveJigsawCanonicalQuestions(
+      assignment,
+      resolvedLevelId,
+      targetLevel
+    );
+    const prev = levelsInProgress[resolvedLevelId] || {};
+    const nowIso = new Date().toISOString();
+    const nextState = {
+      puzzleCompleted: true,
+      puzzleCompletedAt: prev.puzzleCompletedAt || nowIso,
+      answers: prev.answers || {},
+      currentQuestionIndex: Number(prev.currentQuestionIndex || 0),
+      questionsUnlockedCount: questions.length
+    };
+    await persistJigsawInProgress(ctx, nextState);
+
+    const unlockedQuestions = questionsEnabled
+      ? questions.map((q, idx) => sanitizeJigsawQuestionForStudent(q, idx)).filter(Boolean)
+      : [];
+
+    return res.json({
+      success: true,
+      puzzleCompleted: true,
+      questionsEnabled,
+      questionCount: questions.length,
+      questions: unlockedQuestions,
+      answers: nextState.answers,
+      currentQuestionIndex: nextState.currentQuestionIndex
+    });
+  } catch (err) {
+    console.error('[games/jigsaw/unlock-questions] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to unlock Jigsaw questions' });
+  }
+});
+
+app.post('/api/games/jigsaw/submit-answer', async (req, res) => {
+  try {
+    const { assignmentId, levelId, questionId, submittedAnswer } = req.body || {};
+    const ctx = await verifyJigsawLevelContext(req, assignmentId, levelId);
+    if (ctx.status !== 200) {
+      return res.status(ctx.status).json({ success: false, error: ctx.error });
+    }
+    const { resolvedLevelId, targetLevel, levelsCompleted, levelsInProgress, assignment } = ctx;
+    if (levelsCompleted[resolvedLevelId]) {
+      return res.status(409).json({ success: false, alreadyCompleted: true, error: 'This level has already been completed.' });
+    }
+
+    const prev = levelsInProgress[resolvedLevelId];
+    if (!prev || !prev.puzzleCompleted) {
+      return res.status(403).json({
+        success: false,
+        code: 'PUZZLE_NOT_COMPLETED',
+        error: 'Complete the puzzle to unlock questions.'
+      });
+    }
+
+    const { questionsEnabled, questions } = await resolveJigsawCanonicalQuestions(
+      assignment,
+      resolvedLevelId,
+      targetLevel
+    );
+    if (!questionsEnabled || questions.length === 0) {
+      return res.status(400).json({ success: false, error: 'No interactive questions configured for this puzzle.' });
+    }
+
+    const qIdx = questions.findIndex((q) => String(q.id) === String(questionId));
+    if (qIdx === -1) {
+      return res.status(404).json({ success: false, error: 'Question not found in this puzzle.' });
+    }
+
+    const existingAnswers = { ...(prev.answers || {}) };
+    if (existingAnswers[String(questionId)]) {
+      const answeredCount = Object.keys(existingAnswers).length;
+      const correctCount = Object.values(existingAnswers).filter((a) => a?.isCorrect).length;
+      return res.json({
+        success: true,
+        alreadyAnswered: true,
+        record: existingAnswers[String(questionId)],
+        answeredCount,
+        totalQuestions: questions.length,
+        correctCount,
+        incorrectCount: answeredCount - correctCount,
+        allAnswered: answeredCount >= questions.length
+      });
+    }
+
+    // Enforce sequential order: student must answer earlier questions first
+    for (let i = 0; i < qIdx; i += 1) {
+      if (!existingAnswers[String(questions[i].id)]) {
+        return res.status(400).json({
+          success: false,
+          error: `Please answer Question ${i + 1} before moving ahead.`
+        });
+      }
+    }
+
+    const canonicalQ = questions[qIdx];
+    const graded = gradeJigsawQuestionSubmission(canonicalQ, submittedAnswer);
+    const nowIso = new Date().toISOString();
+    const record = {
+      questionId: String(canonicalQ.id),
+      type: canonicalQ.type,
+      submittedAnswer: graded.normalizedSubmission,
+      isCorrect: graded.isCorrect,
+      correctAnswerDisplay: graded.correctAnswerDisplay,
+      ...(graded.correctIndex !== undefined ? { correctIndex: graded.correctIndex } : {}),
+      ...(graded.correctBoolean !== undefined ? { correctBoolean: graded.correctBoolean } : {}),
+      ...(graded.correctSentence !== undefined ? { correctSentence: graded.correctSentence } : {}),
+      submittedAt: nowIso
+    };
+
+    const nextAnswers = {
+      ...existingAnswers,
+      [String(canonicalQ.id)]: record
+    };
+    const nextIndex = Math.min(questions.length, Object.keys(nextAnswers).length);
+    await persistJigsawInProgress(ctx, {
+      ...prev,
+      puzzleCompleted: true,
+      answers: nextAnswers,
+      currentQuestionIndex: nextIndex,
+      questionsUnlockedCount: questions.length
+    });
+
+    const answeredCount = Object.keys(nextAnswers).length;
+    const correctCount = Object.values(nextAnswers).filter((a) => a?.isCorrect).length;
+    const levelMax = Math.max(1, Number(targetLevel.points || 20));
+    const breakdown = jigsawComputeBreakdown(levelMax, questions.length, correctCount);
+
+    return res.json({
+      success: true,
+      alreadyAnswered: false,
+      record,
+      currentQuestionIndex: nextIndex,
+      answeredCount,
+      totalQuestions: questions.length,
+      correctCount,
+      incorrectCount: answeredCount - correctCount,
+      allAnswered: answeredCount >= questions.length,
+      breakdown
+    });
+  } catch (err) {
+    console.error('[games/jigsaw/submit-answer] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to submit Jigsaw answer' });
+  }
+});
+
 app.post('/api/games/submit-score', async (req, res) => {
   try {
     const auth = await verifyAuthUser(req);
@@ -23422,9 +24250,13 @@ app.post('/api/games/submit-score', async (req, res) => {
       .maybeSingle();
 
     let levelsCompleted = {};
+    let levelsInProgress = {};
     if (existingSubmission?.text_response) {
       try {
         const parsed = JSON.parse(existingSubmission.text_response);
+        if (parsed?.levels_in_progress && typeof parsed.levels_in_progress === 'object') {
+          levelsInProgress = { ...parsed.levels_in_progress };
+        }
         if (parsed?.levels_completed && typeof parsed.levels_completed === 'object') {
           levelsCompleted = { ...parsed.levels_completed };
         } else if (parsed?.assignment_id) {
@@ -23519,8 +24351,76 @@ app.post('/api/games/submit-score', async (req, res) => {
     const reportedMax = Math.max(1, Number(maxPoints || levelMax));
     const rawScore = Math.max(0, Number(scoreEarned || 0));
     const ratio = Math.min(1, Math.max(0, rawScore / reportedMax));
-    const pointsAwarded = Math.min(levelMax, Math.max(0, Math.round(ratio * levelMax)));
-    const percentage = Math.round(ratio * 100);
+    let pointsAwarded = Math.min(levelMax, Math.max(0, Math.round(ratio * levelMax)));
+    let percentage = Math.round(ratio * 100);
+    let resolvedDetails = details || null;
+
+    if (gameId === 'classroom-jigsaw') {
+      const { questionsEnabled, questions: canonicalQuestions } = await resolveJigsawCanonicalQuestions(
+        assignment,
+        resolvedLevelId,
+        targetLevel
+      );
+      if (questionsEnabled && canonicalQuestions.length > 0) {
+        const savedProgress = levelsInProgress[resolvedLevelId];
+        if (!savedProgress || !savedProgress.puzzleCompleted) {
+          return res.status(403).json({
+            success: false,
+            error: 'Complete the Jigsaw puzzle before submitting questions.'
+          });
+        }
+        const savedAnswers = savedProgress.answers && typeof savedProgress.answers === 'object'
+          ? savedProgress.answers
+          : {};
+        const answeredCount = canonicalQuestions.filter((q) => Boolean(savedAnswers[String(q.id)])).length;
+        if (answeredCount < canonicalQuestions.length) {
+          return res.status(400).json({
+            success: false,
+            error: `Please answer all ${canonicalQuestions.length} interactive questions before finishing (${answeredCount}/${canonicalQuestions.length} completed).`
+          });
+        }
+        const correctCount = canonicalQuestions.filter(
+          (q) => Boolean(savedAnswers[String(q.id)]?.isCorrect)
+        ).length;
+        const questionResults = canonicalQuestions.map((q) => {
+          const ans = savedAnswers[String(q.id)] || null;
+          return {
+            questionId: String(q.id),
+            type: q.type || 'mcq',
+            prompt: q.prompt || q.question || '',
+            isCorrect: Boolean(ans?.isCorrect),
+            studentAnswer: ans?.answer ?? null,
+            correctAnswer:
+              q.type === 'true_false'
+                ? q.correctAnswer
+                : q.type === 'unscramble'
+                  ? q.sentence || ''
+                  : q.options?.[Number(q.correctIndex ?? 0)] ?? q.correctIndex
+          };
+        });
+        const breakdown = jigsawComputeBreakdown(levelMax, canonicalQuestions.length, correctCount);
+        pointsAwarded = breakdown.totalPoints;
+        percentage = breakdown.accuracyPct;
+        resolvedDetails = {
+          ...(details && typeof details === 'object' ? details : {}),
+          puzzleCompleted: true,
+          questionsEnabled: true,
+          totalQuestions: canonicalQuestions.length,
+          questionsAnswered: answeredCount,
+          correctAnswers: correctCount,
+          incorrectAnswers: canonicalQuestions.length - correctCount,
+          accuracyPct: breakdown.accuracyPct,
+          puzzlePoints: breakdown.puzzlePoints,
+          questionPoints: breakdown.questionPoints,
+          totalPointsEarned: breakdown.totalPoints,
+          questionResults,
+          total_questions: canonicalQuestions.length,
+          questions_completed: answeredCount,
+          correct_answers: correctCount
+        };
+      }
+    }
+
     const safeTimeSeconds = Math.max(0, Math.round(Number(timeTakenSeconds || 0)));
     const nowIso = new Date().toISOString();
 
@@ -23535,9 +24435,12 @@ app.post('/api/games/submit-score', async (req, res) => {
         percentage,
         timeTakenSeconds: safeTimeSeconds,
         completedAt: nowIso,
-        details: details || null
+        details: resolvedDetails
       }
     };
+
+    const remainingInProgress = { ...levelsInProgress };
+    delete remainingInProgress[resolvedLevelId];
 
     const completedLevelsCount = Object.keys(updatedLevelsCompleted).length;
     const totalPointsEarned = Object.values(updatedLevelsCompleted).reduce(
@@ -23558,7 +24461,8 @@ app.post('/api/games/submit-score', async (req, res) => {
       completed_levels_count: completedLevelsCount,
       total_points_earned: totalPointsEarned,
       max_points: assignmentTotalMax,
-      levels_completed: updatedLevelsCompleted
+      levels_completed: updatedLevelsCompleted,
+      levels_in_progress: remainingInProgress
     });
 
     const newStatus = allLevelsCompleted ? 'graded' : 'submitted';
@@ -23571,6 +24475,7 @@ app.post('/api/games/submit-score', async (req, res) => {
         .from('assignment_submissions')
         .update({
           status: newStatus,
+          submitted_at: existingSubmission.submitted_at || nowIso,
           graded_at: allLevelsCompleted ? nowIso : existingSubmission.graded_at,
           text_response: summaryText,
           points_awarded: totalPointsEarned,
@@ -23657,6 +24562,25 @@ app.post('/api/games/submit-score', async (req, res) => {
       }
     }
 
+    if (gameId === 'classroom-jigsaw' && resolvedDetails?.questionsEnabled) {
+      try {
+        await serverSupabase
+          .from('jigsaw_student_progress')
+          .update({
+            puzzle_points: Number(resolvedDetails.puzzlePoints || 0),
+            question_points: Number(resolvedDetails.questionPoints || 0),
+            total_points_earned: pointsAwarded,
+            completed_at: nowIso,
+            updated_at: nowIso
+          })
+          .eq('assignment_id', assignmentId)
+          .eq('student_id', studentId)
+          .eq('level_id', resolvedLevelId);
+      } catch {
+        // Non-fatal if migration hasn't been applied
+      }
+    }
+
     return res.json({
       success: true,
       alreadySubmitted: false,
@@ -23669,11 +24593,692 @@ app.post('/api/games/submit-score', async (req, res) => {
       completedLevelsCount,
       totalLevels: rawLevels.length,
       totalPointsEarned,
+      details: resolvedDetails,
       message: `${targetLevel.title || `Level ${targetIndex + 1}`} completed! +${pointsAwarded} points added to the classroom leaderboard.`
     });
   } catch (err) {
     console.error('[games/submit-score] error:', err);
     return res.status(500).json({ success: false, error: err.message || 'Failed to submit game score' });
+  }
+});
+
+// Helper: Verify teacher or co-teacher access for a classroom
+async function isUserClassroomTeacher(userId, classroomId) {
+  if (!serverSupabase || !userId || !classroomId) return false;
+  const [{ data: cls }, { data: member }] = await Promise.all([
+    serverSupabase
+      .from('classrooms')
+      .select('id, teacher_id')
+      .eq('id', classroomId)
+      .maybeSingle(),
+    serverSupabase
+      .from('classroom_members')
+      .select('role, status')
+      .eq('classroom_id', classroomId)
+      .eq('profile_id', userId)
+      .eq('status', 'active')
+      .maybeSingle()
+  ]);
+  return Boolean(
+    cls?.teacher_id === userId ||
+      member?.role === 'teacher' ||
+      member?.role === 'co-teacher'
+  );
+}
+
+// POST /api/games/assignments/:assignmentId/publish-status - Publish / Unpublish game or task assignment without deleting history
+app.post('/api/games/assignments/:assignmentId/publish-status', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Database service unavailable.' });
+    }
+
+    const { assignmentId } = req.params;
+    const { publish } = req.body || {};
+    if (typeof publish !== 'boolean') {
+      return res.status(400).json({ success: false, error: 'publish (boolean) is required.' });
+    }
+
+    const { data: existing, error: fetchErr } = await serverSupabase
+      .from('assignments')
+      .select('id, classroom_id, title, status, settings, due_date, points, is_deleted')
+      .eq('id', assignmentId)
+      .maybeSingle();
+
+    if (fetchErr || !existing || existing.is_deleted) {
+      return res.status(404).json({ success: false, error: 'Assignment not found.' });
+    }
+
+    const allowed = await isUserClassroomTeacher(authData.user.id, existing.classroom_id);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: 'Teacher permissions required.' });
+    }
+
+    const nextSettings = {
+      ...(existing.settings && typeof existing.settings === 'object' ? existing.settings : {}),
+      is_unpublished: !publish
+    };
+    const nextStatus = publish ? 'published' : 'draft';
+
+    const { data: updated, error: updErr } = await serverSupabase
+      .from('assignments')
+      .update({
+        status: nextStatus,
+        settings: nextSettings,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', assignmentId)
+      .select('*')
+      .single();
+
+    if (updErr) {
+      return res.status(500).json({ success: false, error: updErr.message || 'Failed to update publication status.' });
+    }
+
+    return res.json({
+      success: true,
+      published: publish,
+      assignment: updated
+    });
+  } catch (err) {
+    console.error('[assignments/publish-status] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to update publication status' });
+  }
+});
+
+// PATCH /api/games/assignments/:assignmentId - Update single classroom assignment title or deadline without mutating library config
+app.patch('/api/games/assignments/:assignmentId', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Database service unavailable.' });
+    }
+
+    const { assignmentId } = req.params;
+    const { title, dueDate } = req.body || {};
+
+    const { data: existing, error: fetchErr } = await serverSupabase
+      .from('assignments')
+      .select('id, classroom_id, is_deleted')
+      .eq('id', assignmentId)
+      .maybeSingle();
+
+    if (fetchErr || !existing || existing.is_deleted) {
+      return res.status(404).json({ success: false, error: 'Assignment not found.' });
+    }
+
+    const allowed = await isUserClassroomTeacher(authData.user.id, existing.classroom_id);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: 'Teacher permissions required.' });
+    }
+
+    const updates = { updated_at: new Date().toISOString() };
+    if (typeof title === 'string' && title.trim()) {
+      updates.title = title.trim();
+    }
+    if (dueDate !== undefined) {
+      updates.due_date = dueDate ? new Date(dueDate).toISOString() : null;
+    }
+
+    const { data: updated, error: updErr } = await serverSupabase
+      .from('assignments')
+      .update(updates)
+      .eq('id', assignmentId)
+      .select('*')
+      .single();
+
+    if (updErr) {
+      return res.status(500).json({ success: false, error: updErr.message || 'Failed to update assignment.' });
+    }
+
+    return res.json({
+      success: true,
+      assignment: updated
+    });
+  } catch (err) {
+    console.error('[assignments/patch] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to update assignment' });
+  }
+});
+
+// POST /api/classes/challenges/:challengeId/publish-status - Publish / Unpublish AI competition without deleting submissions
+app.post('/api/classes/challenges/:challengeId/publish-status', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Database service unavailable.' });
+    }
+
+    const { challengeId } = req.params;
+    const { publish } = req.body || {};
+    if (typeof publish !== 'boolean') {
+      return res.status(400).json({ success: false, error: 'publish (boolean) is required.' });
+    }
+
+    const { data: challenge, error: fetchErr } = await serverSupabase
+      .from('ai_challenges')
+      .select('id, classroom_id, created_by, status')
+      .eq('id', challengeId)
+      .maybeSingle();
+
+    if (fetchErr || !challenge) {
+      return res.status(404).json({ success: false, error: 'Competition not found.' });
+    }
+
+    const allowed =
+      challenge.created_by === authData.user.id ||
+      (await isUserClassroomTeacher(authData.user.id, challenge.classroom_id));
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: 'Teacher permissions required.' });
+    }
+
+    const nextStatus = publish ? 'published' : 'draft';
+    const { data: updated, error: updErr } = await serverSupabase
+      .from('ai_challenges')
+      .update({
+        status: nextStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', challengeId)
+      .select('*')
+      .single();
+
+    if (updErr) {
+      return res.status(500).json({ success: false, error: updErr.message || 'Failed to update competition status.' });
+    }
+
+    return res.json({
+      success: true,
+      published: publish,
+      challenge: updated
+    });
+  } catch (err) {
+    console.error('[challenges/publish-status] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to update competition status' });
+  }
+});
+
+// GET /api/teacher/games/dashboard - Unified teacher Activity Details & Student Submissions across all teacher classrooms
+app.get('/api/teacher/games/dashboard', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Database service unavailable.' });
+    }
+
+    const teacherId = authData.user.id;
+    const requestedClassroomId = typeof req.query?.classroomId === 'string' ? req.query.classroomId : null;
+
+    // 1. Resolve all classrooms where this user is primary teacher or active co-teacher/teacher member
+    const [{ data: ownedClassrooms }, { data: teacherMemberships }, { data: savedLibraryGames }] = await Promise.all([
+      serverSupabase
+        .from('classrooms')
+        .select('id, title, subject, grade, is_archived, teacher_id')
+        .eq('teacher_id', teacherId),
+      serverSupabase
+        .from('classroom_members')
+        .select('classroom_id, role, status')
+        .eq('profile_id', teacherId)
+        .eq('status', 'active')
+        .in('role', ['teacher', 'co-teacher']),
+      serverSupabase
+        .from('teacher_game_library')
+        .select('*')
+        .eq('teacher_id', teacherId)
+        .order('updated_at', { ascending: false })
+    ]);
+
+    const classroomMap = new Map();
+    (ownedClassrooms || []).forEach((c) => {
+      if (c && !c.is_archived) classroomMap.set(c.id, c);
+    });
+
+    const memberClassroomIds = (teacherMemberships || [])
+      .map((m) => m.classroom_id)
+      .filter((cid) => cid && !classroomMap.has(cid));
+
+    if (memberClassroomIds.length > 0) {
+      const { data: extraClassrooms } = await serverSupabase
+        .from('classrooms')
+        .select('id, title, subject, grade, is_archived, teacher_id')
+        .in('id', memberClassroomIds);
+      (extraClassrooms || []).forEach((c) => {
+        if (c && !c.is_archived) classroomMap.set(c.id, c);
+      });
+    }
+
+    if (requestedClassroomId && !classroomMap.has(requestedClassroomId)) {
+      const allowed = await isUserClassroomTeacher(teacherId, requestedClassroomId);
+      if (allowed) {
+        const { data: reqCls } = await serverSupabase
+          .from('classrooms')
+          .select('id, title, subject, grade, is_archived, teacher_id')
+          .eq('id', requestedClassroomId)
+          .maybeSingle();
+        if (reqCls && !reqCls.is_archived) classroomMap.set(reqCls.id, reqCls);
+      }
+    }
+
+    const classrooms = Array.from(classroomMap.values()).sort((a, b) =>
+      String(a.title || '').localeCompare(String(b.title || ''))
+    );
+    const classroomIds = classrooms.map((c) => c.id);
+
+    if (classroomIds.length === 0) {
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({
+        success: true,
+        classrooms: [],
+        savedGames: savedLibraryGames || [],
+        activityGroups: [],
+        competitions: [],
+        studentSubmissions: []
+      });
+    }
+
+    // 2. Fetch game assignments, competitions, classroom members, and classroom students across all teacher classrooms
+    const [{ data: allAssignments }, { data: allChallenges }, { data: memberStudents }, { data: legacyStudents }] =
+      await Promise.all([
+        serverSupabase
+          .from('assignments')
+          .select('*')
+          .in('classroom_id', classroomIds)
+          .eq('is_deleted', false)
+          .order('created_at', { ascending: false }),
+        serverSupabase
+          .from('ai_challenges')
+          .select('*')
+          .in('classroom_id', classroomIds)
+          .order('created_at', { ascending: false }),
+        serverSupabase
+          .from('classroom_members')
+          .select('classroom_id, profile_id, role, status, profile:profiles!profile_id (id, full_name, email, avatar_url)')
+          .in('classroom_id', classroomIds)
+          .eq('status', 'active')
+          .eq('role', 'student'),
+        serverSupabase
+          .from('classroom_students')
+          .select('classroom_id, student_id')
+          .in('classroom_id', classroomIds)
+      ]);
+
+    const gameAssignments = (allAssignments || []).filter((a) => Boolean(a?.settings?.is_game_library));
+    const challenges = (allChallenges || []).filter(
+      (c) => String(c.status || '').toLowerCase() !== 'deleted'
+    );
+
+    const assignmentIds = gameAssignments.map((a) => a.id);
+    const challengeIds = challenges.map((c) => c.id);
+
+    // 3. Fetch submissions and any missing student profiles in parallel
+    const [{ data: rawGameSubs }, { data: rawChallengeSubs }] = await Promise.all([
+      assignmentIds.length > 0
+        ? serverSupabase
+            .from('assignment_submissions')
+            .select('id, assignment_id, student_id, status, points_awarded, submitted_at, graded_at, text_response, teacher_feedback')
+            .in('assignment_id', assignmentIds)
+        : Promise.resolve({ data: [] }),
+      challengeIds.length > 0
+        ? serverSupabase
+            .from('ai_challenge_submissions')
+            .select('id, challenge_id, student_id, status, submission_type, word_count, ai_score, final_score, percentage, criteria_json, ai_feedback, teacher_adjusted, teacher_adjustment_reason, submitted_at, evaluated_at')
+            .in('challenge_id', challengeIds)
+        : Promise.resolve({ data: [] })
+    ]);
+
+    // Build student profile directory & per-classroom student rosters
+    const profileMap = new Map();
+    const rosterByClassroom = new Map();
+    classroomIds.forEach((cid) => rosterByClassroom.set(cid, new Map()));
+
+    (memberStudents || []).forEach((m) => {
+      if (!m?.classroom_id || !m?.profile_id) return;
+      const p = m.profile || { id: m.profile_id, full_name: 'Student', email: '', avatar_url: null };
+      profileMap.set(m.profile_id, p);
+      if (rosterByClassroom.has(m.classroom_id)) {
+        rosterByClassroom.get(m.classroom_id).set(m.profile_id, p);
+      }
+    });
+
+    const missingProfileIds = new Set();
+    (legacyStudents || []).forEach((ls) => {
+      if (ls?.student_id && !profileMap.has(ls.student_id)) missingProfileIds.add(ls.student_id);
+    });
+    (rawGameSubs || []).forEach((s) => {
+      if (s?.student_id && !profileMap.has(s.student_id)) missingProfileIds.add(s.student_id);
+    });
+    (rawChallengeSubs || []).forEach((s) => {
+      if (s?.student_id && !profileMap.has(s.student_id)) missingProfileIds.add(s.student_id);
+    });
+
+    if (missingProfileIds.size > 0) {
+      const { data: extraProfiles } = await serverSupabase
+        .from('profiles')
+        .select('id, full_name, email, avatar_url')
+        .in('id', Array.from(missingProfileIds));
+      (extraProfiles || []).forEach((p) => {
+        if (p?.id) profileMap.set(p.id, p);
+      });
+    }
+
+    (legacyStudents || []).forEach((ls) => {
+      if (!ls?.classroom_id || !ls?.student_id) return;
+      const p = profileMap.get(ls.student_id) || { id: ls.student_id, full_name: 'Student', email: '', avatar_url: null };
+      if (rosterByClassroom.has(ls.classroom_id) && !rosterByClassroom.get(ls.classroom_id).has(ls.student_id)) {
+        rosterByClassroom.get(ls.classroom_id).set(ls.student_id, p);
+      }
+    });
+
+    // Safe JSON parser for game submission text_response
+    const parseSubText = (textResponse) => {
+      if (!textResponse) return null;
+      try {
+        return typeof textResponse === 'string' ? JSON.parse(textResponse) : textResponse;
+      } catch {
+        return null;
+      }
+    };
+
+    const isAssignmentPub = (row) =>
+      Boolean(row && !row.is_deleted && row.status === 'published' && !row.settings?.is_unpublished);
+
+    const gameSubsByAssignment = new Map();
+    (rawGameSubs || []).forEach((s) => {
+      if (!gameSubsByAssignment.has(s.assignment_id)) gameSubsByAssignment.set(s.assignment_id, []);
+      gameSubsByAssignment.get(s.assignment_id).push(s);
+    });
+
+    const challengeSubsByChallenge = new Map();
+    (rawChallengeSubs || []).forEach((s) => {
+      if (!challengeSubsByChallenge.has(s.challenge_id)) challengeSubsByChallenge.set(s.challenge_id, []);
+      challengeSubsByChallenge.get(s.challenge_id).push(s);
+    });
+
+    const savedLibraryMap = new Map();
+    (savedLibraryGames || []).forEach((g) => savedLibraryMap.set(g.id, g));
+
+    const studentSubmissions = [];
+    const activityGroupsMap = new Map();
+
+    // Seed groups from assigned game assignments (grouped by library_game_id or game+title fallback)
+    gameAssignments.forEach((a) => {
+      const cls = classroomMap.get(a.classroom_id);
+      if (!cls) return;
+
+      const libId = a.settings?.library_game_id || null;
+      const savedLib = libId ? savedLibraryMap.get(libId) : null;
+      const gameId = savedLib?.game_id || a.settings?.game_id || 'liquid-sentences';
+      const gameName = a.settings?.game_name || gameId;
+      const groupKey = libId
+        ? `lib::${libId}`
+        : `adhoc::${gameId}::${String(a.title || gameName).trim().toLowerCase()}`;
+      const groupTitle = savedLib?.title || a.title || gameName;
+
+      const rawLevels = Array.isArray(a.settings?.levels) && a.settings.levels.length > 0 ? a.settings.levels : [];
+      const totalLevels = Math.max(1, rawLevels.length || 1);
+      const maxPoints =
+        rawLevels.length > 0
+          ? rawLevels.reduce((sum, l) => sum + Math.max(1, Number(l.points || 20)), 0)
+          : Math.max(1, Number(a.points || 100));
+
+      const subsForAssign = gameSubsByAssignment.get(a.id) || [];
+      const subByStudent = new Map();
+      subsForAssign.forEach((s) => subByStudent.set(s.student_id, s));
+
+      const rosterMap = rosterByClassroom.get(a.classroom_id) || new Map();
+      const studentIdSet = new Set([...rosterMap.keys(), ...subByStudent.keys()]);
+
+      let completedCount = 0;
+      let inProgressCount = 0;
+
+      studentIdSet.forEach((studentId) => {
+        const prof =
+          rosterMap.get(studentId) ||
+          profileMap.get(studentId) || { id: studentId, full_name: 'Student', email: '', avatar_url: null };
+        const sub = subByStudent.get(studentId) || null;
+        const parsed = parseSubText(sub?.text_response);
+
+        const levelsCompletedObj = parsed?.levels_completed && typeof parsed.levels_completed === 'object' ? parsed.levels_completed : {};
+        const levelsInProgressObj = parsed?.levels_in_progress && typeof parsed.levels_in_progress === 'object' ? parsed.levels_in_progress : {};
+        const levelCompletedList = Object.values(levelsCompletedObj).sort(
+          (x, y) => Number(x?.levelNumber || 0) - Number(y?.levelNumber || 0)
+        );
+        const completedLevelsCount = Number(parsed?.completed_levels_count ?? levelCompletedList.length);
+        const inProgressCountLevels = Object.keys(levelsInProgressObj).length;
+
+        let status = 'Not Started';
+        if (sub) {
+          if (sub.status === 'graded' || (totalLevels > 0 && completedLevelsCount >= totalLevels)) {
+            status = 'Completed';
+          } else if (completedLevelsCount > 0 || inProgressCountLevels > 0 || sub.status === 'submitted') {
+            status = 'In Progress';
+          }
+        }
+
+        if (status === 'Completed') completedCount += 1;
+        else if (status === 'In Progress') inProgressCount += 1;
+
+        const scoreEarned = sub ? Number(sub.points_awarded ?? parsed?.total_points_earned ?? 0) : null;
+        const percentage =
+          scoreEarned !== null && maxPoints > 0 ? Math.min(100, Math.round((scoreEarned / maxPoints) * 100)) : null;
+        const totalTimeSeconds = levelCompletedList.reduce((sum, lvl) => sum + Number(lvl?.timeTakenSeconds || 0), 0);
+
+        const latestCompletedLevelAt = levelCompletedList.reduce((latest, lvl) => {
+          if (!lvl?.completedAt) return latest;
+          return !latest || new Date(lvl.completedAt) > new Date(latest) ? lvl.completedAt : latest;
+        }, null);
+        const completedAt =
+          status === 'Completed'
+            ? sub?.graded_at || sub?.submitted_at || latestCompletedLevelAt || null
+            : sub?.submitted_at || latestCompletedLevelAt || null;
+
+        studentSubmissions.push({
+          rowId: `game::${a.id}::${studentId}`,
+          itemType: 'game',
+          activityId: a.id,
+          libraryGameId: libId,
+          classroomId: cls.id,
+          classroomTitle: cls.title || 'Classroom',
+          studentId,
+          studentName: prof.full_name || 'Student',
+          studentEmail: prof.email || '',
+          studentAvatar: prof.avatar_url || null,
+          gameId,
+          gameName,
+          activityTitle: a.title || groupTitle,
+          publicationStatus: isAssignmentPub(a) ? 'Published' : 'Unpublished',
+          status,
+          scoreEarned,
+          maxPoints,
+          percentage,
+          completedAt,
+          timeTakenSeconds: levelCompletedList.length > 0 ? totalTimeSeconds : null,
+          completedLevelsCount,
+          totalLevels,
+          levelsCompleted: levelCompletedList,
+          levelsInProgress: Object.values(levelsInProgressObj)
+        });
+      });
+
+      const pubStatus = isAssignmentPub(a) ? 'Published' : 'Unpublished';
+      if (!activityGroupsMap.has(groupKey)) {
+        activityGroupsMap.set(groupKey, {
+          groupKey,
+          libraryGameId: libId,
+          isSavedLibraryGame: Boolean(savedLib),
+          title: groupTitle,
+          gameId,
+          gameName,
+          updatedAt: savedLib?.updated_at || a.updated_at || a.created_at,
+          assignments: [],
+          totalClassrooms: 0,
+          publishedCount: 0,
+          unpublishedCount: 0,
+          totalSubmissions: 0,
+          totalStudents: 0
+        });
+      }
+
+      const grp = activityGroupsMap.get(groupKey);
+      grp.assignments.push({
+        assignmentId: a.id,
+        classroomId: cls.id,
+        classroomTitle: cls.title || 'Classroom',
+        classroomSubject: cls.subject || '',
+        classroomGrade: cls.grade || '',
+        libraryGameId: libId,
+        gameId,
+        gameName,
+        title: a.title || groupTitle,
+        publicationStatus: pubStatus,
+        published: pubStatus === 'Published',
+        dueDate: a.due_date || null,
+        points: maxPoints,
+        totalLevels,
+        submissionsCount: completedCount + inProgressCount,
+        completedCount,
+        inProgressCount,
+        totalStudents: studentIdSet.size,
+        createdAt: a.created_at,
+        updatedAt: a.updated_at || a.created_at
+      });
+      grp.totalClassrooms += 1;
+      if (pubStatus === 'Published') grp.publishedCount += 1;
+      else grp.unpublishedCount += 1;
+      grp.totalSubmissions += completedCount + inProgressCount;
+      grp.totalStudents += studentIdSet.size;
+    });
+
+    // Build Competitions array + competition student submissions
+    const competitions = [];
+    challenges.forEach((c) => {
+      const cls = classroomMap.get(c.classroom_id);
+      if (!cls) return;
+      const chStatus = String(c.status || 'published').toLowerCase();
+      const isPub = !['draft', 'archived', 'deleted'].includes(chStatus);
+      const maxMarks = Math.max(1, Number(c.max_marks || 100));
+
+      const subs = challengeSubsByChallenge.get(c.id) || [];
+      const subByStudent = new Map();
+      subs.forEach((s) => subByStudent.set(s.student_id, s));
+
+      const rosterMap = rosterByClassroom.get(c.classroom_id) || new Map();
+      const studentIdSet = new Set([...rosterMap.keys(), ...subByStudent.keys()]);
+
+      let completedCount = 0;
+      let inProgressCount = 0;
+
+      studentIdSet.forEach((studentId) => {
+        const prof =
+          rosterMap.get(studentId) ||
+          profileMap.get(studentId) || { id: studentId, full_name: 'Student', email: '', avatar_url: null };
+        const sub = subByStudent.get(studentId) || null;
+        let status = 'Not Started';
+        if (sub) {
+          if (sub.status === 'completed' || sub.evaluated_at || sub.final_score !== null) {
+            status = 'Completed';
+            completedCount += 1;
+          } else {
+            status = 'In Progress';
+            inProgressCount += 1;
+          }
+        }
+
+        const scoreEarned = sub ? (sub.final_score !== null && sub.final_score !== undefined ? Number(sub.final_score) : sub.ai_score !== null && sub.ai_score !== undefined ? Number(sub.ai_score) : null) : null;
+        const pct = sub?.percentage !== null && sub?.percentage !== undefined
+          ? Math.round(Number(sub.percentage))
+          : scoreEarned !== null && maxMarks > 0
+            ? Math.min(100, Math.round((scoreEarned / maxMarks) * 100))
+            : null;
+
+        studentSubmissions.push({
+          rowId: `comp::${c.id}::${studentId}`,
+          itemType: 'competition',
+          activityId: c.id,
+          libraryGameId: null,
+          classroomId: cls.id,
+          classroomTitle: cls.title || 'Classroom',
+          studentId,
+          studentName: prof.full_name || 'Student',
+          studentEmail: prof.email || '',
+          studentAvatar: prof.avatar_url || null,
+          gameId: 'competition',
+          gameName: 'Competition',
+          activityTitle: c.title || 'Competition',
+          publicationStatus: isPub ? 'Published' : 'Unpublished',
+          status,
+          scoreEarned,
+          maxPoints: maxMarks,
+          percentage: pct,
+          completedAt: sub?.evaluated_at || sub?.submitted_at || null,
+          timeTakenSeconds: null,
+          competitionDetails: sub
+            ? {
+                submissionId: sub.id,
+                submissionType: sub.submission_type || 'text',
+                wordCount: sub.word_count ?? null,
+                aiScore: sub.ai_score ?? null,
+                finalScore: sub.final_score ?? null,
+                percentage: pct,
+                criteriaJson: sub.criteria_json || null,
+                aiFeedback: sub.ai_feedback || null,
+                teacherAdjusted: Boolean(sub.teacher_adjusted),
+                teacherAdjustmentReason: sub.teacher_adjustment_reason || null,
+                submittedAt: sub.submitted_at || null,
+                evaluatedAt: sub.evaluated_at || null
+              }
+            : null
+        });
+      });
+
+      competitions.push({
+        challengeId: c.id,
+        classroomId: cls.id,
+        classroomTitle: cls.title || 'Classroom',
+        title: c.title || 'Competition',
+        description: c.description || '',
+        status: c.status || 'published',
+        publicationStatus: isPub ? 'Published' : 'Unpublished',
+        published: isPub,
+        maxMarks,
+        deadlineAt: c.deadline_at || null,
+        submissionsCount: subs.length,
+        completedCount,
+        inProgressCount,
+        totalStudents: studentIdSet.size,
+        createdAt: c.created_at
+      });
+    });
+
+    const activityGroups = Array.from(activityGroupsMap.values()).sort(
+      (a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+    );
+
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    return res.json({
+      success: true,
+      classrooms,
+      savedGames: savedLibraryGames || [],
+      activityGroups,
+      competitions,
+      studentSubmissions
+    });
+  } catch (err) {
+    console.error('[teacher/games/dashboard] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to load teacher games dashboard' });
   }
 });
 

@@ -18,9 +18,11 @@ import {
   Calendar,
   Layers,
   EyeOff,
-  RotateCcw,
-  Globe
+  ClipboardList,
+  BarChart3,
+  RefreshCw
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import { AiChallenge } from '@/types/aiChallenge';
 import type { Assignment } from '@/types/classroom';
 import type { GameConfig, GameId, SavedLibraryGame } from '@/types/gameLibrary';
@@ -29,8 +31,12 @@ import {
   countGameContentItems,
   gameLibraryService,
   getGameCatalogItem,
-  type TeacherClassroomOption
+  type TeacherActivityAssignmentItem,
+  type TeacherClassroomOption,
+  type TeacherCompetitionActivity,
+  type TeacherGamesDashboardData
 } from '@/services/gameLibraryService';
+import { assignmentService } from '@/services/assignmentService';
 import {
   isAssignmentPublished,
   normalizeAssignmentLevels,
@@ -42,6 +48,8 @@ import { CreateChallengeModal } from './CreateChallengeModal';
 import { StudentChallengeSubmissionModal } from './StudentChallengeSubmissionModal';
 import { ChallengeDashboardModal } from './ChallengeDashboardModal';
 import { UnpublishConfirmModal } from '../games/UnpublishConfirmModal';
+import { ActivityDetailsTab } from '../games/ActivityDetailsTab';
+import { StudentSubmissionsTab } from '../games/StudentSubmissionsTab';
 
 interface ChallengeListModalProps {
   isOpen: boolean;
@@ -82,11 +90,27 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
     ? gameAssignments
     : gameAssignments.filter((a) => isAssignmentPublished(a));
 
-  const [confirmUnpublishAssignment, setConfirmUnpublishAssignment] = useState<Assignment | null>(null);
+  const [confirmUnpublishTarget, setConfirmUnpublishTarget] = useState<
+    | { kind: 'assignment'; item: Assignment }
+    | { kind: 'activity'; item: TeacherActivityAssignmentItem }
+    | { kind: 'competition'; item: TeacherCompetitionActivity }
+    | null
+  >(null);
 
-  const [activeTab, setActiveTab] = useState<'games' | 'library' | 'competitions'>('games');
+  const [activeTab, setActiveTab] = useState<
+    'games' | 'library' | 'competitions' | 'activity-details' | 'submissions'
+  >('games');
   const [challenges, setChallenges] = useState<AiChallenge[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Unified Teacher Games & Submissions Dashboard state
+  const [dashboardData, setDashboardData] = useState<TeacherGamesDashboardData | null>(null);
+  const [loadingDashboard, setLoadingDashboard] = useState(false);
+  const [dashboardPublishingId, setDashboardPublishingId] = useState<string | null>(null);
+  const [submissionsInitialFilter, setSubmissionsInitialFilter] = useState<{
+    classroomId?: string;
+    activityKey?: string;
+  } | null>(null);
 
   // Teacher Game Library state
   const [savedGames, setSavedGames] = useState<SavedLibraryGame[]>([]);
@@ -135,11 +159,27 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
     }
   };
 
+  const loadTeacherDashboard = async () => {
+    if (!isTeacher) return;
+    setLoadingDashboard(true);
+    try {
+      const res = await gameLibraryService.getTeacherGamesDashboard(classroomId);
+      if (res.data) {
+        setDashboardData(res.data);
+      }
+    } catch (err) {
+      console.error('Error loading teacher games dashboard:', err);
+    } finally {
+      setLoadingDashboard(false);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       loadChallenges();
       if (isTeacher) {
         loadSavedGames();
+        loadTeacherDashboard();
       }
     }
   }, [isOpen, classroomId, isTeacher, libraryRefreshKey]);
@@ -194,6 +234,7 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
     setTimeout(() => setLibraryFeedback(null), 4000);
     setAssigningGame(null);
     onUpdated?.();
+    loadTeacherDashboard();
   };
 
   const handleDuplicateSaved = async (game: SavedLibraryGame) => {
@@ -225,13 +266,92 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
     }
   };
 
+  const executeActivityPublishToggle = async (
+    item: TeacherActivityAssignmentItem,
+    publish: boolean
+  ) => {
+    setDashboardPublishingId(item.assignmentId);
+    try {
+      const localMatch = gameAssignments.find((a) => a.id === item.assignmentId);
+      if (localMatch && onTogglePublish) {
+        await onTogglePublish(localMatch, publish);
+      } else {
+        await assignmentService.setAssignmentPublishStatus(item.assignmentId, publish);
+      }
+      await loadTeacherDashboard();
+      onUpdated?.();
+    } finally {
+      setDashboardPublishingId(null);
+    }
+  };
+
+  const executeCompetitionPublishToggle = async (
+    challengeId: string,
+    publish: boolean
+  ) => {
+    setDashboardPublishingId(challengeId);
+    try {
+      await gameLibraryService.setChallengePublishStatus(challengeId, publish);
+      await Promise.all([loadChallenges(), loadTeacherDashboard()]);
+      onUpdated?.();
+    } finally {
+      setDashboardPublishingId(null);
+    }
+  };
+
+  const handleViewActivityGame = async (item: TeacherActivityAssignmentItem) => {
+    const localMatch = gameAssignments.find((a) => a.id === item.assignmentId);
+    if (localMatch) {
+      onPlayGameAssignment?.(localMatch);
+      return;
+    }
+    if (supabase) {
+      const { data } = await supabase
+        .from('assignments')
+        .select('*')
+        .eq('id', item.assignmentId)
+        .maybeSingle();
+      if (data) {
+        onPlayGameAssignment?.(data as Assignment);
+      }
+    }
+  };
+
+  const handleEditSavedGameById = (savedGameId: string) => {
+    const found =
+      savedGames.find((g) => g.id === savedGameId) ||
+      dashboardData?.savedGames?.find((g) => g.id === savedGameId);
+    if (found) {
+      onClose();
+      onEditSavedGame?.(found);
+    }
+  };
+
+  const handleEditAssignmentMeta = async (
+    assignmentId: string,
+    updates: { title?: string; dueDate?: string | null }
+  ): Promise<boolean> => {
+    const res = await gameLibraryService.updateGameAssignmentMeta(assignmentId, updates);
+    if (res.error) {
+      setLibraryFeedback(res.error);
+      setTimeout(() => setLibraryFeedback(null), 4000);
+      return false;
+    }
+    await loadTeacherDashboard();
+    onUpdated?.();
+    return true;
+  };
+
   if (!isOpen) return null;
 
   const showInitialLoading = (loading || isRoleResolving) && challenges.length === 0;
+  const activityDetailsCount =
+    (dashboardData?.activityGroups?.length ?? 0) + (dashboardData?.competitions?.length ?? 0);
+  const submissionsTotalCount = dashboardData?.studentSubmissions?.length ?? 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="bg-white w-full max-w-5xl rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[92vh]">
         
         {/* Header */}
         <div className="p-6 bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 text-white flex items-center justify-between shrink-0">
@@ -276,12 +396,18 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
           </div>
         </div>
 
-        {/* Mode Switcher: Educational Games | Game Library (Teachers) | Competitions */}
-        <div className="px-6 pt-3 pb-2 border-b border-slate-100 bg-slate-50/70 flex items-center gap-2 flex-wrap shrink-0">
+        {/* Mode Switcher: Educational Games | Game Library | Competitions | Activity Details | Student Submissions */}
+        <div
+          role="tablist"
+          aria-label="Games and Competitions Tabs"
+          className="px-4 sm:px-6 pt-3 pb-2.5 border-b border-slate-100 bg-slate-50/70 flex items-center gap-1.5 sm:gap-2 overflow-x-auto sm:flex-wrap shrink-0"
+        >
           <button
             type="button"
+            role="tab"
+            aria-selected={activeTab === 'games'}
             onClick={() => setActiveTab('games')}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap shrink-0 transition cursor-pointer ${
               activeTab === 'games'
                 ? 'bg-sky-600 text-white shadow-sm'
                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
@@ -293,8 +419,10 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
           {isTeacher && (
             <button
               type="button"
+              role="tab"
+              aria-selected={activeTab === 'library'}
               onClick={() => setActiveTab('library')}
-              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap shrink-0 transition cursor-pointer ${
                 activeTab === 'library'
                   ? 'bg-emerald-600 text-white shadow-sm'
                   : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
@@ -306,8 +434,10 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
           )}
           <button
             type="button"
+            role="tab"
+            aria-selected={activeTab === 'competitions'}
             onClick={() => setActiveTab('competitions')}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap shrink-0 transition cursor-pointer ${
               activeTab === 'competitions'
                 ? 'bg-indigo-600 text-white shadow-sm'
                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
@@ -316,6 +446,44 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
             <Trophy className="w-3.5 h-3.5" />
             <span>Competitions ({challenges.length})</span>
           </button>
+          {isTeacher && (
+            <>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'activity-details'}
+                onClick={() => {
+                  setActiveTab('activity-details');
+                  loadTeacherDashboard();
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap shrink-0 transition cursor-pointer ${
+                  activeTab === 'activity-details'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <ClipboardList className="w-3.5 h-3.5" />
+                <span>Activity Details ({activityDetailsCount})</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'submissions'}
+                onClick={() => {
+                  setActiveTab('submissions');
+                  loadTeacherDashboard();
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap shrink-0 transition cursor-pointer ${
+                  activeTab === 'submissions'
+                    ? 'bg-violet-600 text-white shadow-sm'
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                <span>Student Submissions ({submissionsTotalCount})</span>
+              </button>
+            </>
+          )}
         </div>
 
         {/* Content Body */}
@@ -519,98 +687,65 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
                 })()
               )}
             </div>
+          ) : activeTab === 'activity-details' && isTeacher ? (
+            <ActivityDetailsTab
+              groups={dashboardData?.activityGroups || []}
+              competitions={dashboardData?.competitions || []}
+              savedGames={dashboardData?.savedGames || savedGames}
+              currentClassroomId={classroomId}
+              loading={loadingDashboard}
+              publishingId={dashboardPublishingId || publishingAssignmentId}
+              onToggleGamePublish={async (item, publish) => {
+                if (!publish) {
+                  setConfirmUnpublishTarget({ kind: 'activity', item });
+                } else {
+                  await executeActivityPublishToggle(item, true);
+                }
+              }}
+              onToggleCompetitionPublish={async (comp, publish) => {
+                if (!publish) {
+                  setConfirmUnpublishTarget({ kind: 'competition', item: comp });
+                } else {
+                  await executeCompetitionPublishToggle(comp.challengeId, true);
+                }
+              }}
+              onViewGame={handleViewActivityGame}
+              onEditSavedGame={handleEditSavedGameById}
+              onEditAssignmentMeta={handleEditAssignmentMeta}
+              onViewSubmissions={(filter) => {
+                setSubmissionsInitialFilter(filter);
+                setActiveTab('submissions');
+                loadTeacherDashboard();
+              }}
+              onOpenGameLibrary={() => setActiveTab('library')}
+              onCreateCompetition={() => setIsCreateOpen(true)}
+            />
+          ) : activeTab === 'submissions' && isTeacher ? (
+            <StudentSubmissionsTab
+              submissions={dashboardData?.studentSubmissions || []}
+              classrooms={dashboardData?.classrooms || []}
+              loading={loadingDashboard}
+              initialFilter={submissionsInitialFilter}
+            />
           ) : activeTab === 'games' ? (
             isTeacher ? (
-              <div className="space-y-6">
-                {visibleGameAssignments.length > 0 && (
-                  <div className="space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-600">
-                        Assigned Classroom Games ({visibleGameAssignments.length})
-                      </h3>
-                    </div>
-                    <div className="space-y-2.5">
-                      {visibleGameAssignments.map((a) => {
-                        const published = isAssignmentPublished(a);
-                        const levels = normalizeAssignmentLevels(a);
-                        const cat = getGameCatalogItem((a.settings?.game_id as GameId) || 'liquid-sentences');
-                        const busy = publishingAssignmentId === a.id;
-                        return (
-                          <div
-                            key={a.id}
-                            className="p-3.5 rounded-2xl border border-slate-200 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <img
-                                src={cat.thumbnailUrl}
-                                alt={cat.name}
-                                className="w-12 h-12 rounded-xl object-cover shrink-0 border border-slate-200"
-                              />
-                              <div className="min-w-0 space-y-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                    {String(a.settings?.game_name || cat.name)}
-                                  </span>
-                                  <span
-                                    className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                                      published
-                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                        : 'bg-amber-50 text-amber-800 border-amber-200'
-                                    }`}
-                                  >
-                                    {published ? 'Published' : 'Unpublished'}
-                                  </span>
-                                  <span className="text-[11px] font-bold text-slate-500">
-                                    {levels.length} {levels.length === 1 ? 'Level' : 'Levels'} • {a.submission_count ?? 0} Submissions
-                                  </span>
-                                </div>
-                                <h4 className="text-sm font-bold text-slate-900 truncate">{a.title}</h4>
-                              </div>
-                            </div>
-
-                            {onTogglePublish && (
-                              <div className="flex items-center gap-2 shrink-0">
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={() => {
-                                    if (published) {
-                                      setConfirmUnpublishAssignment(a);
-                                    } else {
-                                      onTogglePublish(a, true);
-                                    }
-                                  }}
-                                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold border transition cursor-pointer disabled:opacity-50 ${
-                                    published
-                                      ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
-                                      : 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600'
-                                  }`}
-                                >
-                                  {busy ? (
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                  ) : published ? (
-                                    <EyeOff className="w-3.5 h-3.5" />
-                                  ) : a.settings?.is_unpublished ? (
-                                    <RotateCcw className="w-3.5 h-3.5" />
-                                  ) : (
-                                    <Globe className="w-3.5 h-3.5" />
-                                  )}
-                                  <span>
-                                    {published
-                                      ? 'Unpublish'
-                                      : a.settings?.is_unpublished
-                                      ? 'Republish'
-                                      : 'Publish'}
-                                  </span>
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-sky-50/70 border border-sky-100 rounded-2xl px-4 py-3">
+                  <p className="text-xs font-semibold text-sky-900">
+                    Choose a game template to create a new saved game, or manage classroom assignments cleanly in{' '}
+                    <span className="font-black">Activity Details</span>.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('activity-details');
+                      loadTeacherDashboard();
+                    }}
+                    className="self-start sm:self-center shrink-0 text-xs font-black text-indigo-700 hover:text-indigo-900 underline cursor-pointer"
+                  >
+                    Open Activity Details →
+                  </button>
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {GAME_CATALOG.map((game) => (
@@ -814,7 +949,60 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0 sm:self-center">
+                    <div className="flex items-center gap-2 flex-wrap shrink-0 sm:self-center">
+                      {isTeacher && (() => {
+                        const isCompPublished = !['draft', 'archived', 'deleted'].includes(
+                          String(ch.status || 'published').toLowerCase()
+                        );
+                        const isCompBusy = dashboardPublishingId === ch.id;
+                        return (
+                          <button
+                            type="button"
+                            disabled={isCompBusy}
+                            onClick={() => {
+                              if (isCompPublished) {
+                                setConfirmUnpublishTarget({
+                                  kind: 'competition',
+                                  item: {
+                                    challengeId: ch.id,
+                                    classroomId: ch.classroom_id,
+                                    classroomTitle: '',
+                                    title: ch.title,
+                                    description: ch.instructions || '',
+                                    status: ch.status || 'published',
+                                    publicationStatus: 'Published',
+                                    published: true,
+                                    maxMarks: ch.max_marks || 100,
+                                    deadlineAt: ch.deadline_at || null,
+                                    submissionsCount: ch.submitted_count || 0,
+                                    completedCount: ch.completed_count || 0,
+                                    inProgressCount: ch.processing_count || 0,
+                                    totalStudents: ch.total_participants || 0,
+                                    createdAt: ch.created_at
+                                  }
+                                });
+                              } else {
+                                executeCompetitionPublishToggle(ch.id, true);
+                              }
+                            }}
+                            className={`px-3 py-2.5 rounded-2xl text-xs font-extrabold border transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 ${
+                              isCompPublished
+                                ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                            }`}
+                          >
+                            {isCompBusy ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : isCompPublished ? (
+                              <EyeOff className="w-3.5 h-3.5" />
+                            ) : (
+                              <RefreshCw className="w-3.5 h-3.5" />
+                            )}
+                            <span>{isCompPublished ? 'Unpublish' : 'Republish'}</span>
+                          </button>
+                        );
+                      })()}
+
                       <button
                         type="button"
                         onClick={() => setSelectedForDashboard(ch)}
@@ -1018,16 +1206,30 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
       )}
 
       <UnpublishConfirmModal
-        isOpen={Boolean(confirmUnpublishAssignment)}
-        gameTitle={confirmUnpublishAssignment?.title}
+        isOpen={Boolean(confirmUnpublishTarget)}
+        gameTitle={confirmUnpublishTarget?.item?.title}
         loading={Boolean(
-          confirmUnpublishAssignment && publishingAssignmentId === confirmUnpublishAssignment.id
+          confirmUnpublishTarget &&
+            (confirmUnpublishTarget.kind === 'assignment'
+              ? publishingAssignmentId === confirmUnpublishTarget.item.id
+              : confirmUnpublishTarget.kind === 'activity'
+              ? dashboardPublishingId === confirmUnpublishTarget.item.assignmentId ||
+                publishingAssignmentId === confirmUnpublishTarget.item.assignmentId
+              : dashboardPublishingId === confirmUnpublishTarget.item.challengeId)
         )}
-        onCancel={() => setConfirmUnpublishAssignment(null)}
+        onCancel={() => setConfirmUnpublishTarget(null)}
         onConfirm={async () => {
-          if (!confirmUnpublishAssignment || !onTogglePublish) return;
-          await onTogglePublish(confirmUnpublishAssignment, false);
-          setConfirmUnpublishAssignment(null);
+          if (!confirmUnpublishTarget) return;
+          if (confirmUnpublishTarget.kind === 'assignment') {
+            if (onTogglePublish) {
+              await onTogglePublish(confirmUnpublishTarget.item, false);
+            }
+          } else if (confirmUnpublishTarget.kind === 'activity') {
+            await executeActivityPublishToggle(confirmUnpublishTarget.item, false);
+          } else if (confirmUnpublishTarget.kind === 'competition') {
+            await executeCompetitionPublishToggle(confirmUnpublishTarget.item.challengeId, false);
+          }
+          setConfirmUnpublishTarget(null);
         }}
       />
     </div>

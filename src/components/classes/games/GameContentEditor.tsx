@@ -18,6 +18,7 @@ import type {
   SaveTheBalloonConfig
 } from '@/types/gameLibrary';
 import { BulkContentUploader, type ParsedBulkRow } from './BulkContentUploader';
+import { JigsawQuestionsEditor } from './JigsawQuestionsEditor';
 
 interface GameContentEditorProps {
   gameId: GameId;
@@ -616,6 +617,11 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
             ))}
           </div>
         </div>
+
+        <JigsawQuestionsEditor
+          config={c}
+          onChange={(nextCfg) => onChange(nextCfg)}
+        />
       </div>
     );
   }

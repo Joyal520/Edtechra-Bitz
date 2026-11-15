@@ -108,7 +108,11 @@ export function getEmptyConfigForGame(gameId: GameId): GameConfig {
         imageDataUrl: '',
         images: [],
         gridSize: 3,
-        title: ''
+        title: '',
+        showTimer: true,
+        questionsEnabled: false,
+        questions: [],
+        questionCount: 0
       };
     case 'lumina-words':
       return {
@@ -155,7 +159,11 @@ export function getDemoConfigForGame(gameId: GameId): GameConfig {
         imageDataUrl: '',
         images: [],
         gridSize: 3,
-        title: 'Classroom Picture Puzzle'
+        title: 'Classroom Picture Puzzle',
+        showTimer: true,
+        questionsEnabled: false,
+        questions: [],
+        questionCount: 0
       };
     case 'lumina-words':
       return {
@@ -254,7 +262,7 @@ class GameLibraryService {
     if (!user) return { error: 'Authentication required' };
 
     const catalogItem = getGameCatalogItem(params.gameId);
-    const normalizedLevels =
+    let normalizedLevels =
       params.levels && params.levels.length > 0
         ? params.levels.map((lvl, idx) => ({
             ...lvl,
@@ -267,7 +275,70 @@ class GameLibraryService {
       ? normalizedLevels.reduce((sum, l) => sum + l.points, 0)
       : Math.max(1, Math.round(params.points || 100));
 
-    const settings: GameAssignmentSettings = {
+    let jigsawSealedKeys: string | undefined;
+    let rawLevelsForKeySync: GameLevelDefinition[] | undefined;
+
+    if (params.gameId === 'classroom-jigsaw') {
+      const levelsToSeal =
+        normalizedLevels ||
+        (params.config
+          ? [
+              {
+                id: 'level-1',
+                levelNumber: 1,
+                title: params.title.trim(),
+                points: totalPoints,
+                config: params.config
+              } as GameLevelDefinition
+            ]
+          : []);
+
+      const hasAnyQuestions = levelsToSeal.some((lvl) => {
+        const jc = lvl.config as ClassroomJigsawConfig;
+        return Boolean(jc?.questionsEnabled) && Array.isArray(jc?.questions) && jc.questions.length > 0;
+      });
+
+      if (hasAnyQuestions) {
+        rawLevelsForKeySync = levelsToSeal;
+        try {
+          const sealRes = await authenticatedFetch('/api/games/jigsaw/seal-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              classroomId: params.classroomId,
+              levels: levelsToSeal
+            })
+          });
+          const sealJson = await sealRes.json();
+          if (!sealRes.ok || !sealJson?.success) {
+            return {
+              error: sealJson?.error || 'Failed to secure interactive Jigsaw questions before publishing.'
+            };
+          }
+          jigsawSealedKeys = sealJson.jigsawSealedKeys;
+          if (normalizedLevels && Array.isArray(sealJson.levels)) {
+            normalizedLevels = sealJson.levels;
+          }
+        } catch (sealErr: any) {
+          return {
+            error: sealErr?.message || 'Unable to secure interactive Jigsaw questions before publishing.'
+          };
+        }
+      }
+    }
+
+    const sanitizedSingleConfig =
+      params.gameId === 'classroom-jigsaw'
+        ? normalizedLevels?.[0]?.config ||
+          (params.config
+            ? (() => {
+                const { questions: _ignored, ...rest } = params.config as ClassroomJigsawConfig;
+                return rest;
+              })()
+            : undefined)
+        : params.config || normalizedLevels?.[0]?.config;
+
+    const settings: GameAssignmentSettings & { jigsaw_sealed_keys?: string } = {
       is_game_library: true,
       ...(params.libraryGameId ? { library_game_id: params.libraryGameId } : {}),
       game_id: params.gameId,
@@ -275,7 +346,8 @@ class GameLibraryService {
       unlock_mode: params.unlockMode || 'sequential',
       daily_limit: params.dailyLimit || 1,
       levels: normalizedLevels,
-      game_config: params.config || normalizedLevels?.[0]?.config
+      game_config: sanitizedSingleConfig,
+      ...(jigsawSealedKeys ? { jigsaw_sealed_keys: jigsawSealedKeys } : {})
     };
 
     const levelSummary = normalizedLevels
@@ -305,6 +377,21 @@ class GameLibraryService {
         .single();
 
       if (error) throw error;
+
+      if (data?.id && rawLevelsForKeySync) {
+        authenticatedFetch('/api/games/jigsaw/seal-config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            classroomId: params.classroomId,
+            assignmentId: data.id,
+            levels: rawLevelsForKeySync
+          })
+        }).catch(() => {
+          // Sealed payload inside assignment settings already protects answer keys.
+        });
+      }
+
       return { data: data as Assignment };
     } catch (err: any) {
       console.error('[GameLibraryService] createGameAssignment error:', err);
@@ -433,6 +520,55 @@ class GameLibraryService {
     }
   }
 
+  async getJigsawState(assignmentId: string, levelId?: string): Promise<any> {
+    try {
+      const qs = new URLSearchParams({ assignmentId });
+      if (levelId) qs.set('levelId', levelId);
+      const res = await authenticatedFetch(`/api/games/jigsaw/state?${qs.toString()}`, {
+        method: 'GET'
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Failed to load Jigsaw state.' };
+    }
+  }
+
+  async unlockJigsawQuestions(assignmentId: string, levelId?: string): Promise<any> {
+    try {
+      const res = await authenticatedFetch('/api/games/jigsaw/unlock-questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignmentId, levelId: levelId || null })
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Failed to unlock Jigsaw questions.' };
+    }
+  }
+
+  async submitJigsawAnswer(params: {
+    assignmentId: string;
+    levelId?: string;
+    questionId: string;
+    submittedAnswer: unknown;
+  }): Promise<any> {
+    try {
+      const res = await authenticatedFetch('/api/games/jigsaw/submit-answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignmentId: params.assignmentId,
+          levelId: params.levelId || null,
+          questionId: params.questionId,
+          submittedAnswer: params.submittedAnswer
+        })
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Failed to submit answer.' };
+    }
+  }
+
   async submitGameCompletion(params: {
     assignmentId: string;
     classroomId: string;
@@ -474,6 +610,197 @@ class GameLibraryService {
       };
     }
   }
+
+  async getTeacherGamesDashboard(classroomId?: string): Promise<{
+    data?: TeacherGamesDashboardData;
+    error?: string;
+  }> {
+    try {
+      const query = classroomId ? `?classroomId=${encodeURIComponent(classroomId)}&_t=${Date.now()}` : `?_t=${Date.now()}`;
+      const res = await authenticatedFetch(`/api/teacher/games/dashboard${query}`, {
+        method: 'GET',
+        cache: 'no-store'
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.success) {
+        return { error: json?.error || `Failed to load dashboard (${res.status})` };
+      }
+      return {
+        data: {
+          classrooms: json.classrooms || [],
+          savedGames: json.savedGames || [],
+          activityGroups: json.activityGroups || [],
+          competitions: json.competitions || [],
+          studentSubmissions: json.studentSubmissions || []
+        }
+      };
+    } catch (err: any) {
+      return { error: err?.message || 'Failed to load teacher games dashboard.' };
+    }
+  }
+
+  async updateGameAssignmentMeta(
+    assignmentId: string,
+    updates: { title?: string; dueDate?: string | null }
+  ): Promise<{ assignment?: Assignment; error?: string }> {
+    try {
+      const res = await authenticatedFetch(`/api/games/assignments/${assignmentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.success) {
+        return { error: json?.error || 'Failed to update assignment details.' };
+      }
+      return { assignment: json.assignment as Assignment };
+    } catch (err: any) {
+      return { error: err?.message || 'Failed to update assignment details.' };
+    }
+  }
+
+  async setChallengePublishStatus(
+    challengeId: string,
+    publish: boolean
+  ): Promise<{ published?: boolean; error?: string }> {
+    try {
+      const res = await authenticatedFetch(`/api/classes/challenges/${challengeId}/publish-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publish })
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.success) {
+        return { error: json?.error || 'Failed to update competition status.' };
+      }
+      return { published: Boolean(json.published) };
+    } catch (err: any) {
+      return { error: err?.message || 'Failed to update competition status.' };
+    }
+  }
+}
+
+export interface TeacherDashboardClassroom {
+  id: string;
+  title: string;
+  subject?: string;
+  grade?: string;
+}
+
+export interface TeacherActivityAssignmentItem {
+  assignmentId: string;
+  classroomId: string;
+  classroomTitle: string;
+  classroomSubject?: string;
+  classroomGrade?: string;
+  libraryGameId: string | null;
+  gameId: string;
+  gameName: string;
+  title: string;
+  publicationStatus: 'Published' | 'Unpublished';
+  published: boolean;
+  dueDate: string | null;
+  points: number;
+  totalLevels: number;
+  submissionsCount: number;
+  completedCount: number;
+  inProgressCount: number;
+  totalStudents: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TeacherActivityGroup {
+  groupKey: string;
+  libraryGameId: string | null;
+  isSavedLibraryGame: boolean;
+  title: string;
+  gameId: string;
+  gameName: string;
+  updatedAt: string;
+  assignments: TeacherActivityAssignmentItem[];
+  totalClassrooms: number;
+  publishedCount: number;
+  unpublishedCount: number;
+  totalSubmissions: number;
+  totalStudents: number;
+}
+
+export interface TeacherCompetitionActivity {
+  challengeId: string;
+  classroomId: string;
+  classroomTitle: string;
+  title: string;
+  description: string;
+  status: string;
+  publicationStatus: 'Published' | 'Unpublished';
+  published: boolean;
+  maxMarks: number;
+  deadlineAt: string | null;
+  submissionsCount: number;
+  completedCount: number;
+  inProgressCount: number;
+  totalStudents: number;
+  createdAt: string;
+}
+
+export interface TeacherStudentSubmissionRow {
+  rowId: string;
+  itemType: 'game' | 'competition';
+  activityId: string;
+  libraryGameId: string | null;
+  classroomId: string;
+  classroomTitle: string;
+  studentId: string;
+  studentName: string;
+  studentEmail?: string;
+  studentAvatar?: string | null;
+  gameId: string;
+  gameName: string;
+  activityTitle: string;
+  publicationStatus: 'Published' | 'Unpublished';
+  status: 'Not Started' | 'In Progress' | 'Completed';
+  scoreEarned: number | null;
+  maxPoints: number;
+  percentage: number | null;
+  completedAt: string | null;
+  timeTakenSeconds: number | null;
+  completedLevelsCount?: number;
+  totalLevels?: number;
+  levelsCompleted?: Array<{
+    levelId: string;
+    levelNumber: number;
+    title: string;
+    scoreEarned: number;
+    maxPoints: number;
+    percentage: number;
+    timeTakenSeconds?: number;
+    completedAt?: string;
+    details?: Record<string, any> | null;
+  }>;
+  levelsInProgress?: Array<Record<string, any>>;
+  competitionDetails?: {
+    submissionId: string;
+    submissionType: string;
+    wordCount: number | null;
+    aiScore: number | null;
+    finalScore: number | null;
+    percentage: number | null;
+    criteriaJson: any;
+    aiFeedback: string | null;
+    teacherAdjusted: boolean;
+    teacherAdjustmentReason: string | null;
+    submittedAt: string | null;
+    evaluatedAt: string | null;
+  } | null;
+}
+
+export interface TeacherGamesDashboardData {
+  classrooms: TeacherDashboardClassroom[];
+  savedGames: SavedLibraryGame[];
+  activityGroups: TeacherActivityGroup[];
+  competitions: TeacherCompetitionActivity[];
+  studentSubmissions: TeacherStudentSubmissionRow[];
 }
 
 export const gameLibraryService = new GameLibraryService();

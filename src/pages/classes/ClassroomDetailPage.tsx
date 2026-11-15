@@ -684,9 +684,19 @@ export const ClassroomDetailPage: React.FC = () => {
           .subscribe()
       : null;
 
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible' && isMounted) {
+        loadAllClassroomData(true);
+      }
+    };
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
     return () => {
       isMounted = false;
       clearInterval(interval);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
       if (channel && supabase) {
         supabase.removeChannel(channel);
       }
@@ -753,6 +763,39 @@ export const ClassroomDetailPage: React.FC = () => {
     }
   };
 
+  const handleOpenStudentGame = async (gameAssignment: Assignment) => {
+    if (!gameAssignment?.settings?.is_game_library) return;
+    if (isTeacher) {
+      setActiveGameAssignment(gameAssignment);
+      return;
+    }
+
+    const liveCheck = await assignmentService.checkAssignmentPublishedLive(gameAssignment.id);
+    if (!liveCheck.published) {
+      setAssignments((prev) =>
+        prev.filter((a) => a.id !== gameAssignment.id)
+      );
+      setAnnouncements((prev) =>
+        prev.filter(
+          (item) =>
+            item.rawId !== gameAssignment.id &&
+            item.id !== `game-${gameAssignment.id}` &&
+            item.id !== `task-${gameAssignment.id}`
+        )
+      );
+      setActiveGameAssignment(null);
+      setActiveGamePlay(null);
+      setToastMessage(
+        liveCheck.reason || 'This activity was unpublished by your teacher and is currently unavailable.'
+      );
+      setTimeout(() => setToastMessage(null), 5000);
+      await loadAllClassroomData(true);
+      return;
+    }
+
+    setActiveGameAssignment(liveCheck.assignment || gameAssignment);
+  };
+
   const handleToggleAssignmentPublish = async (assignment: Assignment, publish: boolean) => {
     setPublishingAssignmentId(assignment.id);
     try {
@@ -761,6 +804,32 @@ export const ClassroomDetailPage: React.FC = () => {
         alert(res.error);
         return;
       }
+
+      // Optimistically synchronise assignments and active announcements immediately
+      const updatedAssignment = res.assignment || {
+        ...assignment,
+        status: publish ? 'published' : 'draft',
+        settings: {
+          ...(assignment.settings || {}),
+          is_unpublished: !publish
+        }
+      };
+
+      setAssignments((prev) =>
+        prev.map((a) => (a.id === assignment.id ? (updatedAssignment as Assignment) : a))
+      );
+
+      if (!publish) {
+        setAnnouncements((prev) =>
+          prev.filter(
+            (item) =>
+              item.rawId !== assignment.id &&
+              item.id !== `task-${assignment.id}` &&
+              item.id !== `game-${assignment.id}`
+          )
+        );
+      }
+
       setToastMessage(
         publish
           ? `"${assignment.title}" published to classroom!`
@@ -1599,7 +1668,7 @@ export const ClassroomDetailPage: React.FC = () => {
               if (isTeacher) {
                 setActiveReviewAssignment(gameAssignment);
               } else if (gameAssignment.settings?.is_game_library) {
-                setActiveGameAssignment(gameAssignment);
+                handleOpenStudentGame(gameAssignment);
               }
             }}
             onOpenExam={(exam) => {
@@ -1623,7 +1692,21 @@ export const ClassroomDetailPage: React.FC = () => {
                 handleStudentJoinLiveQuiz();
               }
             }}
-            onOpenChallenge={(_challenge) => {
+            onOpenChallenge={async (challenge) => {
+              if (!isTeacher && challenge?.id) {
+                const liveCh = await assignmentService.checkChallengePublishedLive(challenge.id);
+                if (!liveCh.published) {
+                  setAnnouncements((prev) =>
+                    prev.filter((item) => item.rawId !== challenge.id && item.id !== `comp-${challenge.id}`)
+                  );
+                  setToastMessage(
+                    liveCh.reason || 'This competition was unpublished by your teacher and is currently unavailable.'
+                  );
+                  setTimeout(() => setToastMessage(null), 5000);
+                  await loadAllClassroomData(true);
+                  return;
+                }
+              }
               setChallengeListModalOpen(true);
             }}
           />
@@ -2176,7 +2259,7 @@ export const ClassroomDetailPage: React.FC = () => {
                   onOpenSubmissions={(a) => setActiveReviewAssignment(a)}
                   onSubmitWork={(a) => {
                     if (a.settings?.is_game_library) {
-                      setActiveGameAssignment(a);
+                      handleOpenStudentGame(a);
                     } else {
                       setActiveSubmitAssignment(a);
                     }
@@ -2697,9 +2780,7 @@ export const ClassroomDetailPage: React.FC = () => {
         }}
         libraryRefreshKey={libraryRefreshKey}
         onPlayGameAssignment={(a) => {
-          if (a.settings?.is_game_library) {
-            setActiveGameAssignment(a);
-          }
+          handleOpenStudentGame(a);
         }}
       />
 
@@ -2818,7 +2899,7 @@ export const ClassroomDetailPage: React.FC = () => {
           onPlayAssignment={(a) => {
             if (!a.settings?.is_game_library) return;
             setGameLibraryModalOpen(false);
-            setActiveGameAssignment(a);
+            handleOpenStudentGame(a);
           }}
           onPreviewGame={(gameId, title, config, points = 100) => {
             setActiveGamePlay({

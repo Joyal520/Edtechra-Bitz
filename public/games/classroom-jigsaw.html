@@ -41,6 +41,48 @@ input[type=text]{width:100%;padding:10px 12px;border-radius:12px;border:1px soli
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0}.stats div{background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:14px;padding:10px}
 .stats b{display:block;font-size:22px;color:#fcd34d;margin-top:2px}.stats span{font-size:11px;text-transform:uppercase;letter-spacing:.08em;opacity:.7}
 #ref{position:fixed;top:70px;right:12px;z-index:8;padding:8px;width:min(230px,45vw)}#ref img{width:100%;border-radius:10px;display:block}
+.lock-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:10px;background:rgba(245,158,11,.15);border:1px solid rgba(251,191,36,.35);font-size:12px;font-weight:700;color:#fde68a;cursor:pointer}
+.quiz-card{width:100%;max-width:740px;padding:20px;max-height:calc(100vh - 24px);overflow-y:auto;display:flex;flex-direction:column;gap:14px}
+.quiz-banner{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,rgba(16,185,129,.22),rgba(245,158,11,.16));border:1px solid rgba(52,211,153,.35)}
+.quiz-thumb{width:56px;height:56px;border-radius:10px;object-fit:cover;border:1px solid var(--line);flex-shrink:0;cursor:pointer}
+.quiz-prog-wrap{display:flex;flex-direction:column;gap:6px}
+.quiz-prog-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px;font-weight:800;color:#fde68a}
+.quiz-bar{width:100%;height:8px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden}
+.quiz-bar-fill{height:100%;background:linear-gradient(90deg,#f59e0b,#34d399);transition:width .25s ease}
+.type-pill{padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;background:rgba(251,191,36,.16);border:1px solid rgba(251,191,36,.4);color:#fde68a}
+.q-prompt{font-size:clamp(16px,2.5vw,20px);font-weight:800;line-height:1.4;color:#fffbeb;margin:0;user-select:text;-webkit-user-select:text}
+.opt-grid{display:grid;grid-template-columns:1fr;gap:10px}
+@media(min-width:560px){.opt-grid.mcq-grid{grid-template-columns:1fr 1fr}}
+.tf-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.opt-btn{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:12px 14px;border-radius:14px;border:1px solid rgba(251,191,36,.28);background:rgba(0,0,0,.35);color:#fef3c7;text-align:left;font-size:14px;font-weight:700;transition:transform .12s,border-color .15s,background .15s}
+.opt-btn:hover:not(:disabled){background:rgba(251,191,36,.14);border-color:#fbbf24}
+.opt-btn.selected{background:rgba(245,158,11,.28);border-color:#fbbf24;box-shadow:0 0 0 2px rgba(251,191,36,.35)}
+.opt-btn.correct{background:rgba(16,185,129,.25);border-color:#34d399;color:#ecfdf5}
+.opt-btn.wrong{background:rgba(244,63,94,.24);border-color:#fb7185;color:#fff1f2}
+.opt-btn:disabled{cursor:default}
+.opt-tag{width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;background:rgba(255,255,255,.1);flex-shrink:0}
+.opt-btn.selected .opt-tag{background:#f59e0b;color:#1c1208}
+.opt-btn.correct .opt-tag{background:#10b981;color:#fff}
+.opt-btn.wrong .opt-tag{background:#f43f5e;color:#fff}
+.unscramble-zone{min-height:68px;padding:12px;border-radius:14px;border:2px dashed rgba(251,191,36,.42);background:rgba(0,0,0,.38);display:flex;flex-wrap:wrap;gap:8px;align-items:center;transition:border-color .15s,background .15s}
+.unscramble-zone.drag-over{border-color:#34d399;background:rgba(16,185,129,.12)}
+.word-bank{min-height:64px;padding:12px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.04);display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.word-tile{min-height:40px;padding:8px 13px;border-radius:11px;border:1px solid rgba(251,191,36,.48);background:linear-gradient(135deg,rgba(245,158,11,.28),rgba(180,83,9,.36));color:#fffbeb;font-size:14px;font-weight:800;cursor:grab;transition:transform .12s,opacity .15s,background .15s;touch-action:manipulation}
+.word-tile:hover:not(:disabled){transform:translateY(-1px);border-color:#fde68a}
+.word-tile:active{transform:scale(.95)}
+.word-tile.placed{background:linear-gradient(135deg,rgba(56,189,248,.28),rgba(14,116,144,.38));border-color:rgba(125,211,252,.55)}
+.word-tile:disabled{opacity:.75;cursor:default}
+.feedback-box{padding:12px 14px;border-radius:14px;font-size:14px;font-weight:700;display:flex;flex-direction:column;gap:4px}
+.feedback-box.ok{background:rgba(16,185,129,.2);border:1px solid rgba(52,211,153,.55);color:#d1fae5}
+.feedback-box.bad{background:rgba(244,63,94,.2);border:1px solid rgba(251,113,133,.55);color:#ffe4e6}
+.quiz-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;align-items:center}
+.quiz-pic-modal{position:fixed;inset:0;z-index:35;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:16px}
+.quiz-pic-modal img{max-width:100%;max-height:85vh;border-radius:16px;border:2px solid var(--line)}
+.res-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(min-width:560px){.res-grid{grid-template-columns:repeat(3,1fr)}}
+.res-cell{padding:12px;border-radius:14px;background:rgba(0,0,0,.35);border:1px solid var(--line);text-align:left}
+.res-cell span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;opacity:.72}
+.res-cell b{display:block;font-size:19px;color:#fde68a;margin-top:3px}
 </style>
 </head>
 <body>
@@ -48,7 +90,7 @@ input[type=text]{width:100%;padding:10px 12px;border-radius:12px;border:1px soli
 
 <div class="hud hidden" id="hud">
   <div class="glass"><span class="dot"></span><span class="title" id="hTitle">Puzzle</span><span id="hProg">0 / 4</span><span id="hTimerWrap">⏱ <span id="hTime" style="font-variant-numeric:tabular-nums">00:00</span></span></div>
-  <div class="glass"><button class="pill" id="bNew">⚙ New puzzle</button><button class="pill" id="bMute" aria-label="Sound">🔊</button></div>
+  <div class="glass"><button class="lock-badge hidden" id="bLockInfo" type="button" title="Complete the puzzle to unlock questions.">🔒 <span id="bLockTxt">Questions Locked</span></button><button class="pill" id="bNew">⚙ New puzzle</button><button class="pill" id="bMute" aria-label="Sound">🔊</button></div>
 </div>
 <div class="bar glass hidden" id="bar">
   <button class="pill on" id="bGhost">👁 Ghost</button>
@@ -57,6 +99,69 @@ input[type=text]{width:100%;padding:10px 12px;border-radius:12px;border:1px soli
   <button class="pill" id="bHint">💡 Hint</button>
 </div>
 <div id="ref" class="glass hidden"><img id="refImg" alt="Reference picture"></div>
+
+<!-- INTERACTIVE QUESTION STAGE (UNLOCKS ONLY AFTER PUZZLE COMPLETION) -->
+<div class="overlay hidden" id="quizStage">
+  <div class="quiz-card glass">
+    <div class="quiz-banner">
+      <img id="quizThumb" class="quiz-thumb" alt="Completed puzzle picture" title="Click to inspect full picture">
+      <div style="min-width:0;flex:1">
+        <div style="font-size:14px;font-weight:900;color:#ecfdf5">Puzzle Completed! Now test what you learned from the picture.</div>
+        <div id="quizSubNote" style="font-size:12px;color:#fde68a;opacity:.88;margin-top:2px">Tap the picture thumbnail anytime to look closely at details.</div>
+      </div>
+      <button type="button" class="pill" id="quizViewPicBtn" style="flex-shrink:0">🖼 View Picture</button>
+    </div>
+
+    <div id="quizQuestionView" class="space-y" style="display:flex;flex-direction:column;gap:12px">
+      <div class="quiz-prog-wrap">
+        <div class="quiz-prog-top">
+          <span id="quizCounter">Question 1 of 1</span>
+          <span class="type-pill" id="quizTypeBadge">MCQ</span>
+        </div>
+        <div class="quiz-bar"><div class="quiz-bar-fill" id="quizBarFill" style="width:0%"></div></div>
+      </div>
+
+      <p class="q-prompt" id="quizPromptText"></p>
+
+      <!-- MCQ & True/False Options -->
+      <div id="quizOptionsWrap" class="opt-grid"></div>
+
+      <!-- Sentence Unscramble Builder -->
+      <div id="quizUnscrambleWrap" class="hidden" style="display:flex;flex-direction:column;gap:10px">
+        <div style="font-size:12px;font-weight:700;color:#fde68a;opacity:.85">Your Sentence (tap words to remove/reorder, or drag tiles):</div>
+        <div class="unscramble-zone" id="unscrambleAnswerZone"></div>
+        <div style="font-size:12px;font-weight:700;color:#fde68a;opacity:.85">Word Bank (tap or drag words into your sentence):</div>
+        <div class="word-bank" id="unscrambleBankZone"></div>
+      </div>
+
+      <div id="quizFeedbackBox" class="feedback-box hidden"></div>
+
+      <div class="quiz-actions">
+        <button type="button" class="pill hidden" id="quizResetBtn">↺ Reset</button>
+        <button type="button" class="go" id="quizSubmitBtn" style="width:auto;margin:0;padding:12px 22px">Submit Answer</button>
+        <button type="button" class="go hidden" id="quizNextBtn" style="width:auto;margin:0;padding:12px 22px;background:linear-gradient(90deg,#10b981,#34d399);color:#052e16">Continue →</button>
+      </div>
+    </div>
+
+    <div id="quizResultView" class="hidden" style="text-align:center;display:flex;flex-direction:column;gap:14px">
+      <div style="font-size:40px">🏆</div>
+      <h2 class="title" style="margin:0;font-size:24px">Activity Complete!</h2>
+      <p class="sub" id="quizResultSubtitle" style="margin:0"></p>
+      <div class="res-grid" id="quizResultGrid"></div>
+      <div id="quizPreviewNote" class="hidden" style="padding:10px 12px;border-radius:12px;background:rgba(245,158,11,.18);border:1px solid rgba(251,191,36,.4);font-size:12px;font-weight:700;color:#fde68a">Teacher Preview Mode — scores are not saved to student records.</div>
+      <div class="row" style="max-width:340px;margin:4px auto 0;width:100%">
+        <button type="button" class="go hidden" id="quizPlayAgainBtn" style="margin:0">Play Preview Again</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="quiz-pic-modal hidden" id="quizPicModal">
+  <div style="text-align:center;max-width:94vw">
+    <img id="quizPicModalImg" alt="Completed puzzle picture">
+    <div style="margin-top:10px"><button type="button" class="pill" id="quizPicCloseBtn">Close Picture</button></div>
+  </div>
+</div>
 
 <!-- TEACHER SETUP -->
 <div class="overlay" id="setup">
@@ -212,11 +317,17 @@ function hint(){if(g.solved)return;const l=g.pieces.filter(p=>!p.locked);if(!l.l
 function win(){if(g.pieces.some(p=>!p.locked))return;g.solved=true;clearInterval(g.tick);audio.win();
   const multi=edtechraBridge.images&&edtechraBridge.images.length>1;
   const hasNext=multi&&edtechraBridge.index+1<edtechraBridge.images.length;
+  for(let i=0;i<6;i++)setTimeout(()=>spark(g.board.x+Math.random()*g.board.size,g.board.y+Math.random()*g.board.size,26),i*150);
+
+  if(!hasNext && edtechraBridge.questionsEnabled){
+    setTimeout(()=>{openQuizStageAfterPuzzle()},750);
+    return;
+  }
+
   if(edtechraBridge.active&&!edtechraBridge.reported&&!hasNext){edtechraBridge.reported=true;
     const totalSec=(edtechraBridge.totalSec||0)+g.sec;
     const totalPuz=multi?edtechraBridge.images.length:1;
-    window.parent.postMessage({type:"EDTECHRA_GAME_COMPLETE",payload:{gameId:"classroom-jigsaw",scoreEarned:edtechraBridge.maxPoints,maxAvailablePoints:edtechraBridge.maxPoints,completionStatus:"completed",timeTakenSeconds:totalSec,details:{gridSize:g.N,pieces:g.N*g.N,puzzlesCompleted:totalPuz,totalPuzzles:totalPuz,questionsCompleted:totalPuz,correctAnswers:totalPuz}}},"*")}
-  for(let i=0;i<6;i++)setTimeout(()=>spark(g.board.x+Math.random()*g.board.size,g.board.y+Math.random()*g.board.size,26),i*150);
+    window.parent.postMessage({type:"EDTECHRA_GAME_COMPLETE",payload:{gameId:"classroom-jigsaw",scoreEarned:edtechraBridge.maxPoints,maxAvailablePoints:edtechraBridge.maxPoints,completionStatus:"completed",timeTakenSeconds:totalSec,details:{gridSize:g.N,pieces:g.N*g.N,puzzlesCompleted:totalPuz,totalPuzzles:totalPuz,questionsCompleted:totalPuz,correctAnswers:totalPuz,questionsEnabled:false}}},"*")}
   setTimeout(()=>{$("winTime").textContent=fmt(g.sec);$("winTimeBox").classList.toggle("hidden",!g.timer);$("winGrid").textContent=`${g.N}×${g.N} (${g.N*g.N})`;
     const bAgain=$("bAgain");
     if(hasNext){bAgain.classList.remove("hidden");bAgain.textContent=`Next Puzzle (${edtechraBridge.index+2}/${edtechraBridge.images.length}) →`}
@@ -293,10 +404,483 @@ function loadBridgePuzzle(idx){
   }
 }
 
-/* ---------- EDTECHRA INTEGRATION BRIDGE ---------- */
-window.addEventListener("message",ev=>{
+/* ---------- EDTECHRA INTEGRATION BRIDGE & QUESTION STAGE ---------- */
+const quizState={
+  questions:[],
+  answers:{},
+  currentIndex:0,
+  selectedMcqIndex:null,
+  selectedTf:null,
+  unscramblePlaced:[],
+  unscrambleBank:[],
+  dragPayload:null,
+  submitting:false
+};
+
+const pendingRpc=new Map();
+function bridgeRpc(type,payload={}){
+  return new Promise(resolve=>{
+    const requestId=`rpc_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+    const timer=setTimeout(()=>{pendingRpc.delete(requestId);resolve({success:false,error:"Request timed out"})},12000);
+    pendingRpc.set(requestId,res=>{clearTimeout(timer);resolve(res)});
+    window.parent.postMessage({type,requestId,...payload},"*");
+  });
+}
+
+function tokenizeSentenceWordsLocal(s){return String(s||"").trim().split(/\s+/).filter(Boolean)}
+function normalizeUnscrambleTokenLocal(t){return String(t||"").trim().replace(/[.!?]+$/g,"").toLowerCase()}
+function shuffleTokensLocal(tokens,seedInput){
+  const arr=[...tokens];if(arr.length<=1)return arr;
+  const hasDistinct=new Set(arr.map(t=>normalizeUnscrambleTokenLocal(t))).size>1;
+  let state=0;const seed=String(seedInput||"s");
+  for(let i=0;i<seed.length;i++)state=(state*31+seed.charCodeAt(i))>>>0;
+  const rand=()=>{state=(1664525*state+1013904223)>>>0;return state/4294967296};
+  for(let a=0;a<8;a++){const c=[...arr];for(let i=c.length-1;i>0;i--){const j=Math.floor(rand()*(i+1));[c[i],c[j]]=[c[j],c[i]]}
+    if(!hasDistinct||!c.every((t,idx)=>t===arr[idx]))return c}
+  return arr;
+}
+function computeBreakdownLocal(maxPts,totalQ,correctQ){
+  const safeMax=Math.max(0,Math.round(Number(maxPts)||0));
+  if(totalQ<=0)return{puzzlePoints:safeMax,questionPoints:0,totalPoints:safeMax,accuracyPct:100};
+  const safeC=Math.max(0,Math.min(totalQ,Math.round(Number(correctQ)||0)));
+  const puzzlePts=safeMax>0?Math.max(1,Math.round(safeMax*0.25)):0;
+  const pool=Math.max(0,safeMax-puzzlePts);
+  const qPts=safeC===totalQ?pool:Math.round((pool*safeC)/totalQ);
+  const tot=Math.min(safeMax,puzzlePts+qPts);
+  return{puzzlePoints:puzzlePts,questionPoints:tot-puzzlePts,totalPoints:tot,accuracyPct:Math.round((safeC/totalQ)*100)};
+}
+
+function gradePreviewQuestion(q,submittedAnswer){
+  if(q.type==="mcq"){
+    const chosen=Number(submittedAnswer),corr=Number(q.correctIndex);
+    const L=["A","B","C","D"];
+    return{questionId:q.id,type:q.type,submittedAnswer:chosen,isCorrect:chosen===corr,correctAnswerDisplay:`${L[corr]}. ${(q.options||[])[corr]||""}`,correctIndex:corr};
+  }
+  if(q.type==="true_false"){
+    const chosen=Boolean(submittedAnswer),corr=Boolean(q.correctAnswer);
+    return{questionId:q.id,type:q.type,submittedAnswer:chosen,isCorrect:chosen===corr,correctAnswerDisplay:corr?"True":"False",correctBoolean:corr};
+  }
+  const exp=tokenizeSentenceWordsLocal(q.sentence||"");
+  const arr=Array.isArray(submittedAnswer)?submittedAnswer:[];
+  const ok=arr.length===exp.length&&exp.every((w,i)=>normalizeUnscrambleTokenLocal(arr[i])===normalizeUnscrambleTokenLocal(w));
+  return{questionId:q.id,type:q.type,submittedAnswer:arr,isCorrect:ok,correctAnswerDisplay:String(q.sentence||"").trim(),correctSentence:String(q.sentence||"").trim()};
+}
+
+function setQuizPicturePreview(src){
+  if(!src)return;
+  $("quizThumb").src=src;
+  $("quizPicModalImg").src=src;
+}
+
+$("bLockInfo").onclick=()=>{
+  if(g.solved)return;
+  const el=$("bLockTxt"),prev=el.textContent;
+  el.textContent="Complete the puzzle to unlock questions.";
+  setTimeout(()=>{el.textContent=prev},2200);
+};
+$("quizThumb").onclick=()=>$("quizPicModal").classList.remove("hidden");
+$("quizViewPicBtn").onclick=()=>$("quizPicModal").classList.remove("hidden");
+$("quizPicCloseBtn").onclick=()=>$("quizPicModal").classList.add("hidden");
+$("quizPicModal").onclick=e=>{if(e.target===$("quizPicModal"))$("quizPicModal").classList.add("hidden")};
+
+async function openQuizStageAfterPuzzle(){
+  const imgs=edtechraBridge.images||[];
+  const picSrc=$("refImg").src||(imgs[imgs.length-1]||imgs[0]||"");
+  setQuizPicturePreview(picSrc);
+
+  if(edtechraBridge.mode==="student"&&edtechraBridge.active){
+    const res=await bridgeRpc("EDTECHRA_JIGSAW_UNLOCK_QUESTIONS");
+    if(!res||!res.success){
+      $("quizSubNote").textContent=res?.error||"Could not unlock questions. Please retry.";
+      $("quizStage").classList.remove("hidden");
+      return;
+    }
+    quizState.questions=Array.isArray(res.questions)?res.questions:[];
+    quizState.answers=res.answers&&typeof res.answers==="object"?{...res.answers}:{};
+    quizState.currentIndex=Math.min(Math.max(0,Number(res.currentQuestionIndex||0)),Math.max(0,quizState.questions.length-1));
+  }else{
+    const qs=Array.isArray(edtechraBridge.previewQuestions)?edtechraBridge.previewQuestions:[];
+    quizState.questions=qs.map((q,idx)=>({
+      ...q,
+      shuffledTokens:q.type==="unscramble"?(Array.isArray(q.shuffledTokens)&&q.shuffledTokens.length?q.shuffledTokens:shuffleTokensLocal(tokenizeSentenceWordsLocal(q.sentence),q.id||idx)):undefined
+    }));
+    quizState.answers={};
+    quizState.currentIndex=0;
+  }
+
+  if(!quizState.questions.length){
+    finishQuizStage();
+    return;
+  }
+  const allAnswered=quizState.questions.every(q=>Boolean(quizState.answers[q.id]));
+  $("quizStage").classList.remove("hidden");
+  if(allAnswered){
+    finishQuizStage();
+  }else{
+    const firstUnanswered=quizState.questions.findIndex(q=>!quizState.answers[q.id]);
+    quizState.currentIndex=firstUnanswered>=0?firstUnanswered:0;
+    renderCurrentQuizQuestion();
+  }
+}
+
+function resetUnscrambleForQuestion(q,submittedRec){
+  const baseTokens=Array.isArray(q.shuffledTokens)&&q.shuffledTokens.length
+    ?q.shuffledTokens
+    :shuffleTokensLocal(tokenizeSentenceWordsLocal(q.sentence||""),q.id);
+  const bankItems=baseTokens.map((text,idx)=>({key:`${q.id}_tok_${idx}`,text}));
+  if(submittedRec&&Array.isArray(submittedRec.submittedAnswer)){
+    quizState.unscramblePlaced=submittedRec.submittedAnswer.map((t,idx)=>({key:`sub_${idx}`,text:String(t)}));
+    quizState.unscrambleBank=[];
+  }else{
+    quizState.unscramblePlaced=[];
+    quizState.unscrambleBank=bankItems;
+  }
+}
+
+function renderUnscrambleZones(locked){
+  const ansZone=$("unscrambleAnswerZone"),bankZone=$("unscrambleBankZone");
+  ansZone.innerHTML="";bankZone.innerHTML="";
+
+  if(!quizState.unscramblePlaced.length&&!locked){
+    const ph=document.createElement("span");
+    ph.style.cssText="font-size:13px;opacity:.6;font-weight:600";
+    ph.textContent="Tap or drag words here in the correct order...";
+    ansZone.appendChild(ph);
+  }
+
+  quizState.unscramblePlaced.forEach((item,idx)=>{
+    const btn=document.createElement("button");
+    btn.type="button";
+    btn.className="word-tile placed";
+    btn.textContent=item.text;
+    btn.disabled=locked;
+    btn.draggable=!locked;
+    if(!locked){
+      btn.onclick=()=>{
+        const moved=quizState.unscramblePlaced.splice(idx,1)[0];
+        if(moved)quizState.unscrambleBank.push(moved);
+        renderUnscrambleZones(false);
+        updateSubmitButtonState();
+      };
+      btn.ondragstart=e=>{
+        quizState.dragPayload={from:"placed",index:idx};
+        if(e.dataTransfer)e.dataTransfer.setData("text/plain",String(idx));
+      };
+      btn.ondragover=e=>e.preventDefault();
+      btn.ondrop=e=>{
+        e.preventDefault();e.stopPropagation();
+        if(!quizState.dragPayload)return;
+        if(quizState.dragPayload.from==="placed"){
+          const fromIdx=quizState.dragPayload.index;
+          if(fromIdx!==idx){
+            const [moved]=quizState.unscramblePlaced.splice(fromIdx,1);
+            quizState.unscramblePlaced.splice(idx,0,moved);
+          }
+        }else if(quizState.dragPayload.from==="bank"){
+          const [moved]=quizState.unscrambleBank.splice(quizState.dragPayload.index,1);
+          if(moved)quizState.unscramblePlaced.splice(idx,0,moved);
+        }
+        quizState.dragPayload=null;
+        renderUnscrambleZones(false);
+        updateSubmitButtonState();
+      };
+    }
+    ansZone.appendChild(btn);
+  });
+
+  if(!quizState.unscrambleBank.length&&!locked){
+    const doneTxt=document.createElement("span");
+    doneTxt.style.cssText="font-size:12px;opacity:.7;font-weight:700;color:#6ee7b7";
+    doneTxt.textContent="All words placed! Review order or Submit Answer.";
+    bankZone.appendChild(doneTxt);
+  }
+
+  quizState.unscrambleBank.forEach((item,idx)=>{
+    const btn=document.createElement("button");
+    btn.type="button";
+    btn.className="word-tile";
+    btn.textContent=item.text;
+    btn.disabled=locked;
+    btn.draggable=!locked;
+    if(!locked){
+      btn.onclick=()=>{
+        const moved=quizState.unscrambleBank.splice(idx,1)[0];
+        if(moved)quizState.unscramblePlaced.push(moved);
+        renderUnscrambleZones(false);
+        updateSubmitButtonState();
+      };
+      btn.ondragstart=e=>{
+        quizState.dragPayload={from:"bank",index:idx};
+        if(e.dataTransfer)e.dataTransfer.setData("text/plain",String(idx));
+      };
+    }
+    bankZone.appendChild(btn);
+  });
+
+  ansZone.ondragover=e=>{if(!locked){e.preventDefault();ansZone.classList.add("drag-over")}};
+  ansZone.ondragleave=()=>ansZone.classList.remove("drag-over");
+  ansZone.ondrop=e=>{
+    ansZone.classList.remove("drag-over");
+    if(locked||!quizState.dragPayload)return;
+    e.preventDefault();
+    if(quizState.dragPayload.from==="bank"){
+      const [moved]=quizState.unscrambleBank.splice(quizState.dragPayload.index,1);
+      if(moved)quizState.unscramblePlaced.push(moved);
+    }
+    quizState.dragPayload=null;
+    renderUnscrambleZones(false);
+    updateSubmitButtonState();
+  };
+  bankZone.ondragover=e=>{if(!locked)e.preventDefault()};
+  bankZone.ondrop=e=>{
+    if(locked||!quizState.dragPayload)return;
+    e.preventDefault();
+    if(quizState.dragPayload.from==="placed"){
+      const [moved]=quizState.unscramblePlaced.splice(quizState.dragPayload.index,1);
+      if(moved)quizState.unscrambleBank.push(moved);
+    }
+    quizState.dragPayload=null;
+    renderUnscrambleZones(false);
+    updateSubmitButtonState();
+  };
+}
+
+function updateSubmitButtonState(){
+  const q=quizState.questions[quizState.currentIndex];
+  const btn=$("quizSubmitBtn");
+  if(!q||quizState.answers[q.id]||quizState.submitting){btn.disabled=true;return}
+  if(q.type==="mcq")btn.disabled=quizState.selectedMcqIndex===null;
+  else if(q.type==="true_false")btn.disabled=quizState.selectedTf===null;
+  else btn.disabled=quizState.unscrambleBank.length>0||quizState.unscramblePlaced.length===0;
+}
+
+function renderCurrentQuizQuestion(){
+  $("quizQuestionView").classList.remove("hidden");
+  $("quizResultView").classList.add("hidden");
+  const total=quizState.questions.length,idx=quizState.currentIndex;
+  const q=quizState.questions[idx];if(!q)return;
+  const submittedRec=quizState.answers[q.id]||null;
+  const isLocked=Boolean(submittedRec);
+
+  $("quizCounter").textContent=`Question ${idx+1} of ${total}`;
+  $("quizBarFill").style.width=`${Math.round(((idx+(isLocked?1:0))/total)*100)}%`;
+
+  const badgeMap={mcq:"MCQ",true_false:"True / False",unscramble:"Unscramble the Sentence"};
+  $("quizTypeBadge").textContent=badgeMap[q.type]||q.type;
+
+  const optsWrap=$("quizOptionsWrap"),unscWrap=$("quizUnscrambleWrap"),resetBtn=$("quizResetBtn");
+  optsWrap.innerHTML="";optsWrap.className="opt-grid";
+
+  quizState.selectedMcqIndex=null;
+  quizState.selectedTf=null;
+
+  if(q.type==="mcq"){
+    $("quizPromptText").textContent=q.prompt||"";
+    optsWrap.classList.remove("hidden");
+    optsWrap.classList.add("mcq-grid");
+    unscWrap.classList.add("hidden");
+    resetBtn.classList.add("hidden");
+    const L=["A","B","C","D"];
+    (q.options||[]).forEach((opt,oIdx)=>{
+      const b=document.createElement("button");
+      b.type="button";b.className="opt-btn";
+      b.disabled=isLocked;
+      b.innerHTML=`<span class="opt-tag">${L[oIdx]}</span><span></span>`;
+      b.lastElementChild.textContent=opt;
+      if(isLocked){
+        if(oIdx===submittedRec.correctIndex)b.classList.add("correct");
+        else if(oIdx===submittedRec.submittedAnswer&&!submittedRec.isCorrect)b.classList.add("wrong");
+      }else{
+        b.onclick=()=>{
+          quizState.selectedMcqIndex=oIdx;
+          [...optsWrap.children].forEach((el,ci)=>el.classList.toggle("selected",ci===oIdx));
+          updateSubmitButtonState();
+        };
+      }
+      optsWrap.appendChild(b);
+    });
+  }else if(q.type==="true_false"){
+    $("quizPromptText").textContent=q.prompt||"";
+    optsWrap.classList.remove("hidden");
+    optsWrap.classList.add("tf-grid");
+    unscWrap.classList.add("hidden");
+    resetBtn.classList.add("hidden");
+    [true,false].forEach(val=>{
+      const b=document.createElement("button");
+      b.type="button";b.className="opt-btn";
+      b.disabled=isLocked;
+      b.innerHTML=`<span class="opt-tag">${val?"✓":"✗"}</span><span>${val?"True":"False"}</span>`;
+      if(isLocked){
+        if(val===submittedRec.correctBoolean)b.classList.add("correct");
+        else if(val===submittedRec.submittedAnswer&&!submittedRec.isCorrect)b.classList.add("wrong");
+      }else{
+        b.onclick=()=>{
+          quizState.selectedTf=val;
+          [...optsWrap.children].forEach((el,ci)=>el.classList.toggle("selected",(ci===0)===val));
+          updateSubmitButtonState();
+        };
+      }
+      optsWrap.appendChild(b);
+    });
+  }else{
+    $("quizPromptText").textContent="Arrange the words below into the correct sentence:";
+    optsWrap.classList.add("hidden");
+    unscWrap.classList.remove("hidden");
+    resetBtn.classList.toggle("hidden",isLocked);
+    resetUnscrambleForQuestion(q,submittedRec);
+    renderUnscrambleZones(isLocked);
+  }
+
+  const fb=$("quizFeedbackBox"),subBtn=$("quizSubmitBtn"),nextBtn=$("quizNextBtn");
+  if(isLocked){
+    fb.className=`feedback-box ${submittedRec.isCorrect?"ok":"bad"}`;
+    fb.innerHTML=`<div>${submittedRec.isCorrect?"✓ Correct!":"✗ Incorrect"}</div><div style="font-size:13px;opacity:.92">Correct answer: ${submittedRec.correctAnswerDisplay}</div>`;
+    fb.classList.remove("hidden");
+    subBtn.classList.add("hidden");
+    nextBtn.classList.remove("hidden");
+    nextBtn.textContent=idx+1<total?"Continue →":"View Final Results →";
+  }else{
+    fb.classList.add("hidden");
+    subBtn.classList.remove("hidden");
+    subBtn.textContent="Submit Answer";
+    nextBtn.classList.add("hidden");
+  }
+  updateSubmitButtonState();
+}
+
+$("quizResetBtn").onclick=()=>{
+  const q=quizState.questions[quizState.currentIndex];
+  if(!q||q.type!=="unscramble"||quizState.answers[q.id])return;
+  resetUnscrambleForQuestion(q,null);
+  renderUnscrambleZones(false);
+  updateSubmitButtonState();
+};
+
+$("quizSubmitBtn").onclick=async()=>{
+  const q=quizState.questions[quizState.currentIndex];
+  if(!q||quizState.answers[q.id]||quizState.submitting)return;
+  let submittedAnswer=null;
+  if(q.type==="mcq")submittedAnswer=quizState.selectedMcqIndex;
+  else if(q.type==="true_false")submittedAnswer=quizState.selectedTf;
+  else submittedAnswer=quizState.unscramblePlaced.map(t=>t.text);
+
+  if(submittedAnswer===null)return;
+  quizState.submitting=true;
+  $("quizSubmitBtn").disabled=true;
+  $("quizSubmitBtn").textContent="Checking...";
+
+  let record=null;
+  if(edtechraBridge.mode==="student"&&edtechraBridge.active){
+    const res=await bridgeRpc("EDTECHRA_JIGSAW_SUBMIT_ANSWER",{questionId:q.id,submittedAnswer});
+    if(res&&res.success&&res.record){
+      record=res.record;
+    }else{
+      quizState.submitting=false;
+      $("quizSubmitBtn").textContent="Submit Answer";
+      $("quizFeedbackBox").className="feedback-box bad";
+      $("quizFeedbackBox").textContent=res?.error||"Unable to save answer. Please try again.";
+      $("quizFeedbackBox").classList.remove("hidden");
+      updateSubmitButtonState();
+      return;
+    }
+  }else{
+    record=gradePreviewQuestion(q,submittedAnswer);
+  }
+
+  quizState.submitting=false;
+  quizState.answers[q.id]=record;
+  if(record.isCorrect)audio.snap(1,true);
+  else audio.drop();
+  renderCurrentQuizQuestion();
+};
+
+$("quizNextBtn").onclick=()=>{
+  if(quizState.currentIndex+1<quizState.questions.length){
+    quizState.currentIndex+=1;
+    renderCurrentQuizQuestion();
+  }else{
+    finishQuizStage();
+  }
+};
+
+$("quizPlayAgainBtn").onclick=()=>{
+  $("quizStage").classList.add("hidden");
+  edtechraBridge.index=0;
+  edtechraBridge.totalSec=0;
+  edtechraBridge.reported=false;
+  loadBridgePuzzle(0);
+};
+
+function finishQuizStage(){
+  $("quizQuestionView").classList.add("hidden");
+  $("quizResultView").classList.remove("hidden");
+
+  const totalQ=quizState.questions.length;
+  const recs=quizState.questions.map(q=>quizState.answers[q.id]).filter(Boolean);
+  const answered=recs.length;
+  const correct=recs.filter(r=>r.isCorrect).length;
+  const incorrect=Math.max(0,answered-correct);
+  const bd=computeBreakdownLocal(edtechraBridge.maxPoints,totalQ,correct);
+
+  $("quizResultSubtitle").textContent=`Puzzle completed and ${correct} of ${totalQ} questions answered correctly (${bd.accuracyPct}% accuracy).`;
+  $("quizResultGrid").innerHTML=`
+    <div class="res-cell"><span>Puzzle Status</span><b style="color:#6ee7b7">Completed ✓</b></div>
+    <div class="res-cell"><span>Total Questions</span><b>${answered} / ${totalQ}</b></div>
+    <div class="res-cell"><span>Accuracy</span><b>${bd.accuracyPct}%</b></div>
+    <div class="res-cell"><span>Correct / Incorrect</span><b>${correct} ✓ / ${incorrect} ✗</b></div>
+    <div class="res-cell"><span>Puzzle Points</span><b>${bd.puzzlePoints}</b></div>
+    <div class="res-cell"><span>Question Points</span><b>${bd.questionPoints}</b></div>
+    <div class="res-cell" style="grid-column:1/-1;text-align:center"><span>Total Points Earned</span><b style="font-size:24px;color:#34d399">${bd.totalPoints} / ${edtechraBridge.maxPoints}</b></div>
+  `;
+
+  const isPrev=edtechraBridge.mode==="preview";
+  $("quizPreviewNote").classList.toggle("hidden",!isPrev);
+  $("quizPlayAgainBtn").classList.toggle("hidden",!isPrev);
+
+  if(edtechraBridge.active&&!edtechraBridge.reported){
+    edtechraBridge.reported=true;
+    const totalSec=(edtechraBridge.totalSec||0)+g.sec;
+    const multi=edtechraBridge.images&&edtechraBridge.images.length>1;
+    const totalPuz=multi?edtechraBridge.images.length:1;
+    window.parent.postMessage({
+      type:"EDTECHRA_GAME_COMPLETE",
+      payload:{
+        gameId:"classroom-jigsaw",
+        scoreEarned:bd.totalPoints,
+        maxAvailablePoints:edtechraBridge.maxPoints,
+        completionStatus:"completed",
+        timeTakenSeconds:totalSec,
+        details:{
+          gridSize:g.N,
+          pieces:g.N*g.N,
+          puzzlesCompleted:totalPuz,
+          totalPuzzles:totalPuz,
+          puzzleCompleted:true,
+          questionsEnabled:true,
+          totalQuestions:totalQ,
+          questionsAnswered:answered,
+          correctAnswers:correct,
+          incorrectAnswers:incorrect,
+          accuracyPct:bd.accuracyPct,
+          puzzlePoints:bd.puzzlePoints,
+          questionPoints:bd.questionPoints,
+          totalPointsEarned:bd.totalPoints,
+          questionsCompleted:answered
+        }
+      }
+    },"*");
+  }
+}
+
+window.addEventListener("message",async ev=>{
   const msg=ev.data;
-  if(!msg||msg.type!=="EDTECHRA_INIT_GAME")return;
+  if(!msg||typeof msg!=="object")return;
+  if(msg.type==="EDTECHRA_JIGSAW_RESPONSE"&&msg.requestId){
+    const cb=pendingRpc.get(msg.requestId);
+    if(cb){pendingRpc.delete(msg.requestId);cb(msg.data)}
+    return;
+  }
+  if(msg.type!=="EDTECHRA_INIT_GAME")return;
   const p=msg.payload||msg||{},cfg=p.config||{};
   edtechraBridge.active=true;
   edtechraBridge.mode=p.mode||"student";
@@ -305,6 +889,10 @@ window.addEventListener("message",ev=>{
   edtechraBridge.index=0;
   edtechraBridge.totalSec=0;
   edtechraBridge.baseTitle=cfg.title||p.title||"Classroom Jigsaw";
+  edtechraBridge.questionsEnabled=Boolean(cfg.questionsEnabled);
+  edtechraBridge.previewQuestions=Array.isArray(cfg.questions)?cfg.questions:[];
+  edtechraBridge.questionCount=Number(cfg.questionCount||edtechraBridge.previewQuestions.length||0);
+
   if(p.mode==="student"||p.mode==="preview"){
     $("setup").classList.add("hidden");
     $("bNew").classList.add("hidden");
@@ -313,6 +901,43 @@ window.addEventListener("message",ev=>{
   g.timer=cfg.showTimer!==false;
   const imgs=Array.isArray(cfg.images)&&cfg.images.length?cfg.images:(cfg.imageDataUrl?[cfg.imageDataUrl]:[]);
   edtechraBridge.images=imgs;
+
+  if(edtechraBridge.questionsEnabled){
+    const countLabel=edtechraBridge.questionCount||"";
+    $("bLockTxt").textContent=countLabel?`${countLabel} Questions Locked`:"Questions Locked";
+    $("bLockInfo").classList.remove("hidden");
+  }else{
+    $("bLockInfo").classList.add("hidden");
+  }
+
+  if(p.mode==="student"&&edtechraBridge.questionsEnabled){
+    const state=await bridgeRpc("EDTECHRA_JIGSAW_FETCH_STATE");
+    if(state&&state.success){
+      edtechraBridge.questionCount=Number(state.questionCount||edtechraBridge.questionCount||0);
+      $("bLockTxt").textContent=`${edtechraBridge.questionCount} Questions Locked`;
+      if(state.inProgress&&state.inProgress.puzzleCompleted&&Array.isArray(state.unlockedQuestions)&&state.unlockedQuestions.length>0){
+        const picSrc=imgs[imgs.length-1]||imgs[0]||"";
+        setQuizPicturePreview(picSrc);
+        if(picSrc)$("refImg").src=picSrc;
+        g.solved=true;
+        $("setup").classList.add("hidden");
+        $("hTitle").textContent=edtechraBridge.baseTitle;
+        $("hud").classList.remove("hidden");
+        quizState.questions=state.unlockedQuestions;
+        quizState.answers=state.inProgress.answers&&typeof state.inProgress.answers==="object"?{...state.inProgress.answers}:{};
+        const firstUnanswered=quizState.questions.findIndex(q=>!quizState.answers[q.id]);
+        $("quizStage").classList.remove("hidden");
+        if(firstUnanswered===-1){
+          finishQuizStage();
+        }else{
+          quizState.currentIndex=firstUnanswered;
+          renderCurrentQuizQuestion();
+        }
+        return;
+      }
+    }
+  }
+
   loadBridgePuzzle(0);
 });
 window.parent.postMessage({type:"EDTECHRA_GAME_READY",gameId:"classroom-jigsaw"},"*");
