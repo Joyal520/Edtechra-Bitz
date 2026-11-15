@@ -109,6 +109,7 @@ import { getClassroomTheme } from '@/utils/classroomThemes';
 import { DEFAULT_CLASSROOM_HEADER_IMAGE, getClassroomHeaderImage } from '@/utils/classroomCovers';
 import { ClassroomCoursesSection } from '@/components/classes/ClassroomCoursesSection';
 import { AssignCourseToClassModal } from '@/components/classes/AssignCourseToClassModal';
+import { TodaysMotivationBanner } from '@/components/classes/motivation/TodaysMotivationBanner';
 
 type TabType = 'overview' | 'assignments' | 'roster' | 'stream' | 'resources' | 'leaderboard' | 'exams' | 'courses';
 
@@ -1310,6 +1311,9 @@ export const ClassroomDetailPage: React.FC = () => {
                 )}
 
               </div>
+
+              {/* Compact Today's Motivation Banner */}
+              <TodaysMotivationBanner />
 
             </div>
 
