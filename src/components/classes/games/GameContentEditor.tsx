@@ -10,15 +10,19 @@ import {
 } from '@/utils/luminaPuzzleGenerator';
 import type {
   ClassroomJigsawConfig,
+  ConnectionsConfig,
   GameConfig,
   GameId,
   LiquidSentencesConfig,
   LuminaWordsConfig,
   MemoryMatchConfig,
-  SaveTheBalloonConfig
+  SaveTheBalloonConfig,
+  SnakeSpellConfig
 } from '@/types/gameLibrary';
 import { BulkContentUploader, type ParsedBulkRow } from './BulkContentUploader';
+import { ConnectionsEditor } from './ConnectionsEditor';
 import { JigsawQuestionsEditor } from './JigsawQuestionsEditor';
+import { SnakeSpellEditor } from './SnakeSpellEditor';
 
 interface GameContentEditorProps {
   gameId: GameId;
@@ -105,6 +109,41 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
       const incoming = rows.map((r) => ({ word: r.primary, clue: r.secondary }));
       const base = mode === 'replace' ? [] : c.words.filter((w) => w.word.trim().length > 0);
       onChange({ ...c, words: [...base, ...incoming] });
+    } else if (gameId === 'snake-spell') {
+      const c = config as SnakeSpellConfig;
+      const incoming = rows.map((r) => ({ word: r.primary, hint: r.secondary }));
+      const base = mode === 'replace' ? [] : (c.words || []).filter((w) => w.word.trim().length > 0);
+      onChange({ ...c, words: [...base, ...incoming] });
+    } else if (gameId === 'connections') {
+      const c = config as ConnectionsConfig;
+      const baseGroups = Array.isArray(c.groups) ? [...c.groups] : [];
+      const nextGroups = [0, 1, 2, 3].map((idx) => {
+        const incomingRow = rows[idx];
+        if (incomingRow) {
+          const parsedWords = incomingRow.secondary
+            .split(',')
+            .map((w) => w.trim().toUpperCase())
+            .filter(Boolean);
+          return {
+            title: incomingRow.primary.trim(),
+            level: idx as 0 | 1 | 2 | 3,
+            words: [
+              parsedWords[0] || '',
+              parsedWords[1] || '',
+              parsedWords[2] || '',
+              parsedWords[3] || ''
+            ] as [string, string, string, string]
+          };
+        }
+        return (
+          baseGroups[idx] || {
+            title: '',
+            level: idx as 0 | 1 | 2 | 3,
+            words: ['', '', '', ''] as [string, string, string, string]
+          }
+        );
+      });
+      onChange({ ...c, groups: nextGroups });
     }
   };
 
@@ -623,6 +662,26 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
           onChange={(nextCfg) => onChange(nextCfg)}
         />
       </div>
+    );
+  }
+
+  if (gameId === 'snake-spell') {
+    return (
+      <SnakeSpellEditor
+        config={config as SnakeSpellConfig}
+        onChange={(next) => onChange(next)}
+        onBulkImport={handleBulkImport}
+      />
+    );
+  }
+
+  if (gameId === 'connections') {
+    return (
+      <ConnectionsEditor
+        config={config as ConnectionsConfig}
+        onChange={(next) => onChange(next)}
+        onBulkImport={handleBulkImport}
+      />
     );
   }
 

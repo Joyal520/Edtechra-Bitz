@@ -2,6 +2,7 @@ import type { Assignment, AssignmentSubmission } from '@/types/classroom';
 import type {
   ClassroomJigsawConfig,
   CompletedLevelRecord,
+  ConnectionsConfig,
   GameConfig,
   GameId,
   GameLevelDefinition,
@@ -9,7 +10,8 @@ import type {
   LiquidSentencesConfig,
   LuminaWordsConfig,
   MemoryMatchConfig,
-  SaveTheBalloonConfig
+  SaveTheBalloonConfig,
+  SnakeSpellConfig
 } from '@/types/gameLibrary';
 
 export function isAssignmentPublished(assignment?: Assignment | null): boolean {
@@ -47,6 +49,14 @@ export function getLevelQuestionCount(gameId: GameId, cfg?: GameConfig | null): 
     case 'lumina-words':
       return Array.isArray((cfg as LuminaWordsConfig).words)
         ? (cfg as LuminaWordsConfig).words.length
+        : 0;
+    case 'snake-spell':
+      return Array.isArray((cfg as SnakeSpellConfig).words)
+        ? (cfg as SnakeSpellConfig).words.length
+        : 0;
+    case 'connections':
+      return Array.isArray((cfg as ConnectionsConfig).groups)
+        ? (cfg as ConnectionsConfig).groups.length
         : 0;
     default:
       return 0;

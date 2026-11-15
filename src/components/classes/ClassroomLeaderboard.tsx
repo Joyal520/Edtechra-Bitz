@@ -1,24 +1,40 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
-  Trophy,
   ArrowRight,
-  X,
-  TrendingUp,
-  Settings,
-  Clock,
-  Sparkles,
+  BarChart3,
   CheckCircle2,
-  Share2
+  ChevronRight,
+  Clock,
+  Download,
+  Eye,
+  Link2,
+  MessageCircle,
+  Settings,
+  Share2,
+  Sparkles,
+  Trophy,
+  X,
 } from 'lucide-react';
 import { ClassroomLeaderboardEntry, LeaderboardResetFrequency } from '@/types/classroom';
-import { formatLeaderboardResetText, DEFAULT_LEADERBOARD_TIMEZONE } from '@/utils/leaderboardResetUtils';
+import {
+  DEFAULT_LEADERBOARD_TIMEZONE,
+  formatLeaderboardResetText,
+  sanitizeLeaderboardStudentName,
+} from '@/utils/leaderboardResetUtils';
+import {
+  formatLeaderboardPeriodRange,
+  partitionLeaderboardEntries,
+} from '@/utils/classChampionsUtils';
+import { ClassChampionsPodium } from './champions/ClassChampionsPodium';
+import { ClassroomOptionsDropdown } from './ClassroomOptionsDropdown';
 import { LeaderboardSettingsModal } from './LeaderboardSettingsModal';
-import { ShareLeaderboardModal } from './ShareLeaderboardModal';
+import { ShareLeaderboardModal, ShareQuickAction } from './ShareLeaderboardModal';
 
 interface ClassroomLeaderboardProps {
   entries: ClassroomLeaderboardEntry[];
   currentUserId?: string;
   classroomId?: string;
+  classroomName?: string;
   isTeacher?: boolean;
   resetFrequency?: LeaderboardResetFrequency;
   nextResetAt?: string | null;
@@ -28,76 +44,127 @@ interface ClassroomLeaderboardProps {
   onShowToast?: (message: string) => void;
 }
 
-const PODIUM_IMAGE_URL = '/assets/ChatGPT%20Image%20Aug%2028,%202026,%2002_56_25%20PM.png';
+const getInitials = (name: string): string => {
+  const clean = sanitizeLeaderboardStudentName(name).trim();
+  const parts = clean.split(/\s+/);
+  if (parts.length >= 2) {
+    return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
+  }
+  return (parts[0]?.slice(0, 2) || 'ST').toUpperCase();
+};
+
+const LeaderboardAvatar: React.FC<{
+  avatarUrl?: string | null;
+  name: string;
+  sizeClass?: string;
+}> = ({ avatarUrl, name, sizeClass = 'w-9 h-9' }) => {
+  const [failed, setFailed] = useState(false);
+
+  return (
+    <div
+      className={`${sizeClass} rounded-full bg-white border border-slate-200 shrink-0 overflow-hidden flex items-center justify-center text-xs font-extrabold text-slate-700 shadow-2xs`}
+    >
+      {avatarUrl && !failed ? (
+        <img
+          src={avatarUrl}
+          alt={sanitizeLeaderboardStudentName(name)}
+          onError={() => setFailed(true)}
+          className="w-full h-full object-cover"
+        />
+      ) : (
+        <div className="w-full h-full bg-gradient-to-br from-sky-100 to-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs">
+          {getInitials(name)}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
   entries,
   currentUserId,
   classroomId,
+  classroomName = 'Classroom',
   isTeacher = false,
   resetFrequency = 'never',
   nextResetAt,
   lastResetAt,
   timeZone = DEFAULT_LEADERBOARD_TIMEZONE,
   onRefreshLeaderboard,
-  onShowToast
+  onShowToast,
 }) => {
   const [showAllModal, setShowAllModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const [shareInitialAction, setShareInitialAction] = useState<ShareQuickAction>('preview');
   const [localToast, setLocalToast] = useState<string | null>(null);
+
+  const shareBtnRef = useRef<HTMLDivElement | null>(null);
 
   const showNotification = (msg: string) => {
     if (onShowToast) {
       onShowToast(msg);
     } else {
       setLocalToast(msg);
-      setTimeout(() => setLocalToast(null), 3500);
+      window.setTimeout(() => setLocalToast(null), 3500);
     }
   };
 
-  // Strictly partition unique students from the database
-  const topThree = entries.slice(0, 3);
-  const nextThree = entries.slice(3, 6);
+  // Strictly partition: Top 3 ONLY on podium; #4+ ONLY in remaining leaderboard
+  const { sortedEntries, podiumEntries, remainingEntries } =
+    partitionLeaderboardEntries(entries);
 
-  // Check if all students currently have 0 XP (e.g. right after a leaderboard reset or at cycle start)
-  const allZeroXP = entries.length > 0 && entries.every((e) => (e.points || 0) === 0);
+  const periodLabel = formatLeaderboardPeriodRange(
+    resetFrequency,
+    lastResetAt,
+    nextResetAt,
+    timeZone
+  );
 
-  // Format schedule text for friendly reset indicator
+  const allZeroXP =
+    sortedEntries.length > 0 && sortedEntries.every((e) => (e.points || 0) === 0);
+
   const { frequencyLabel, nextResetLabel } = formatLeaderboardResetText(
     resetFrequency,
     nextResetAt,
     timeZone
   );
 
+  const openShareWithAction = (action: ShareQuickAction) => {
+    setShareMenuOpen(false);
+    setShareInitialAction(action);
+    setShowShareModal(true);
+  };
+
   return (
     <div className="space-y-4">
-
       {/* ======================================================================= */}
-      {/* TOP HEADER STATUS BAR: RESET INDICATOR & TEACHER SETTINGS CONTROL        */}
+      {/* TOP HEADER STATUS BAR: RESET INDICATOR, SETTINGS & SHARE DROPDOWN       */}
       {/* ======================================================================= */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-stone-200/80">
-        
-        {/* Left: Next Reset Indicator */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-stone-200/80">
+        {/* Left: Reset Indicator */}
         <div className="flex items-center gap-2">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#faf8f5] border border-stone-200/90 text-xs font-semibold text-slate-700 shadow-2xs">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#faf8f5] border border-stone-200/90 text-xs font-semibold text-slate-700 shadow-2xs flex-wrap">
             <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <span>
-              Reset frequency: <strong className="text-slate-900 font-black">{frequencyLabel}</strong>
+              Reset frequency:{' '}
+              <strong className="text-slate-900 font-black">{frequencyLabel}</strong>
             </span>
 
             {resetFrequency !== 'never' && nextResetLabel && (
               <>
                 <span className="text-stone-300">•</span>
                 <span className="text-slate-500">
-                  Next reset: <strong className="text-[#026fc3] font-bold">{nextResetLabel}</strong>
+                  Next reset:{' '}
+                  <strong className="text-[#026fc3] font-bold">{nextResetLabel}</strong>
                 </span>
               </>
             )}
           </div>
         </div>
 
-        {/* Right: Controls - Teacher-only Settings & Share Leaderboard Update */}
+        {/* Right: Controls */}
         <div className="flex items-center gap-2">
           {isTeacher && classroomId && (
             <button
@@ -112,25 +179,115 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
           )}
 
           {classroomId && (
-            <button
-              type="button"
-              onClick={() => setShowShareModal(true)}
-              className="group inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white hover:bg-stone-50 border border-stone-200 text-xs font-bold text-slate-700 shadow-2xs hover:border-amber-400/80 hover:text-amber-600 active:scale-95 transition-all cursor-pointer"
-              title="Share Leaderboard Update"
-              aria-label="Share Leaderboard Update"
-            >
-              <Share2 className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-500 transition-colors" />
-              <span>Share</span>
-            </button>
+            <div className="relative" ref={shareBtnRef}>
+              {/* Subtle Golden Rays accent matching Class Champions design */}
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden="true"
+                className="w-4 h-4 absolute -top-2 -right-2 pointer-events-none select-none"
+              >
+                <path
+                  d="M5 17L10 9M12 19L19 14M4 9L5 3"
+                  stroke="#f59e0b"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                />
+              </svg>
+
+              <button
+                type="button"
+                onClick={() => setShareMenuOpen((prev) => !prev)}
+                className={`group inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border text-xs font-extrabold shadow-2xs active:scale-95 transition-all cursor-pointer ${
+                  shareMenuOpen
+                    ? 'border-[#026fc3] bg-sky-100/80 text-[#026fc3]'
+                    : 'border-[#026fc3]/80 text-[#026fc3] bg-sky-50/50 hover:bg-sky-50'
+                }`}
+                title="Share Class Champions Achievement Certificate"
+                aria-label="Share Class Champions"
+                aria-expanded={shareMenuOpen}
+                aria-haspopup="true"
+              >
+                <Share2 className="w-3.5 h-3.5 stroke-[2.2]" />
+                <span>Share</span>
+              </button>
+
+              <ClassroomOptionsDropdown
+                isOpen={shareMenuOpen}
+                onClose={() => setShareMenuOpen(false)}
+                anchorRef={shareBtnRef}
+                preferredAlign="right"
+                widthPx={260}
+              >
+                <div className="py-1 space-y-0.5">
+                  <button
+                    type="button"
+                    onClick={() => openShareWithAction('whatsapp')}
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition-colors text-left cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                        <MessageCircle className="w-3.5 h-3.5" />
+                      </span>
+                      <span>Share on WhatsApp</span>
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => openShareWithAction('download')}
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-700 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-colors text-left cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                        <Download className="w-3.5 h-3.5" />
+                      </span>
+                      <span>Download Achievement Certificate</span>
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => openShareWithAction('link')}
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-700 hover:text-[#026fc3] hover:bg-sky-50 rounded-xl transition-colors text-left cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span className="w-6 h-6 rounded-full bg-sky-100 text-[#026fc3] flex items-center justify-center shrink-0">
+                        <Link2 className="w-3.5 h-3.5" />
+                      </span>
+                      <span>Copy Share Link</span>
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                  </button>
+
+                  <div className="my-1 border-t border-slate-100" />
+
+                  <button
+                    type="button"
+                    onClick={() => openShareWithAction('preview')}
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-700 hover:text-amber-700 hover:bg-amber-50 rounded-xl transition-colors text-left cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                        <Eye className="w-3.5 h-3.5" />
+                      </span>
+                      <span>Preview &amp; Achievement Gallery</span>
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                  </button>
+                </div>
+              </ClassroomOptionsDropdown>
+            </div>
           )}
         </div>
-
       </div>
 
       {/* ======================================================================= */}
       {/* EMPTY STATE (No enrolled students)                                      */}
       {/* ======================================================================= */}
-      {entries.length === 0 ? (
+      {sortedEntries.length === 0 ? (
         <div className="bg-[#faf8f5] rounded-[28px] p-8 text-center border border-stone-200/70 shadow-xs space-y-2 h-full flex flex-col items-center justify-center min-h-[260px]">
           <Trophy className="w-10 h-10 text-amber-400/60 mx-auto" />
           <p className="text-sm font-black text-slate-700">No leaderboard activity yet</p>
@@ -140,7 +297,7 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
         </div>
       ) : (
         <>
-          {/* Friendly Fresh Period Banner when all student scores are at 0 XP */}
+          {/* Fresh Period Banner when all scores are 0 XP */}
           {allZeroXP && (
             <div className="bg-sky-50/90 border border-sky-200/80 rounded-2xl p-3 sm:px-4 flex items-center justify-between gap-3 shadow-2xs animate-in fade-in">
               <div className="flex items-center gap-2.5 text-xs font-bold text-[#026fc3]">
@@ -154,217 +311,118 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
           )}
 
           {/* ======================================================================= */}
-          {/* MAIN TOP 3 LEADERBOARD CARD                                             */}
+          {/* CLASS CHAMPIONS PODIUM (LEFT) + REMAINING LEADERBOARD #4+ (RIGHT)       */}
           {/* ======================================================================= */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-            
-            {/* LEFT: 3D CUT-PAPER PODIUM IMAGE WITH DYNAMIC OVERLAY (5 Cols) */}
-            <div className="md:col-span-5 flex flex-col items-center justify-center relative select-none">
-              <div className="relative w-full max-w-[320px] aspect-[3/2] overflow-hidden rounded-2xl">
-                {/* Background Paper-Cut Artwork */}
-                <img
-                  src={PODIUM_IMAGE_URL}
-                  alt="Classroom Leaderboard Podium"
-                  className="w-full h-full object-contain pointer-events-none drop-shadow-sm"
-                  loading="eager"
-                />
-
-                {/* Rank 2 Avatar (Left Slate Ring: center ~28.6%, ~49.5%, diam ~16%) */}
-                <div className="absolute left-[28.6%] top-[49.5%] -translate-x-1/2 -translate-y-1/2 w-[16%] aspect-square rounded-full overflow-hidden shadow-inner flex items-center justify-center z-10">
-                  {topThree[1] ? (
-                    topThree[1].avatar_url ? (
-                      <img src={topThree[1].avatar_url} alt={topThree[1].name} className="w-full h-full object-cover rounded-full" />
-                    ) : (
-                      <div className="w-full h-full bg-slate-400 text-white font-black text-[10px] sm:text-xs flex items-center justify-center">
-                        {topThree[1].name.slice(0, 2).toUpperCase()}
-                      </div>
-                    )
-                  ) : (
-                    <div className="w-full h-full bg-slate-200/40 rounded-full border border-dashed border-slate-300" />
-                  )}
-                </div>
-                {/* Rank 2 Number Overlay */}
-                <span className="absolute left-[28.6%] top-[72%] -translate-x-1/2 -translate-y-1/2 text-white font-black text-lg sm:text-xl drop-shadow-md pointer-events-none z-10">
-                  2
-                </span>
-
-                {/* Rank 1 Avatar (Center Gold Ring: center ~50%, ~35.5%, diam ~20%) */}
-                <div className="absolute left-[50%] top-[35.5%] -translate-x-1/2 -translate-y-1/2 w-[20%] aspect-square rounded-full overflow-hidden shadow-inner flex items-center justify-center z-10">
-                  {topThree[0] ? (
-                    topThree[0].avatar_url ? (
-                      <img src={topThree[0].avatar_url} alt={topThree[0].name} className="w-full h-full object-cover rounded-full" />
-                    ) : (
-                      <div className="w-full h-full bg-amber-400 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center">
-                        {topThree[0].name.slice(0, 2).toUpperCase()}
-                      </div>
-                    )
-                  ) : (
-                    <div className="w-full h-full bg-amber-100/40 rounded-full border border-dashed border-amber-300" />
-                  )}
-                </div>
-                {/* Rank 1 Number Overlay */}
-                <span className="absolute left-[50%] top-[58%] -translate-x-1/2 -translate-y-1/2 text-white font-black text-2xl sm:text-3xl drop-shadow-md pointer-events-none z-10">
-                  1
-                </span>
-
-                {/* Rank 3 Avatar (Right Bronze Ring: center ~70.1%, ~50%, diam ~16%) */}
-                <div className="absolute left-[70.1%] top-[50%] -translate-x-1/2 -translate-y-1/2 w-[16%] aspect-square rounded-full overflow-hidden shadow-inner flex items-center justify-center z-10">
-                  {topThree[2] ? (
-                    topThree[2].avatar_url ? (
-                      <img src={topThree[2].avatar_url} alt={topThree[2].name} className="w-full h-full object-cover rounded-full" />
-                    ) : (
-                      <div className="w-full h-full bg-orange-400 text-white font-black text-[10px] sm:text-xs flex items-center justify-center">
-                        {topThree[2].name.slice(0, 2).toUpperCase()}
-                      </div>
-                    )
-                  ) : (
-                    <div className="w-full h-full bg-orange-100/40 rounded-full border border-dashed border-orange-300" />
-                  )}
-                </div>
-                {/* Rank 3 Number Overlay */}
-                <span className="absolute left-[70.1%] top-[73%] -translate-x-1/2 -translate-y-1/2 text-white font-black text-lg sm:text-xl drop-shadow-md pointer-events-none z-10">
-                  3
-                </span>
-
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch">
+            {/* Left: Class Champions Podium (Top 3 only) */}
+            <div className="md:col-span-6">
+              <ClassChampionsPodium
+                topThree={podiumEntries}
+                currentUserId={currentUserId}
+              />
             </div>
 
-            {/* RIGHT: RANKS 1 TO 3 LIST (7 Cols) */}
-            <div className="md:col-span-7 bg-[#faf8f5] rounded-2xl p-4 sm:p-5 border border-stone-200/70 shadow-2xs flex flex-col justify-between space-y-3 h-full">
-              
-              <div className="space-y-2.5">
-                {topThree.map((entry, idx) => {
-                  const isCurrentUser = currentUserId && entry.student_id === currentUserId;
-                  const displayPoints = entry.points || 0;
-
-                  return (
-                    <div
-                      key={entry.student_id}
-                      className={`flex items-center justify-between p-3 rounded-xl transition-all ${
-                        isCurrentUser
-                          ? 'bg-blue-50/90 border border-blue-200 shadow-2xs'
-                          : 'hover:bg-white border border-transparent'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        {/* Rank Indicator */}
-                        <span className={`w-6 text-sm font-black shrink-0 ${
-                          idx === 0 ? 'text-amber-500' : idx === 1 ? 'text-slate-500' : 'text-amber-700'
-                        }`}>
-                          #{idx + 1}
-                        </span>
-
-                        {/* Student Avatar */}
-                        <div className="w-10 h-10 rounded-full bg-white shrink-0 overflow-hidden border-2 border-stone-200 flex items-center justify-center text-xs font-black text-slate-700 shadow-2xs">
-                          {entry.avatar_url ? (
-                            <img src={entry.avatar_url} alt={entry.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="text-slate-800">{entry.name.slice(0, 2).toUpperCase()}</span>
-                          )}
-                        </div>
-
-                        {/* Student Name */}
-                        <div className="min-w-0">
-                          <div className="text-xs sm:text-sm font-black text-slate-900 truncate flex items-center gap-1.5">
-                            <span>{entry.name}</span>
-                            {isCurrentUser && (
-                              <span className="text-[9px] font-black uppercase bg-[#026fc3] text-white px-1.5 py-0.2 rounded-md">
-                                You
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Points / XP */}
-                      <div className="text-right shrink-0 pl-3">
-                        <span className={`text-xs sm:text-sm font-black ${
-                          displayPoints === 0 ? 'text-slate-400' : 'text-[#026fc3]'
-                        }`}>
-                          {displayPoints.toLocaleString()} XP
-                        </span>
-                      </div>
+            {/* Right: Remaining Leaderboard (#4 and below only — never duplicates Top 3) */}
+            <div className="md:col-span-6 bg-[#f8fafc] rounded-[26px] p-4 sm:p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between gap-4">
+              <div className="space-y-3.5">
+                {/* Panel Header */}
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-sky-100 text-[#026fc3] flex items-center justify-center shrink-0">
+                      <BarChart3 className="w-4 h-4 stroke-[2.4]" />
                     </div>
-                  );
-                })}
+                    <h4 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                      Leaderboard
+                    </h4>
+                  </div>
+
+                  <span className="bg-blue-50 text-[#026fc3] border border-blue-200/60 text-[11px] font-bold px-3 py-1 rounded-full">
+                    Students #4 and below
+                  </span>
+                </div>
+
+                {/* Remaining Ranked Student Rows */}
+                {remainingEntries.length > 0 ? (
+                  <div className="space-y-2.5">
+                    {remainingEntries.slice(0, 5).map((entry) => {
+                      const isCurrentUser = Boolean(
+                        currentUserId && entry.student_id === currentUserId
+                      );
+
+                      return (
+                        <div
+                          key={entry.student_id}
+                          className={`flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-2xl border transition-all ${
+                            isCurrentUser
+                              ? 'bg-sky-50/90 border-sky-200 shadow-2xs'
+                              : 'bg-white border-slate-100 hover:border-slate-200 shadow-[0_2px_8px_rgba(15,23,42,0.03)]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="w-7 text-xs sm:text-sm font-black text-indigo-700 shrink-0 tabular-nums">
+                              #{entry.rank}
+                            </span>
+
+                            <LeaderboardAvatar
+                              avatarUrl={entry.avatar_url}
+                              name={entry.name}
+                            />
+
+                            <div className="min-w-0 flex items-center gap-1.5">
+                              <span
+                                className="text-xs sm:text-sm font-extrabold text-slate-900 truncate"
+                                title={entry.name}
+                              >
+                                {entry.name}
+                              </span>
+                              {isCurrentUser && (
+                                <span className="px-1.5 py-0.5 rounded bg-[#026fc3] text-white text-[10px] font-extrabold shrink-0">
+                                  You
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <span
+                            className={`text-xs sm:text-sm font-black shrink-0 tabular-nums ${
+                              entry.points === 0 ? 'text-slate-400' : 'text-[#026fc3]'
+                            }`}
+                          >
+                            {entry.points.toLocaleString()} XP
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl bg-white border border-dashed border-slate-200 p-6 text-center space-y-1.5 my-2">
+                    <p className="text-xs sm:text-sm font-bold text-slate-700">
+                      Ranks #4 and below will appear here
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      All {sortedEntries.length}{' '}
+                      {sortedEntries.length === 1 ? 'student is' : 'students are'} currently celebrated on the Class Champions podium!
+                    </p>
+                  </div>
+                )}
               </div>
 
-              {/* Bottom Action: View Full Leaderboard */}
-              <div className="pt-2 flex justify-end">
+              {/* View Full Leaderboard CTA */}
+              <div className="pt-1">
                 <button
                   type="button"
                   onClick={() => setShowAllModal(true)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white hover:bg-stone-50 text-slate-800 text-xs font-black border border-stone-200 shadow-2xs active:scale-95 transition-all cursor-pointer"
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200/90 text-xs sm:text-sm font-extrabold text-slate-700 hover:text-[#026fc3] hover:border-sky-200 shadow-2xs transition-all cursor-pointer group"
                 >
-                  <span>View Full Leaderboard</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+                  <span>
+                    View Full Leaderboard ({sortedEntries.length}{' '}
+                    {sortedEntries.length === 1 ? 'Student' : 'Students'})
+                  </span>
+                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-[#026fc3] group-hover:translate-x-0.5 transition-all" />
                 </button>
               </div>
-
             </div>
-
           </div>
-
-          {/* ======================================================================= */}
-          {/* SECOND STUDENT PANEL (RANKS #4, #5, #6 CONTINUATION)                   */}
-          {/* ======================================================================= */}
-          {nextThree.length > 0 && (
-            <div className="pt-2 border-t border-stone-100">
-              <div className="flex items-center gap-2 mb-3">
-                <TrendingUp className="w-3.5 h-3.5 text-[#026fc3]" />
-                <span className="text-xs font-black text-slate-700 uppercase tracking-wider">
-                  Continuation Leaderboard (Ranks #4 – #{3 + nextThree.length})
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {nextThree.map((entry, idx) => {
-                  const rankNum = idx + 4;
-                  const isCurrentUser = currentUserId && entry.student_id === currentUserId;
-                  const displayPoints = entry.points || 0;
-
-                  return (
-                    <div
-                      key={entry.student_id}
-                      className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all ${
-                        isCurrentUser
-                          ? 'bg-blue-50/90 border-blue-200 shadow-2xs'
-                          : 'bg-[#faf8f5] hover:bg-white border-stone-200/80 shadow-2xs'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="text-xs font-black text-slate-400 w-5 shrink-0">
-                          #{rankNum}
-                        </span>
-
-                        <div className="w-8 h-8 rounded-full bg-white shrink-0 overflow-hidden border border-stone-200 flex items-center justify-center text-[11px] font-black text-slate-700 shadow-2xs">
-                          {entry.avatar_url ? (
-                            <img src={entry.avatar_url} alt={entry.name} className="w-full h-full object-cover" />
-                          ) : (
-                            entry.name.slice(0, 2).toUpperCase()
-                          )}
-                        </div>
-
-                        <div className="min-w-0">
-                          <div className="text-xs font-black text-slate-900 truncate">
-                            {entry.name}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="text-right shrink-0 pl-2">
-                        <span className={`text-xs font-black ${
-                          displayPoints === 0 ? 'text-slate-400' : 'text-[#026fc3]'
-                        }`}>
-                          {displayPoints.toLocaleString()} XP
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </>
       )}
 
@@ -372,28 +430,35 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
       {/* FULL LEADERBOARD MODAL                                                  */}
       {/* ======================================================================= */}
       {showAllModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 border border-stone-200 shadow-xl space-y-4 max-h-[85vh] flex flex-col">
-            
-            {/* Modal Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+        <div
+          className="fixed inset-0 z-[70] bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowAllModal(false);
+          }}
+        >
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-100 max-h-[85vh] flex flex-col space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <Trophy className="w-5 h-5 text-amber-500" />
-                <h3 className="text-base font-black text-slate-900">Classroom Full Leaderboard</h3>
+                <h3 className="text-base font-black text-slate-900">
+                  Classroom Full Leaderboard
+                </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setShowAllModal(false)}
                 className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+                aria-label="Close full leaderboard"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Scrollable Student List */}
             <div className="overflow-y-auto space-y-2 flex-1 pr-1">
-              {entries.map((entry, idx) => {
-                const isCurrentUser = currentUserId && entry.student_id === currentUserId;
+              {sortedEntries.map((entry, idx) => {
+                const isCurrentUser = Boolean(
+                  currentUserId && entry.student_id === currentUserId
+                );
                 const displayPoints = entry.points || 0;
 
                 return (
@@ -406,32 +471,36 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <span className={`w-6 text-center text-xs font-black ${
-                        idx < 3 ? 'text-amber-600' : 'text-slate-400'
-                      }`}>
+                      <span
+                        className={`w-7 text-center text-xs font-black ${
+                          idx < 3 ? 'text-amber-600' : 'text-slate-400'
+                        }`}
+                      >
                         #{idx + 1}
                       </span>
-                      <div className="w-8 h-8 rounded-full bg-slate-200 shrink-0 overflow-hidden flex items-center justify-center text-xs font-bold text-slate-700">
-                        {entry.avatar_url ? (
-                          <img src={entry.avatar_url} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          entry.name.slice(0, 2).toUpperCase()
-                        )}
-                      </div>
+                      <LeaderboardAvatar
+                        avatarUrl={entry.avatar_url}
+                        name={entry.name}
+                        sizeClass="w-8 h-8"
+                      />
                       <div className="min-w-0">
                         <div className="text-xs font-bold text-slate-900 truncate flex items-center gap-1.5">
                           <span>{entry.name}</span>
                           {isCurrentUser && (
-                            <span className="text-[10px] bg-[#026fc3] text-white px-1.5 py-0.2 rounded font-extrabold">You</span>
+                            <span className="text-[10px] bg-[#026fc3] text-white px-1.5 py-0.2 rounded font-extrabold">
+                              You
+                            </span>
                           )}
                         </div>
                       </div>
                     </div>
 
                     <div className="text-right shrink-0">
-                      <span className={`text-xs font-black ${
-                        displayPoints === 0 ? 'text-slate-400' : 'text-[#026fc3]'
-                      }`}>
+                      <span
+                        className={`text-xs font-black ${
+                          displayPoints === 0 ? 'text-slate-400' : 'text-[#026fc3]'
+                        }`}
+                      >
                         {displayPoints.toLocaleString()} XP
                       </span>
                     </div>
@@ -440,7 +509,6 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
               })}
             </div>
 
-            {/* Modal Footer */}
             <div className="pt-2 border-t border-slate-100 flex justify-end shrink-0">
               <button
                 type="button"
@@ -450,7 +518,6 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
                 Close
               </button>
             </div>
-
           </div>
         </div>
       )}
@@ -478,27 +545,29 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
       )}
 
       {/* ======================================================================= */}
-      {/* SHARE LEADERBOARD MODAL                                                 */}
+      {/* SHARE CLASS CHAMPIONS CERTIFICATE MODAL                                 */}
       {/* ======================================================================= */}
       {classroomId && (
         <ShareLeaderboardModal
           isOpen={showShareModal}
           onClose={() => setShowShareModal(false)}
           classroomId={classroomId}
-          initialEntries={entries}
+          classroomName={classroomName}
+          periodLabel={periodLabel}
+          initialAction={shareInitialAction}
+          initialEntries={sortedEntries}
           onRefreshParentLeaderboard={onRefreshLeaderboard}
           onShowToast={showNotification}
         />
       )}
 
-      {/* Local Toast Fallback if parent does not provide one */}
+      {/* Local Toast Fallback */}
       {localToast && (
         <div className="fixed bottom-6 right-6 z-[60] flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-2xl shadow-xl border border-slate-700/80 text-xs font-bold animate-in fade-in slide-in-from-bottom-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{localToast}</span>
         </div>
       )}
-
     </div>
   );
 };

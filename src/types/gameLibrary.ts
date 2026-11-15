@@ -3,7 +3,9 @@ export type GameId =
   | 'save-the-balloon'
   | 'memory-match'
   | 'classroom-jigsaw'
-  | 'lumina-words';
+  | 'lumina-words'
+  | 'snake-spell'
+  | 'connections';
 
 export type LevelUnlockMode = 'sequential' | 'scheduled' | 'daily_limit';
 
@@ -130,12 +132,38 @@ export interface LuminaWordsConfig {
   puzzles?: LuminaPuzzleDefinition[];
 }
 
+export interface SnakeSpellWordItem {
+  word: string;
+  hint?: string;
+}
+
+export interface SnakeSpellConfig {
+  title?: string;
+  words: SnakeSpellWordItem[];
+  missingLetters?: 0 | 1 | 2 | 3;
+  lives?: 3 | 5 | 8;
+  speed?: 0.8 | 1 | 1.25;
+}
+
+export interface ConnectionsGroupItem {
+  title: string;
+  level: 0 | 1 | 2 | 3;
+  words: [string, string, string, string];
+}
+
+export interface ConnectionsConfig {
+  title?: string;
+  groups: ConnectionsGroupItem[];
+}
+
 export type GameConfig =
   | LiquidSentencesConfig
   | SaveTheBalloonConfig
   | MemoryMatchConfig
   | ClassroomJigsawConfig
-  | LuminaWordsConfig;
+  | LuminaWordsConfig
+  | SnakeSpellConfig
+  | ConnectionsConfig;
 
 export interface GameLevelDefinition {
   id: string;

@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import type { Assignment } from '@/types/classroom';
 import type {
   ClassroomJigsawConfig,
+  ConnectionsConfig,
   GameAssignmentSettings,
   GameCatalogItem,
   GameCompletionPayload,
@@ -15,7 +16,8 @@ import type {
   LuminaWordsConfig,
   MemoryMatchConfig,
   SaveTheBalloonConfig,
-  SavedLibraryGame
+  SavedLibraryGame,
+  SnakeSpellConfig
 } from '@/types/gameLibrary';
 import { createLevelId } from '@/utils/gameLevelUtils';
 
@@ -79,6 +81,30 @@ export const GAME_CATALOG: GameCatalogItem[] = [
     badgeLabel: 'Word Wheel',
     htmlPath: '/games/lumina-words.html',
     defaultPoints: 100
+  },
+  {
+    id: 'snake-spell',
+    name: 'Snake Spell',
+    shortDescription:
+      'Guide the animated snake to catch missing letter orbs and spell custom classroom words with optional emoji or text clues.',
+    category: 'Spelling & Phonics',
+    thumbnailUrl: '/games/thumbnails/snake-spell.jpg',
+    accentColor: 'from-emerald-500 to-cyan-600',
+    badgeLabel: 'Word Arcade',
+    htmlPath: '/games/snake-spell.html',
+    defaultPoints: 100
+  },
+  {
+    id: 'connections',
+    name: 'Connections',
+    shortDescription:
+      'Sort sixteen words into four hidden themed categories across graded logic tiers using hints and category clues.',
+    category: 'Logic & Categorisation',
+    thumbnailUrl: '/games/thumbnails/connections.jpg',
+    accentColor: 'from-amber-500 to-purple-600',
+    badgeLabel: 'Word Logic',
+    htmlPath: '/games/connections.html',
+    defaultPoints: 100
   }
 ];
 
@@ -118,6 +144,24 @@ export function getEmptyConfigForGame(gameId: GameId): GameConfig {
       return {
         title: '',
         words: []
+      };
+    case 'snake-spell':
+      return {
+        title: '',
+        words: [],
+        missingLetters: 0,
+        lives: 3,
+        speed: 1
+      };
+    case 'connections':
+      return {
+        title: '',
+        groups: [
+          { title: '', level: 0, words: ['', '', '', ''] },
+          { title: '', level: 1, words: ['', '', '', ''] },
+          { title: '', level: 2, words: ['', '', '', ''] },
+          { title: '', level: 3, words: ['', '', '', ''] }
+        ]
       };
   }
 }
@@ -175,6 +219,30 @@ export function getDemoConfigForGame(gameId: GameId): GameConfig {
           { word: 'SOLAR', clue: 'Relating to the sun' }
         ]
       };
+    case 'snake-spell':
+      return {
+        title: 'Animal & Science Spell',
+        missingLetters: 0,
+        lives: 3,
+        speed: 1,
+        words: [
+          { word: 'PLANET', hint: '🪐' },
+          { word: 'GARDEN', hint: '🌷' },
+          { word: 'ROCKET', hint: '🚀' },
+          { word: 'CASTLE', hint: '🏰' },
+          { word: 'BRIDGE', hint: '🌉' }
+        ]
+      };
+    case 'connections':
+      return {
+        title: 'Classic Classroom Connections',
+        groups: [
+          { title: 'Baby Animals', level: 0, words: ['CALF', 'FOAL', 'JOEY', 'CUB'] },
+          { title: 'Body Parts', level: 1, words: ['ELBOW', 'KNEE', 'ANKLE', 'WRIST'] },
+          { title: 'Words Ending in "-fish"', level: 2, words: ['STARFISH', 'GOLDFISH', 'JELLYFISH', 'CLOWNFISH'] },
+          { title: 'Things That Have Keys', level: 3, words: ['PIANO', 'MAP', 'LOCK', 'TYPEWRITER'] }
+        ]
+      };
   }
 }
 
@@ -202,6 +270,10 @@ export function countGameContentItems(gameId: GameId, levels: GameLevelDefinitio
       }
       case 'lumina-words':
         return total + ((cfg as LuminaWordsConfig).words?.length || 0);
+      case 'snake-spell':
+        return total + ((cfg as SnakeSpellConfig).words?.length || 0);
+      case 'connections':
+        return total + ((cfg as ConnectionsConfig).groups?.length || 0);
       default:
         return total;
     }

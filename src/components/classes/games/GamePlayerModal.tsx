@@ -7,12 +7,16 @@ import {
   Loader2,
   Lock,
   Map,
+  Music,
   RefreshCw,
   Sparkles,
   Trophy,
+  Volume2,
+  VolumeX,
   X
 } from 'lucide-react';
 import { gameLibraryService, getGameCatalogItem } from '@/services/gameLibraryService';
+import { gameMusicService, type GameMusicSnapshot } from '@/services/gameMusicService';
 import type {
   CompletedLevelRecord,
   GameCompletionPayload,
@@ -80,8 +84,13 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
   const [submissionResult, setSubmissionResult] = useState<GameSubmissionResponse | null>(null);
   const [completedDetails, setCompletedDetails] = useState<Record<string, unknown> | null>(null);
   const [previewResult, setPreviewResult] = useState<{ score: number; max: number; time: number } | null>(null);
+  const [musicSnap, setMusicSnap] = useState<GameMusicSnapshot>(() => gameMusicService.getSnapshot());
 
   const catalogItem = getGameCatalogItem(gameId);
+
+  useEffect(() => {
+    return gameMusicService.subscribe(setMusicSnap);
+  }, []);
 
   const submitScorePayload = useCallback(
     async (payload: GameCompletionPayload) => {
@@ -239,6 +248,11 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
         return;
       }
 
+      if (data.type === 'EDTECHRA_SFX_DUCK') {
+        gameMusicService.duck(Number(data.durationMs) || 950);
+        return;
+      }
+
       if (data.type === 'EDTECHRA_GAME_EXIT') {
         onClose();
         return;
@@ -274,6 +288,30 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
   }, [isOpen, isPreview, title, maxPoints, config, gameId, assignmentId, levelId, submitScorePayload, onClose]);
+
+  const shouldPlayMusic =
+    isOpen &&
+    !( !isPreview && isUnavailable ) &&
+    !( !isPreview && alreadyCompletedScore !== null && !submissionResult?.success );
+
+  useEffect(() => {
+    if (shouldPlayMusic) {
+      gameMusicService.start();
+    } else {
+      gameMusicService.stop(350);
+    }
+    return () => {
+      if (!isOpen) {
+        gameMusicService.stop(350);
+      }
+    };
+  }, [shouldPlayMusic, isOpen]);
+
+  useEffect(() => {
+    return () => {
+      gameMusicService.stop(250);
+    };
+  }, []);
 
   if (!isOpen) return null;
 
@@ -379,7 +417,52 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {musicSnap.status === 'blocked' && musicSnap.enabled && (
+            <button
+              type="button"
+              onClick={() => gameMusicService.unlockFromUserGesture()}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/40 text-[11px] font-bold animate-pulse cursor-pointer"
+              title="Browser blocked autoplay — tap to start 8D background music"
+            >
+              <Music className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden xs:inline sm:inline">Enable 8D Music</span>
+              <span className="sm:hidden">Play Music</span>
+            </button>
+          )}
+
+          {/* Shared 8D Background Music Control */}
+          <div
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/10 border border-white/15"
+            title="8D Background Music Control (independent of game SFX)"
+          >
+            <button
+              type="button"
+              onClick={() => gameMusicService.toggleEnabled()}
+              aria-label={musicSnap.enabled ? 'Turn off background music' : 'Turn on background music'}
+              className="inline-flex items-center gap-1 text-[11px] font-bold text-white hover:text-amber-300 transition cursor-pointer"
+            >
+              {musicSnap.enabled ? (
+                <Volume2 className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+              ) : (
+                <VolumeX className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              )}
+              <span className="hidden md:inline">
+                {musicSnap.enabled ? '8D Music On' : 'Music Off'}
+              </span>
+            </button>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={Math.round(musicSnap.volume * 100)}
+              onChange={(e) => gameMusicService.setVolume(Number(e.target.value) / 100)}
+              aria-label="8D Background music volume"
+              disabled={!musicSnap.enabled}
+              className="hidden sm:block w-14 md:w-16 h-1.5 accent-emerald-400 cursor-pointer disabled:opacity-40"
+            />
+          </div>
+
           {isLockedCompleted && (
             <span className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">
               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -630,6 +713,24 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
             ref={iframeRef}
             src={catalogItem.htmlPath}
             title={`${catalogItem.name} - ${title}`}
+            onLoad={() => {
+              try {
+                const win = iframeRef.current?.contentWindow;
+                if (!win) return;
+                const unlockFromIframe = () => {
+                  void gameMusicService.unlockFromUserGesture();
+                };
+                (['pointerdown', 'pointerup', 'click', 'touchstart', 'keydown'] as const).forEach((evt) => {
+                  win.addEventListener(evt, unlockFromIframe, {
+                    capture: true,
+                    passive: true,
+                    once: true
+                  });
+                });
+              } catch {
+                // ignore cross-origin restrictions if any
+              }
+            }}
             className="w-full h-full border-0 block"
             allow="autoplay; fullscreen"
             allowFullScreen

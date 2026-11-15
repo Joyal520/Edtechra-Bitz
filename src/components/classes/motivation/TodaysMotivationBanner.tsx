@@ -44,16 +44,16 @@ export const TodaysMotivationBanner: React.FC = () => {
 
   return (
     <>
-      <div className="relative w-full mt-5 sm:mt-6 relative z-10">
+      <div className="relative w-full mt-3 md:mt-6 z-10">
         <div
-          className="relative rounded-2xl sm:rounded-[26px] border border-white/95 shadow-[0_10px_30px_-8px_rgba(15,23,42,0.12),0_4px_14px_-4px_rgba(255,217,122,0.28)] px-3.5 py-3.5 sm:px-5 sm:py-4 lg:px-7 lg:py-4"
+          className="relative rounded-[22px] sm:rounded-[26px] border border-white/95 shadow-[0_10px_30px_-8px_rgba(15,23,42,0.12),0_4px_14px_-4px_rgba(255,217,122,0.28)] px-3 py-2.5 sm:px-5 sm:py-4 lg:px-7 lg:py-4"
           style={{
             background:
               'linear-gradient(105deg, #fff6df 0%, #fffbf2 36%, #f4f1ff 68%, #f8f0ff 100%)',
           }}
         >
           {/* Clipped background scenery (soft pastel meadow & clouds) */}
-          <div className="absolute inset-0 rounded-2xl sm:rounded-[26px] overflow-hidden pointer-events-none select-none">
+          <div className="absolute inset-0 rounded-[22px] sm:rounded-[26px] overflow-hidden pointer-events-none select-none">
             <svg
               viewBox="0 0 1200 180"
               preserveAspectRatio="none"
@@ -190,24 +190,24 @@ export const TodaysMotivationBanner: React.FC = () => {
           {/* =============================================================== */}
           {/* MOBILE COMPOSITION (< 768px) — Designed for 320px–767px         */}
           {/* =============================================================== */}
-          <div className="flex flex-col gap-3 md:hidden relative z-10">
-            <div className="flex items-center justify-between gap-2.5">
+          <div className="flex flex-col gap-2.5 md:hidden relative z-10">
+            <div className="flex items-center justify-between gap-2">
               {/* Mascot + Heading */}
-              <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                <div className="w-16 h-16 xs:w-[70px] xs:h-[70px] shrink-0 -ml-1 tm-banner-mascot">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <div className="w-14 h-14 min-[360px]:w-16 min-[360px]:h-16 shrink-0 -ml-0.5 tm-banner-mascot">
                   <MascotCapeBean />
                 </div>
 
                 <div className="min-w-0 flex-1">
                   <div className="inline-block max-w-full">
-                    <h2 className="text-[17px] xs:text-[19px] font-black tracking-tight text-slate-900 leading-tight">
+                    <h2 className="text-[16px] min-[360px]:text-[18px] font-black tracking-tight text-slate-900 leading-tight">
                       Today&apos;s Motivation
                     </h2>
                     <svg
                       viewBox="0 0 200 10"
                       fill="none"
                       aria-hidden="true"
-                      className="w-full max-w-[165px] h-2 mt-0.5"
+                      className="w-full max-w-[150px] min-[360px]:max-w-[170px] h-1.5 mt-0.5"
                       preserveAspectRatio="none"
                     >
                       <path
@@ -218,34 +218,36 @@ export const TodaysMotivationBanner: React.FC = () => {
                       />
                     </svg>
                   </div>
-                  <p className="text-[11px] xs:text-xs font-medium text-slate-600 mt-1 leading-snug">
+                  <p className="text-[11px] min-[360px]:text-xs font-medium text-slate-600 mt-0.5 leading-snug">
                     A little inspiration for a better day.
                   </p>
                 </div>
               </div>
 
-              {/* Compact Fanned Card Stack (hidden only on ultra-narrow < 360px to prevent crowding) */}
-              <div
-                className="hidden min-[360px]:flex items-end shrink-0 pr-1 tm-banner-stack"
-                aria-hidden="true"
+              {/* Compact 3-Card Fanned Stack (always visible on mobile, scaled smoothly for 320px+) */}
+              <button
+                type="button"
+                onClick={handleOpen}
+                aria-label="Open Today's Motivation cards"
+                className="flex items-end shrink-0 pr-0.5 tm-banner-stack cursor-pointer"
               >
-                <div className="relative z-20 w-9 h-12 rounded-[9px] border-2 border-white bg-[#ffd97a] shadow-sm -rotate-6 overflow-hidden p-0.5">
+                <div className="relative z-20 w-7 h-9 min-[360px]:w-9 min-[360px]:h-12 rounded-[8px] border-2 border-white bg-[#ffd97a] shadow-sm -rotate-6 overflow-hidden p-0.5">
                   <CardSwordBean />
                 </div>
-                <div className="relative z-10 w-8 h-11 rounded-[9px] border-2 border-white bg-[#a3e4c1] shadow-sm rotate-3 -ml-4 translate-y-0.5 overflow-hidden p-0.5">
+                <div className="relative z-10 w-6 h-8 min-[360px]:w-8 min-[360px]:h-11 rounded-[8px] border-2 border-white bg-[#a3e4c1] shadow-sm rotate-3 -ml-3.5 min-[360px]:-ml-4 translate-y-0.5 overflow-hidden p-0.5">
                   <CardLightbulbBean />
                 </div>
-                <div className="relative z-0 w-8 h-11 rounded-[9px] border-2 border-white bg-[#92d0f5] shadow-sm rotate-12 -ml-4 translate-y-1 overflow-hidden p-0.5">
-                  <CardMountainBean />
+                <div className="relative z-0 w-6 h-8 min-[360px]:w-8 min-[360px]:h-11 rounded-[8px] border-2 border-white bg-[#f7c3da] shadow-sm rotate-12 -ml-3.5 min-[360px]:-ml-4 translate-y-1 overflow-hidden p-0.5">
+                  <CardHeartBean />
                 </div>
-              </div>
+              </button>
             </div>
 
             {/* Prominent Full-Width Reveal CTA */}
             <button
               type="button"
               onClick={handleOpen}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full font-bold text-sm text-white bg-gradient-to-r from-[#8b5cf6] via-[#7c3aed] to-[#6d28d9] hover:from-[#7c3aed] hover:to-[#5b21b6] shadow-[0_6px_18px_-4px_rgba(124,58,237,0.45)] active:scale-[0.98] transition-all duration-200 cursor-pointer"
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 sm:py-2.5 rounded-full font-bold text-[13px] min-[360px]:text-sm text-white bg-gradient-to-r from-[#8b5cf6] via-[#7c3aed] to-[#6d28d9] hover:from-[#7c3aed] hover:to-[#5b21b6] shadow-[0_6px_18px_-4px_rgba(124,58,237,0.45)] active:scale-[0.98] transition-all duration-200 cursor-pointer"
             >
               <span>Reveal Today&apos;s Card</span>
               <ArrowRight className="w-4 h-4 stroke-[2.5]" />

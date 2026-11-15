@@ -918,45 +918,61 @@ export const ClassroomDetailPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F8F8] font-sans antialiased text-slate-800 py-3 sm:py-6 relative overflow-x-hidden">
+    <div className="min-h-screen bg-[#F4F8F8] font-sans antialiased text-slate-800 py-2 sm:py-6 relative overflow-x-hidden">
       
       {/* 3D Botanical Cut-Paper Decorative Border Frame */}
       <BotanicalPaperCutFrame />
 
       {/* MAIN DIGITAL CLASSROOM WORKSPACE CONTAINER */}
-      <main className="max-w-[1360px] w-full mx-auto px-3 sm:px-6 lg:px-8 space-y-5 sm:space-y-7 relative z-10 pt-1 sm:pt-3">
+      <main className="max-w-[1360px] w-full mx-auto px-3 sm:px-6 lg:px-8 space-y-3 sm:space-y-7 relative z-10 pt-0.5 sm:pt-3">
         
         {/* ========================================================================= */}
         {/* SECTION 1 — PREMIUM COMPACT CLASSROOM HEADER (EdTechra Workspace UI)       */}
         {/* ========================================================================= */}
         <section
           data-testid="classroom-header-section"
-          className="relative rounded-2xl sm:rounded-3xl lg:rounded-[32px] p-4 sm:p-7 lg:p-8 border border-slate-200/80 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06),0_1px_3px_rgba(15,23,42,0.04)] z-20 transition-all overflow-hidden text-slate-900 group/header"
+          className="relative md:rounded-3xl lg:rounded-[32px] md:p-7 lg:p-8 md:border md:border-slate-200/80 md:shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06),0_1px_3px_rgba(15,23,42,0.04)] z-20 transition-all md:overflow-hidden text-slate-900 group/header"
         >
-          {/* Full-bleed Classroom Header Cover Image with object-fit: cover, responsive positioning & readability overlay */}
-          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
+          {/* Desktop Full-bleed Classroom Header Cover Image (>= 768px — unchanged) */}
+          <div className="hidden md:block absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
             <img
               src={getClassroomHeaderImage(classroom.classroom_header_image)}
               alt="Classroom Header Background"
-              className="w-full h-full object-cover object-center sm:object-[center_35%] transition-transform duration-700 ease-out"
+              className="w-full h-full object-cover object-[center_35%] transition-transform duration-700 ease-out"
               onError={(e) => {
                 e.currentTarget.src = DEFAULT_CLASSROOM_HEADER_IMAGE;
               }}
             />
             {/* Multi-stop frosted gradient overlay for crystal-clear text readability */}
-            <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/88 to-white/60 sm:from-white/95 sm:via-white/82 sm:to-white/20 backdrop-blur-[1px]" />
+            <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/82 to-white/20 backdrop-blur-[1px]" />
             <div className="absolute inset-0 bg-gradient-to-b from-white/40 via-transparent to-white/40" />
           </div>
 
-          {/* Top Bar for Mobile (< 640px): Back on Left, Options on Right */}
-          <div className="flex sm:hidden items-center justify-between gap-2 mb-3.5 relative z-20">
-            <Link
-              to="/classes"
-              className="group inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white/90 hover:bg-white px-3 py-1.5 rounded-full transition-all duration-200 border border-slate-200/80 shadow-2xs active:scale-95 cursor-pointer backdrop-blur-xs"
-            >
-              <ArrowLeft className="w-3.5 h-3.5 text-slate-600 group-hover:-translate-x-0.5 transition-transform" />
-              <span>Classes</span>
-            </Link>
+          {/* Mobile & Small-Tablet Contained Hero Card (becomes transparent wrapper on md+) */}
+          <div className="relative rounded-[22px] p-3.5 sm:p-5 border border-slate-200/80 shadow-[0_4px_20px_-4px_rgba(15,23,42,0.06)] overflow-hidden bg-white md:rounded-none md:p-0 md:border-0 md:shadow-none md:overflow-visible md:bg-transparent">
+            {/* Subtle Contained Mobile Background Artwork (< 768px) */}
+            <div className="md:hidden absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
+              <img
+                src={getClassroomHeaderImage(classroom.classroom_header_image)}
+                alt="Classroom Header Background"
+                className="w-full h-full object-cover object-[78%_center]"
+                onError={(e) => {
+                  e.currentTarget.src = DEFAULT_CLASSROOM_HEADER_IMAGE;
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-white/96 via-white/82 to-white/20" />
+              <div className="absolute inset-0 bg-gradient-to-b from-white/30 via-transparent to-white/90" />
+            </div>
+
+            {/* Top Bar for Mobile (< 640px): Back on Left, Options on Right */}
+            <div className="flex sm:hidden items-center justify-between gap-2 mb-2 relative z-20">
+              <Link
+                to="/classes"
+                className="group inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white/95 hover:bg-white px-3 py-1 rounded-full transition-all duration-200 border border-slate-200/80 shadow-2xs active:scale-95 cursor-pointer backdrop-blur-xs"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 text-slate-600 group-hover:-translate-x-0.5 transition-transform" />
+                <span>Classes</span>
+              </Link>
 
             {/* Mobile Options Button [ ••• ] — TEACHER ONLY */}
             {!loading && isTeacher && (
@@ -1117,17 +1133,17 @@ export const ClassroomDetailPage: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-8 items-center relative z-10">
             
             {/* LEFT: Headline, Details, Tagline & Action */}
-            <div className="lg:col-span-7 space-y-3.5 sm:space-y-4">
+            <div className="lg:col-span-7 space-y-2 sm:space-y-4">
               
               {/* Classroom Title — Two-Tone Styling with Teacher Edit Control */}
-              <div className="space-y-2.5">
+              <div className="space-y-1.5 sm:space-y-2.5">
                 {(() => {
                   const titleStr = (classroom.title || 'Classroom').trim();
                   const words = titleStr.split(' ');
                   const activeTheme = getClassroomTheme(classroom.theme);
 
                   return (
-                    <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                       {words.length > 1 ? (
                         (() => {
                           const lastWord = words.pop();
@@ -1153,7 +1169,7 @@ export const ClassroomDetailPage: React.FC = () => {
                             setEditModalInitialTab('details');
                             setEditClassroomModalOpen(true);
                           }}
-                          className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-slate-900 bg-white/90 hover:bg-white border border-slate-200/80 transition-all inline-flex items-center justify-center cursor-pointer shadow-2xs hover:shadow-xs active:scale-95"
+                          className="p-1.5 sm:p-2 rounded-full sm:rounded-xl text-slate-400 hover:text-slate-900 bg-white/90 hover:bg-white border border-slate-200/80 transition-all inline-flex items-center justify-center cursor-pointer shadow-2xs hover:shadow-xs active:scale-95"
                           title="Edit classroom details"
                           aria-label="Edit classroom details"
                         >
@@ -1165,26 +1181,26 @@ export const ClassroomDetailPage: React.FC = () => {
                 })()}
 
                 {/* Floating Metadata Pills */}
-                <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap pt-0.5">
-                  <span className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full bg-slate-50 text-xs sm:text-sm font-semibold text-slate-700 border border-slate-200/80 shadow-2xs">
+                <div className="flex items-center gap-1.5 sm:gap-2.5 flex-wrap pt-0.5">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full bg-white/95 sm:bg-slate-50 text-xs sm:text-sm font-semibold text-slate-700 border border-slate-200/80 shadow-2xs">
                     <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#0284c7] stroke-[2]" />
                     <span>{classroom.subject || 'General'}</span>
                   </span>
 
                   {classroom.grade && (
-                    <span className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full bg-slate-50 text-xs sm:text-sm font-semibold text-slate-700 border border-slate-200/80 shadow-2xs">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full bg-white/95 sm:bg-slate-50 text-xs sm:text-sm font-semibold text-slate-700 border border-slate-200/80 shadow-2xs">
                       <GraduationCap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#0284c7] stroke-[2]" />
                       <span>{classroom.grade.toLowerCase().startsWith('grade') ? classroom.grade : `Grade ${classroom.grade}`}</span>
                     </span>
                   )}
 
-                  <span className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full bg-slate-50 text-xs sm:text-sm font-semibold text-slate-700 border border-slate-200/80 shadow-2xs">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full bg-white/95 sm:bg-slate-50 text-xs sm:text-sm font-semibold text-slate-700 border border-slate-200/80 shadow-2xs">
                     <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#0284c7] stroke-[2]" />
                     <span>{studentCount} {studentCount === 1 ? 'Student' : 'Students'}</span>
                   </span>
 
                   {isTeacher && (
-                    <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-purple-50 text-xs font-bold text-purple-800 border border-purple-200 shadow-2xs">
+                    <span className="hidden sm:inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-purple-50 text-xs font-bold text-purple-800 border border-purple-200 shadow-2xs">
                       <span>Teacher Workspace</span>
                     </span>
                   )}
@@ -1192,18 +1208,18 @@ export const ClassroomDetailPage: React.FC = () => {
               </div>
 
               {/* Tagline / Motto — Clean Italic without Quotation Marks */}
-              <p className="text-sm sm:text-base font-semibold italic text-slate-600 tracking-wide pt-0.5">
+              <p className="text-xs sm:text-base font-semibold italic text-slate-700 sm:text-slate-600 tracking-wide pt-0.5">
                 Learn • Practise • Improve • Grow Together
               </p>
 
               {/* Action Buttons: Primary Enter Classroom CTA & Options Button */}
-              <div className="pt-1.5 flex items-center gap-3 flex-wrap">
+              <div className="pt-1 sm:pt-1.5 flex items-center gap-3 flex-wrap">
                 
                 {/* Primary Action Button: Enter Classroom */}
                 <button
                   type="button"
                   onClick={handleEnterClassroom}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 sm:px-7 py-3 rounded-full font-bold text-sm sm:text-base text-white bg-gradient-to-r from-[#0091ff] via-[#0084f0] to-[#0070e0] hover:from-[#0084f0] hover:to-[#0060c8] shadow-[0_4px_16px_rgba(0,145,255,0.3)] active:scale-95 transition-all duration-200 cursor-pointer group shrink-0"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 sm:px-7 py-2.5 sm:py-3 rounded-full font-bold text-sm sm:text-base text-white bg-gradient-to-r from-[#0091ff] via-[#0084f0] to-[#0070e0] hover:from-[#0084f0] hover:to-[#0060c8] shadow-[0_4px_16px_rgba(0,145,255,0.3)] active:scale-95 transition-all duration-200 cursor-pointer group shrink-0"
                 >
                   <span>Enter Classroom</span>
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform stroke-[2.5]" />
@@ -1329,7 +1345,7 @@ export const ClassroomDetailPage: React.FC = () => {
             </div>
 
             {/* RIGHT on Desktop: Open scenic space framing the full-bleed header artwork with optional teacher edit pill */}
-            <div className="lg:col-span-5 relative flex flex-col items-center lg:items-end justify-center lg:justify-between h-full min-h-[140px] pt-4 lg:pt-0">
+            <div className="hidden lg:flex lg:col-span-5 relative flex-col items-end justify-between h-full min-h-[140px]">
               {isTeacher && (
                 <div className="hidden lg:flex items-center justify-end w-full">
                   <button
@@ -1349,6 +1365,7 @@ export const ClassroomDetailPage: React.FC = () => {
             </div>
 
           </div>
+          </div>
 
           {/* Full-width Today's Motivation Banner */}
           <TodaysMotivationBanner />
@@ -1361,12 +1378,12 @@ export const ClassroomDetailPage: React.FC = () => {
         <section className="space-y-4">
           
           {/* 4 Clean Summary Cards in 2x2 grid on mobile */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 lg:gap-5">
             
             {/* Card 1: Students */}
             <div
               onClick={() => handleSelectTab('roster')}
-              className="bg-white hover:bg-sky-50/50 rounded-2xl sm:rounded-[24px] p-3.5 sm:p-4 lg:p-5 border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_6px_20px_rgba(2,111,195,0.08)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
+              className="bg-white hover:bg-sky-50/50 rounded-2xl sm:rounded-[24px] p-3 sm:p-4 lg:p-5 border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_6px_20px_rgba(2,111,195,0.08)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
             >
               <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
                 <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#e0f2fe] text-[#0284c7] flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
@@ -1389,7 +1406,7 @@ export const ClassroomDetailPage: React.FC = () => {
             {/* Card 2: Assignments */}
             <div
               onClick={() => handleSelectTab('assignments')}
-              className="bg-white hover:bg-purple-50/50 rounded-2xl sm:rounded-[24px] p-3.5 sm:p-4 lg:p-5 border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_6px_20px_rgba(124,58,237,0.08)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
+              className="bg-white hover:bg-purple-50/50 rounded-2xl sm:rounded-[24px] p-3 sm:p-4 lg:p-5 border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_6px_20px_rgba(124,58,237,0.08)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
             >
               <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
                 <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#f3e8ff] text-[#9333ea] flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
@@ -1419,7 +1436,7 @@ export const ClassroomDetailPage: React.FC = () => {
                   if (el) el.scrollIntoView({ behavior: 'smooth' });
                 }
               }}
-              className="bg-white hover:bg-emerald-50/50 rounded-2xl sm:rounded-[24px] p-3.5 sm:p-4 lg:p-5 border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_6px_20px_rgba(5,150,105,0.08)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
+              className="bg-white hover:bg-emerald-50/50 rounded-2xl sm:rounded-[24px] p-3 sm:p-4 lg:p-5 border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_6px_20px_rgba(5,150,105,0.08)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
             >
               <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
                 <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#dcfce7] text-[#16a34a] flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
@@ -1449,7 +1466,7 @@ export const ClassroomDetailPage: React.FC = () => {
                   setStudentReportModalOpen(true);
                 }
               }}
-              className="bg-white hover:bg-amber-50/50 rounded-2xl sm:rounded-[24px] p-3.5 sm:p-4 lg:p-5 border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_6px_20px_rgba(217,119,6,0.08)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
+              className="bg-white hover:bg-amber-50/50 rounded-2xl sm:rounded-[24px] p-3 sm:p-4 lg:p-5 border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_6px_20px_rgba(217,119,6,0.08)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
             >
               <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
                 <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#fef3c7] text-[#d97706] flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
@@ -1979,6 +1996,7 @@ export const ClassroomDetailPage: React.FC = () => {
                 entries={leaderboard}
                 currentUserId={user?.id}
                 classroomId={classroom?.id}
+                classroomName={classroom?.title || 'Classroom'}
                 isTeacher={isTeacher}
                 resetFrequency={classroom?.leaderboard_reset_frequency || 'never'}
                 nextResetAt={classroom?.leaderboard_next_reset_at}
@@ -2486,6 +2504,7 @@ export const ClassroomDetailPage: React.FC = () => {
                 entries={leaderboard}
                 currentUserId={user?.id}
                 classroomId={classroom?.id}
+                classroomName={classroom?.title || 'Classroom'}
                 isTeacher={isTeacher}
                 resetFrequency={classroom?.leaderboard_reset_frequency || 'never'}
                 nextResetAt={classroom?.leaderboard_next_reset_at}

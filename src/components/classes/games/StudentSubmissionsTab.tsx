@@ -560,6 +560,21 @@ export const StudentSubmissionsTab: React.FC<StudentSubmissionsTabProps> = ({
                                 Hints Used: {d.hintsUsed}
                               </span>
                             )}
+                            {typeof d.mistakesUsed === 'number' && (
+                              <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold">
+                                Mistakes: {d.mistakesUsed} / 4
+                              </span>
+                            )}
+                            {typeof d.livesRemaining === 'number' && (
+                              <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-semibold">
+                                Lives Left: {d.livesRemaining}
+                              </span>
+                            )}
+                            {typeof d.rawScore === 'number' && (
+                              <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold">
+                                Game Score: {d.rawScore}
+                              </span>
+                            )}
                           </div>
 
                           {/* Classroom Jigsaw Question-Level Breakdown */}

@@ -85,6 +85,33 @@ function getTemplateMeta(gameId: GameId) {
         secondaryLabel: 'Clue (Optional)',
         minPrimaryWords: 1
       };
+    case 'snake-spell':
+      return {
+        title: 'Bulk Upload Snake Spell Words',
+        formatHint: 'One word per line (3–12 letters). Optional emoji or clue after "|" or comma.',
+        placeholder:
+          'PLANET | 🪐\nROCKET | 🚀\nCASTLE | Ancient fortress\nBRIDGE | Spans over water',
+        sampleFilename: 'snake-spell-template.csv',
+        sampleContent:
+          'PLANET, 🪐\nROCKET, 🚀\nCASTLE, 🏰\nBRIDGE, 🌉\nGARDEN, 🌷\n',
+        primaryLabel: 'Word (3–12 letters)',
+        secondaryLabel: 'Emoji / Clue (Optional)',
+        minPrimaryWords: 1
+      };
+    case 'connections':
+      return {
+        title: 'Bulk Upload Connections Categories',
+        formatHint:
+          'Four lines — each line is Category | word1, word2, word3, word4 (4 categories × 4 unique words).',
+        placeholder:
+          'Baby Animals | CALF, FOAL, JOEY, CUB\nBody Parts | ELBOW, KNEE, ANKLE, WRIST\nWords Ending in "-fish" | STARFISH, GOLDFISH, JELLYFISH, CLOWNFISH\nThings That Have Keys | PIANO, MAP, LOCK, TYPEWRITER',
+        sampleFilename: 'connections-template.csv',
+        sampleContent:
+          'Baby Animals | CALF, FOAL, JOEY, CUB\nBody Parts | ELBOW, KNEE, ANKLE, WRIST\nWords Ending in "-fish" | STARFISH, GOLDFISH, JELLYFISH, CLOWNFISH\nThings That Have Keys | PIANO, MAP, LOCK, TYPEWRITER\n',
+        primaryLabel: 'Category Title',
+        secondaryLabel: 'Four Words (comma-separated)',
+        minPrimaryWords: 1
+      };
   }
 }
 
@@ -186,6 +213,25 @@ export const BulkContentUploader: React.FC<BulkContentUploaderProps> = ({
           return;
         }
         valid.push({ primary: cleanWord, secondary: rawSecondary });
+      } else if (gameId === 'snake-spell') {
+        const cleanWord = rawPrimary.replace(/[^\p{L}]/gu, '').toLocaleUpperCase();
+        if (cleanWord.length < 3 || cleanWord.length > 12) {
+          errors.push(`Line ${lineNum}: "${rawPrimary}" must have 3 to 12 letters.`);
+          return;
+        }
+        valid.push({ primary: cleanWord, secondary: rawSecondary });
+      } else if (gameId === 'connections') {
+        const words = rawSecondary
+          .split(',')
+          .map((w) => w.trim().toUpperCase())
+          .filter(Boolean);
+        if (words.length !== 4) {
+          errors.push(
+            `Line ${lineNum}: "${rawPrimary}" must provide exactly 4 comma-separated words (found ${words.length}).`
+          );
+          return;
+        }
+        valid.push({ primary: rawPrimary, secondary: words.join(', ') });
       }
     });
 

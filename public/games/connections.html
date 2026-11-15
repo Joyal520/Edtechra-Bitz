@@ -1,0 +1,2437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Connections — Word Grouping &amp; Logic</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="preload" as="image" href="assets/garden-bg-mobile.webp" media="(max-width: 767px)" />
+  <link rel="preload" as="image" href="assets/garden-bg.webp" media="(min-width: 768px)" />
+  <style>
+    :root {
+      --font-display: 'Baloo 2', 'Nunito', system-ui, sans-serif;
+      --font-body: 'Nunito', system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: var(--font-body);
+      margin: 0;
+      min-height: 100vh;
+      overflow-x: hidden;
+      background: linear-gradient(180deg, #3ba6f7 0%, #7ad0ff 42%, #a7e4a0 72%, #59b337 100%);
+      color: #2b1844;
+      user-select: none;
+    }
+
+    /* ==================== SCENIC 3D GARDEN BACKGROUND ==================== */
+    .scene-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
+      contain: strict;
+      background-color: #4db8ff;
+    }
+
+    .scene-bg-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center center;
+      display: block;
+    }
+
+    .scene-bg-calm {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 68% 64% at 50% 52%, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 70%);
+    }
+
+    .floating-leaf {
+      position: absolute;
+      width: 16px;
+      height: 11px;
+      border-radius: 100% 0 100% 0;
+      background: linear-gradient(135deg, #a3e635, #4d7c0f);
+      opacity: 0;
+      will-change: transform, opacity;
+      animation: leafFloat 18s ease-in-out infinite;
+    }
+    @keyframes leafFloat {
+      0% { transform: translate3d(-30px, -10px, 0) rotate(0deg); opacity: 0; }
+      18% { opacity: 0.72; }
+      55% { transform: translate3d(34vw, 32vh, 0) rotate(130deg); opacity: 0.65; }
+      88% { opacity: 0.45; }
+      100% { transform: translate3d(72vw, 68vh, 0) rotate(260deg); opacity: 0; }
+    }
+
+    /* ==================== 3D CARTOON UI PRIMITIVES ==================== */
+    .glossy-circle-btn {
+      position: relative;
+      width: 48px;
+      height: 48px;
+      border-radius: 9999px;
+      background: linear-gradient(180deg, #8b5cf6 0%, #5b21b6 60%, #431494 100%);
+      border: 3px solid #fde68a;
+      box-shadow:
+        0 4px 0 #311068,
+        0 7px 14px rgba(24, 12, 56, 0.35),
+        inset 0 3px 3px rgba(255, 255, 255, 0.5);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      cursor: pointer;
+      transition: transform 0.14s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.14s ease, filter 0.14s ease;
+    }
+    .glossy-circle-btn::before {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 8px;
+      right: 8px;
+      height: 12px;
+      border-radius: 9999px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.48), rgba(255,255,255,0));
+      pointer-events: none;
+    }
+    .glossy-circle-btn:hover {
+      transform: translateY(-2px) scale(1.04);
+      filter: brightness(1.06);
+    }
+    .glossy-circle-btn:active {
+      transform: translateY(3px) scale(0.95);
+      box-shadow:
+        0 1px 0 #311068,
+        0 3px 6px rgba(24, 12, 56, 0.3),
+        inset 0 2px 3px rgba(255, 255, 255, 0.4);
+    }
+
+    @media (min-width: 640px) {
+      .glossy-circle-btn {
+        width: 54px;
+        height: 54px;
+      }
+    }
+
+    /* Logo Title */
+    .logo-title {
+      font-family: var(--font-display);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      background: linear-gradient(180deg, #fff59d 0%, #ffd54f 45%, #ff9800 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      -webkit-text-stroke: 2px #3b1768;
+      filter: drop-shadow(0 3px 0 #3b1768) drop-shadow(0 6px 10px rgba(32, 10, 62, 0.35));
+    }
+
+    .logo-subtitle-pill {
+      background: linear-gradient(180deg, #ffb74d 0%, #e67e22 65%, #c05611 100%);
+      border: 2.5px solid #ffe082;
+      box-shadow:
+        0 3px 0 #7f3206,
+        0 5px 10px rgba(60, 22, 0, 0.32),
+        inset 0 2px 2px rgba(255, 255, 255, 0.55);
+      color: #3f1804;
+      font-family: var(--font-display);
+      font-weight: 800;
+    }
+
+    /* Wooden Instruction Banner */
+    .wooden-banner {
+      position: relative;
+      background: linear-gradient(180deg, #a8642c 0%, #804318 55%, #65310e 100%);
+      border: 3px solid #f5b963;
+      border-radius: 9999px;
+      box-shadow:
+        0 4px 0 #4a2107,
+        0 7px 14px rgba(46, 20, 4, 0.35),
+        inset 0 2px 3px rgba(255, 228, 179, 0.45);
+      color: #fffaf0;
+      text-shadow: 0 2px 2px rgba(42, 16, 2, 0.75);
+      font-family: var(--font-display);
+    }
+
+    /* Central Cream Game Board */
+    .game-board-frame {
+      position: relative;
+      background: linear-gradient(180deg, #fff8e7 0%, #ffe6b8 100%);
+      border: 5px solid #f59e0b;
+      border-radius: 28px;
+      box-shadow:
+        0 8px 0 #b45309,
+        0 18px 34px rgba(38, 22, 4, 0.35),
+        inset 0 3px 6px rgba(255, 255, 255, 0.9),
+        inset 0 -4px 8px rgba(217, 119, 6, 0.25);
+    }
+
+    /* Word Tiles */
+    .word-tile {
+      position: relative;
+      user-select: none;
+      word-break: break-word;
+      hyphens: auto;
+      border-radius: 16px;
+      background: linear-gradient(180deg, #fffef9 0%, #ffefd2 58%, #fbd9a5 100%);
+      border: 2.5px solid #f2a950;
+      color: #2e194d;
+      font-family: var(--font-body);
+      font-weight: 900;
+      box-shadow:
+        0 4px 0 #d9822b,
+        0 6px 10px rgba(96, 48, 8, 0.18),
+        inset 0 2px 2px rgba(255, 255, 255, 0.95);
+      transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+                  box-shadow 0.18s ease,
+                  background 0.18s ease,
+                  border-color 0.18s ease,
+                  color 0.18s ease;
+      will-change: transform;
+    }
+
+    .word-tile::before {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 7px;
+      right: 7px;
+      height: 36%;
+      border-radius: 11px 11px 20px 20px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0));
+      pointer-events: none;
+    }
+
+    .word-tile:hover:not(:disabled):not(.tile-selected) {
+      transform: translateY(-2px);
+      filter: brightness(1.02);
+      box-shadow:
+        0 6px 0 #d9822b,
+        0 9px 14px rgba(96, 48, 8, 0.22),
+        inset 0 2px 2px rgba(255, 255, 255, 0.95);
+    }
+
+    .word-tile:active:not(:disabled) {
+      transform: translateY(2px) scale(0.97);
+    }
+
+    .word-tile.tile-selected {
+      background: linear-gradient(180deg, #fef08a 0%, #fbbf24 62%, #f59e0b 100%);
+      border-color: #b45309;
+      color: #3b1706;
+      transform: translateY(-4px) scale(1.03);
+      box-shadow:
+        0 7px 0 #b45309,
+        0 12px 18px rgba(180, 83, 9, 0.35),
+        0 0 14px rgba(251, 191, 36, 0.65),
+        inset 0 2px 3px rgba(255, 255, 255, 0.85);
+      z-index: 2;
+    }
+
+    .word-tile.tile-hint {
+      border-color: #eab308;
+      box-shadow:
+        0 4px 0 #ca8a04,
+        0 0 18px 4px rgba(250, 204, 21, 0.85),
+        inset 0 2px 3px rgba(255, 255, 255, 0.95);
+      animation: hintPulse 1.4s ease-in-out infinite;
+    }
+    @keyframes hintPulse {
+      0%, 100% { transform: translateY(-1px) scale(1); }
+      50% { transform: translateY(-4px) scale(1.035); }
+    }
+
+    .word-tile.tile-wrong {
+      background: linear-gradient(180deg, #fee2e2 0%, #fca5a5 65%, #f87171 100%) !important;
+      border-color: #dc2626 !important;
+      color: #7f1d1d !important;
+      animation: gentleShake 0.42s ease-in-out;
+    }
+    @keyframes gentleShake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-6px); }
+      40% { transform: translateX(6px); }
+      60% { transform: translateX(-4px); }
+      80% { transform: translateX(4px); }
+    }
+
+    /* Side Panels (Left Info & Right Powerups) */
+    .side-panel-card {
+      background: linear-gradient(180deg, #7c3aed 0%, #5b21b6 48%, #4c1d95 100%);
+      border: 4px solid #fbbf24;
+      border-radius: 26px;
+      box-shadow:
+        0 6px 0 #92400e,
+        0 14px 26px rgba(24, 10, 56, 0.38),
+        inset 0 3px 4px rgba(255, 255, 255, 0.35);
+    }
+
+    .left-panel-inner-wood {
+      background: linear-gradient(180deg, #8b4d2b 0%, #6b361a 100%);
+      border: 2.5px solid #d97706;
+      border-radius: 18px;
+      box-shadow: inset 0 3px 6px rgba(34, 14, 4, 0.45);
+    }
+
+    .powerup-btn {
+      position: relative;
+      width: 68px;
+      height: 68px;
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(167, 139, 250, 0.32) 0%, rgba(76, 29, 149, 0.55) 100%);
+      border: 2px solid rgba(253, 224, 71, 0.45);
+      box-shadow:
+        0 4px 0 rgba(36, 12, 78, 0.7),
+        inset 0 2px 3px rgba(255, 255, 255, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.15s ease;
+    }
+    .powerup-btn:hover:not(:disabled) {
+      transform: translateY(-2px) scale(1.05);
+      filter: brightness(1.08);
+    }
+    .powerup-btn:active:not(:disabled) {
+      transform: translateY(2px) scale(0.95);
+    }
+    .powerup-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .qty-badge {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      min-width: 24px;
+      height: 24px;
+      padding: 0 5px;
+      border-radius: 9999px;
+      background: linear-gradient(180deg, #ff5252 0%, #d32f2f 100%);
+      border: 2px solid #ffffff;
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+    }
+
+    /* Bottom Pills */
+    .timer-pill {
+      background: linear-gradient(180deg, #7c3aed 0%, #5b21b6 65%, #431494 100%);
+      border: 3.5px solid #fbbf24;
+      border-radius: 9999px;
+      box-shadow:
+        0 4px 0 #92400e,
+        0 8px 16px rgba(24, 12, 56, 0.32),
+        inset 0 2px 3px rgba(255, 255, 255, 0.35);
+    }
+
+    .mistakes-pill {
+      background: linear-gradient(180deg, #fffdf5 0%, #fdebc8 100%);
+      border: 3.5px solid #f59e0b;
+      border-radius: 9999px;
+      box-shadow:
+        0 4px 0 #b45309,
+        0 8px 16px rgba(56, 30, 6, 0.25),
+        inset 0 2px 3px rgba(255, 255, 255, 0.9);
+    }
+
+    .mistake-orb {
+      width: 18px;
+      height: 18px;
+      border-radius: 9999px;
+      background: radial-gradient(circle at 35% 30%, #c084fc 0%, #7e22ce 55%, #4c1d95 100%);
+      border: 2px solid #581c87;
+      box-shadow: 0 2px 4px rgba(59, 7, 100, 0.35), inset 0 1px 2px rgba(255, 255, 255, 0.6);
+      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease, background 0.25s ease;
+    }
+    .mistake-orb.used {
+      background: #e9d5ff;
+      border-color: #c4b5fd;
+      box-shadow: inset 0 2px 3px rgba(88, 28, 135, 0.2);
+      transform: scale(0.84);
+      opacity: 0.7;
+    }
+
+    /* Glossy 3D Action Pills */
+    .action-pill-primary {
+      background: linear-gradient(180deg, #34d399 0%, #059669 65%, #047857 100%);
+      border: 2.5px solid #a7f3d0;
+      box-shadow: 0 4px 0 #065f46, 0 6px 12px rgba(4, 120, 87, 0.35), inset 0 2px 2px rgba(255,255,255,0.45);
+      color: #ffffff;
+      font-weight: 800;
+      transition: transform 0.14s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.15s ease, filter 0.15s ease;
+    }
+    .action-pill-primary:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.06); }
+    .action-pill-primary:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 #065f46; }
+    .action-pill-primary:disabled {
+      background: linear-gradient(180deg, #e5d5ba 0%, #cbb492 100%);
+      border-color: #f3e5cc;
+      box-shadow: 0 3px 0 #a38c6a;
+      color: #856d4d;
+      cursor: not-allowed;
+    }
+
+    .action-pill-secondary {
+      background: linear-gradient(180deg, #ffffff 0%, #fef3c7 100%);
+      border: 2.5px solid #f59e0b;
+      box-shadow: 0 4px 0 #b45309, 0 5px 10px rgba(120, 53, 15, 0.2);
+      color: #451a03;
+      font-weight: 800;
+      transition: transform 0.14s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.15s ease;
+    }
+    .action-pill-secondary:hover:not(:disabled) { transform: translateY(-2px); }
+    .action-pill-secondary:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 #b45309; }
+    .action-pill-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* Solved Group Banner */
+    .solved-group-card {
+      position: relative;
+      border-radius: 18px;
+      border-width: 3px;
+      box-shadow:
+        0 4px 0 rgba(0, 0, 0, 0.18),
+        0 6px 14px rgba(45, 25, 0, 0.18),
+        inset 0 2px 3px rgba(255, 255, 255, 0.65);
+      animation: groupMergeIn 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+    @keyframes groupMergeIn {
+      0% { transform: scale(0.86) translateY(10px); opacity: 0; }
+      65% { transform: scale(1.03) translateY(-2px); opacity: 1; }
+      100% { transform: scale(1) translateY(0); opacity: 1; }
+    }
+
+    /* Sparkle burst on solved group */
+    .sparkle-particle {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      pointer-events: none;
+      animation: sparklePop 0.7s ease-out forwards;
+    }
+    @keyframes sparklePop {
+      0% { transform: translate(0, 0) scale(0.2) rotate(0deg); opacity: 1; }
+      70% { opacity: 1; }
+      100% { transform: translate(var(--tx), var(--ty)) scale(1.1) rotate(90deg); opacity: 0; }
+    }
+
+    /* Trophy Static Drop Shadow (zero continuous filter repaints) */
+    .trophy-shine {
+      filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.35));
+    }
+
+    /* Star pop */
+    .star-earned {
+      animation: starPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes starPop {
+      0% { transform: scale(0.5) rotate(-18deg); }
+      60% { transform: scale(1.25) rotate(8deg); }
+      100% { transform: scale(1) rotate(0deg); }
+    }
+
+    /* Shuffle lift & settle */
+    .tile-shuffling {
+      animation: tileShuffleSettle 0.36s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes tileShuffleSettle {
+      0% { transform: scale(0.88) translateY(-10px); opacity: 0.65; }
+      60% { transform: scale(1.04) translateY(2px); opacity: 1; }
+      100% { transform: scale(1) translateY(0); opacity: 1; }
+    }
+
+    /* Modal pop */
+    @keyframes popIn {
+      0% { transform: scale(0.92); opacity: 0; }
+      70% { transform: scale(1.02); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .animate-pop-in {
+      animation: popIn 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* ==================== CONGRATULATION PAGE ANIMATIONS ==================== */
+    .congrats-backdrop {
+      background: radial-gradient(circle at 50% 40%, rgba(76, 29, 149, 0.72) 0%, rgba(15, 23, 42, 0.84) 100%);
+      animation: fadeOverlayIn 0.32s ease-out forwards;
+    }
+    @keyframes fadeOverlayIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .congrats-card {
+      position: relative;
+      background: linear-gradient(180deg, #fffdf7 0%, #fff3d6 100%);
+      border: 5px solid #fbbf24;
+      border-radius: 32px;
+      box-shadow:
+        0 10px 0 #b45309,
+        0 24px 50px rgba(20, 8, 46, 0.55),
+        inset 0 4px 6px rgba(255, 255, 255, 0.95);
+      animation: congratsCardPop 0.48s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+    @keyframes congratsCardPop {
+      0% { transform: scale(0.76) translateY(28px); opacity: 0; }
+      65% { transform: scale(1.03) translateY(-4px); opacity: 1; }
+      100% { transform: scale(1) translateY(0); opacity: 1; }
+    }
+
+    .congrats-ribbon {
+      background: linear-gradient(180deg, #9333ea 0%, #6b21a8 65%, #4c1d95 100%);
+      border: 3px solid #fde047;
+      border-radius: 9999px;
+      box-shadow: 0 5px 0 #311068, 0 8px 18px rgba(49, 16, 104, 0.4), inset 0 2px 3px rgba(255,255,255,0.45);
+      color: #ffffff;
+      font-family: var(--font-display);
+      text-shadow: 0 2px 3px rgba(24, 6, 56, 0.7);
+    }
+
+    .congrats-sunburst {
+      position: absolute;
+      width: 180px;
+      height: 180px;
+      border-radius: 9999px;
+      background: repeating-conic-gradient(
+        from 0deg,
+        rgba(253, 224, 71, 0.34) 0deg 15deg,
+        rgba(253, 224, 71, 0) 15deg 30deg
+      );
+      -webkit-mask-image: radial-gradient(circle, rgba(0,0,0,1) 20%, rgba(0,0,0,0) 70%);
+      mask-image: radial-gradient(circle, rgba(0,0,0,1) 20%, rgba(0,0,0,0) 70%);
+      animation: sunburstSpin 18s linear infinite;
+      will-change: transform;
+      pointer-events: none;
+    }
+    @keyframes sunburstSpin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .congrats-trophy-bounce {
+      animation: trophyFloat 2.4s ease-in-out infinite;
+      will-change: transform;
+    }
+    @keyframes trophyFloat {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-6px) scale(1.04); }
+    }
+
+    .congrats-star {
+      opacity: 0;
+      transform: scale(0.2) rotate(-25deg);
+    }
+    .congrats-star.pop {
+      animation: congratsStarPop 0.52s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+    @keyframes congratsStarPop {
+      0% { opacity: 0; transform: scale(0.2) rotate(-25deg); }
+      65% { opacity: 1; transform: scale(1.24) rotate(8deg); }
+      100% { opacity: 1; transform: scale(1) rotate(0deg); }
+    }
+
+    .confetti-piece {
+      position: fixed;
+      top: -16px;
+      width: 11px;
+      height: 16px;
+      border-radius: 3px;
+      pointer-events: none;
+      z-index: 60;
+      will-change: transform, opacity;
+      animation: confettiFall var(--dur, 2.3s) cubic-bezier(0.2, 0.65, 0.35, 1) var(--delay, 0s) forwards;
+    }
+    @keyframes confettiFall {
+      0% { transform: translate3d(0, 0, 0) rotate(0deg) scale(0.9); opacity: 1; }
+      80% { opacity: 1; }
+      100% { transform: translate3d(var(--dx, 40px), 105vh, 0) rotate(var(--rot, 540deg)) scale(1); opacity: 0; }
+    }
+
+    /* Reduced Motion Support */
+    @media (prefers-reduced-motion: reduce) {
+      .floating-leaf, .word-tile.tile-hint,
+      .congrats-sunburst, .congrats-trophy-bounce, .confetti-piece {
+        animation: none !important;
+      }
+      * {
+        transition-duration: 0.05s !important;
+      }
+    }
+    body.reduced-motion .floating-leaf,
+    body.reduced-motion .word-tile.tile-hint,
+    body.reduced-motion .congrats-sunburst,
+    body.reduced-motion .congrats-trophy-bounce,
+    body.reduced-motion .confetti-piece {
+      animation: none !important;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- ==================== SCENIC 3D STORYBOOK GARDEN BACKGROUND ==================== -->
+  <div class="scene-bg" aria-hidden="true">
+    <picture>
+      <source srcset="assets/garden-bg-mobile.webp" media="(max-width: 767px)" type="image/webp" />
+      <source srcset="assets/garden-bg.webp" media="(min-width: 768px)" type="image/webp" />
+      <img src="assets/garden-bg.jpg" alt="" class="scene-bg-img" decoding="async" fetchpriority="high" />
+    </picture>
+    <div class="scene-bg-calm"></div>
+    <!-- Subtle Floating Leaves -->
+    <div class="floating-leaf" style="top:10%;left:8%;animation-delay:0s;"></div>
+    <div class="floating-leaf" style="top:16%;left:52%;animation-delay:-8s;width:13px;height:9px;"></div>
+  </div>
+
+  <!-- ==================== TOAST BANNER ==================== -->
+  <div id="toastContainer" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none flex flex-col items-center gap-2 w-full max-w-sm px-4"></div>
+
+  <!-- ==================== TOP HEADER ==================== -->
+  <header class="relative z-20 w-full max-w-6xl mx-auto px-3 sm:px-6 pt-3 pb-1 flex items-center justify-between gap-2">
+    <!-- Left Circular Buttons: Home & Help -->
+    <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+      <button id="btnHome" type="button" aria-label="Home & Puzzles" title="Home &amp; Puzzle Library" class="glossy-circle-btn">
+        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M11.47 3.84a.75.75 0 011.06 0l8.69 8.69a.75.75 0 101.06-1.06l-8.689-8.69a2.25 2.25 0 00-3.182 0l-8.69 8.69a.75.75 0 001.061 1.06l8.69-8.69z"/>
+          <path d="M12 5.432l8.159 8.159c.03.03.06.058.091.086v6.198c0 1.035-.84 1.875-1.875 1.875H15a.75.75 0 01-.75-.75v-4.5a.75.75 0 00-.75-.75h-3a.75.75 0 00-.75.75V21a.75.75 0 01-.75.75H5.625a1.875 1.875 0 01-1.875-1.875v-6.198a2.29 2.29 0 00.091-.086L12 5.43z"/>
+        </svg>
+      </button>
+      <button id="btnHelp" type="button" aria-label="How to play" title="How to Play" class="glossy-circle-btn">
+        <span class="text-2xl font-black leading-none" style="font-family:var(--font-display);">?</span>
+      </button>
+    </div>
+
+    <!-- Center Colourful 3D Connections Logo -->
+    <div class="flex flex-col items-center justify-center min-w-0">
+      <div class="flex items-center gap-2 sm:gap-3">
+        <!-- 2x2 Tilted Glossy Tile Icon -->
+        <div class="grid grid-cols-2 gap-1 p-1.5 rounded-xl bg-[#381663] border-2 border-[#c4b5fd] shadow-lg -rotate-6 shrink-0" aria-hidden="true">
+          <span class="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-[4px] bg-gradient-to-b from-[#67e8f9] to-[#06b6d4] shadow-inner border border-white/60"></span>
+          <span class="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-[4px] bg-gradient-to-b from-[#fef08a] to-[#f59e0b] shadow-inner border border-white/60"></span>
+          <span class="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-[4px] bg-gradient-to-b from-[#f472b6] to-[#db2777] shadow-inner border border-white/60"></span>
+          <span class="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-[4px] bg-gradient-to-b from-[#fb923c] to-[#ea580c] shadow-inner border border-white/60"></span>
+        </div>
+        <h1 class="logo-title text-3xl sm:text-5xl leading-none select-none truncate">Connections</h1>
+      </div>
+      <div class="logo-subtitle-pill px-4 sm:px-6 py-0.5 rounded-full text-[11px] sm:text-sm tracking-wide -mt-0.5">
+        Word Grouping &amp; Logic
+      </div>
+    </div>
+
+    <!-- Right Circular Buttons: Sound & Settings -->
+    <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+      <button id="btnSound" type="button" aria-label="Toggle sound" title="Toggle Sound" class="glossy-circle-btn">
+        <svg id="iconSoundOn" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 001.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06zM18.584 5.106a.75.75 0 011.06 0c3.808 3.807 3.808 9.98 0 13.788a.75.75 0 11-1.06-1.06 8.25 8.25 0 000-11.668.75.75 0 010-1.06z"/>
+          <path d="M15.932 7.757a.75.75 0 011.061 0 6 6 0 010 8.486.75.75 0 01-1.06-1.061 4.5 4.5 0 000-6.364.75.75 0 010-1.06z"/>
+        </svg>
+        <svg id="iconSoundOff" class="w-6 h-6 hidden opacity-70" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5z"></path>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M22 9l-6 6M16 9l6 6"></path>
+        </svg>
+      </button>
+      <button id="btnSettings" type="button" aria-label="Settings &amp; Studio" title="Settings &amp; Teacher Studio" class="glossy-circle-btn">
+        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+          <path fill-rule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.02.12-.115.26-.297.348a7.493 7.493 0 00-.986.57c-.166.115-.334.126-.45.083L6.3 5.508a1.875 1.875 0 00-2.282.819l-.922 1.597a1.875 1.875 0 00.432 2.385l.84.692c.095.078.17.229.154.43a7.598 7.598 0 000 1.139c.015.2-.059.352-.153.43l-.841.692a1.875 1.875 0 00-.432 2.385l.922 1.597a1.875 1.875 0 002.282.818l1.019-.382c.115-.043.283-.031.45.082.312.214.641.405.985.57.182.088.277.228.297.35l.178 1.071c.151.904.933 1.567 1.85 1.567h1.844c.916 0 1.699-.663 1.85-1.567l.178-1.072c.02-.12.114-.26.297-.349.344-.165.673-.356.985-.57.167-.114.335-.125.45-.082l1.02.382a1.875 1.875 0 002.28-.819l.923-1.597a1.875 1.875 0 00-.432-2.385l-.84-.692c-.095-.078-.17-.229-.154-.43a7.614 7.614 0 000-1.139c-.016-.2.059-.352.153-.43l.84-.692c.708-.582.891-1.59.433-2.385l-.922-1.597a1.875 1.875 0 00-2.282-.818l-1.02.382c-.114.043-.282.031-.449-.083a7.49 7.49 0 00-.985-.57c-.183-.087-.277-.227-.297-.348l-.179-1.072a1.875 1.875 0 00-1.85-1.567h-1.843zM12 15.75a3.75 3.75 0 100-7.5 3.75 3.75 0 000 7.5z" clip-rule="evenodd"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ==================== MAIN STAGE ==================== -->
+  <main class="relative z-10 flex-1 w-full max-w-6xl mx-auto px-3 sm:px-6 py-2 sm:py-4 flex flex-col justify-center">
+
+    <!-- ==================== PLAY VIEW ==================== -->
+    <section id="viewPlay" class="w-full flex flex-col items-center gap-3 sm:gap-4">
+
+      <!-- 3-Column Game Stage (Desktop) / Stacked Adaptive (Mobile) -->
+      <div class="w-full flex flex-col lg:flex-row items-center justify-center gap-3 sm:gap-5">
+
+        <!-- LEFT INFORMATION PANEL -->
+        <aside class="side-panel-card w-full max-w-md lg:w-44 p-2.5 sm:p-3 flex lg:flex-col items-center justify-between gap-2.5 shrink-0 order-2 lg:order-1">
+          <!-- Level Badge -->
+          <div class="text-center px-2 py-0.5">
+            <span id="levelLabel" class="text-lg sm:text-xl font-black text-white tracking-wide drop-shadow" style="font-family:var(--font-display);">Level 1</span>
+          </div>
+
+          <!-- Inner Wooden Trophy & Score Card -->
+          <div class="left-panel-inner-wood flex-1 lg:w-full px-3 py-2 sm:py-3 flex lg:flex-col items-center justify-around lg:justify-center gap-2 text-center">
+            <!-- Golden 3D Trophy -->
+            <div class="trophy-shine shrink-0" aria-hidden="true">
+              <svg class="w-10 h-10 sm:w-14 sm:h-14" viewBox="0 0 64 64">
+                <defs>
+                  <linearGradient id="trophyGold" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#fef08a"/>
+                    <stop offset="45%" stop-color="#facc15"/>
+                    <stop offset="100%" stop-color="#ca8a04"/>
+                  </linearGradient>
+                </defs>
+                <path d="M18 14h28v14c0 9-6 16-14 16s-14-7-14-16V14z" fill="url(#trophyGold)" stroke="#92400e" stroke-width="2.5"/>
+                <path d="M18 17H9c0 8 4 13 10 13" fill="none" stroke="#facc15" stroke-width="4" stroke-linecap="round"/>
+                <path d="M46 17h9c0 8-4 13-10 13" fill="none" stroke="#facc15" stroke-width="4" stroke-linecap="round"/>
+                <rect x="28" y="44" width="8" height="8" fill="#eab308" stroke="#92400e" stroke-width="2"/>
+                <rect x="20" y="51" width="24" height="7" rx="3" fill="url(#trophyGold)" stroke="#92400e" stroke-width="2.5"/>
+                <path d="M32 20l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.3-4.5 2.3.9-5-3.6-3.5 5-.7z" fill="#fffbeb" opacity="0.85"/>
+              </svg>
+            </div>
+            <div>
+              <div id="scoreValue" class="text-xl sm:text-2xl font-black text-white leading-none drop-shadow" style="font-family:var(--font-display);">0</div>
+              <div class="text-[10px] uppercase tracking-wider font-extrabold text-amber-200/90 mt-0.5">Score</div>
+            </div>
+          </div>
+
+          <!-- 3-Star Progress Indicator -->
+          <div id="starsContainer" class="flex items-center justify-center gap-1.5 py-0.5" aria-label="Star progress">
+            <!-- Populated by JS -->
+          </div>
+        </aside>
+
+        <!-- CENTRAL GAME BOARD -->
+        <div class="w-full max-w-[680px] flex flex-col items-center order-1 lg:order-2 relative pt-4">
+          <!-- Wooden Instruction Banner with Decorative Leaves -->
+          <div class="relative z-20 -mb-5 flex items-center justify-center">
+            <!-- Left Leaves -->
+            <svg class="w-11 h-9 -mr-3 rotate-[-16deg] drop-shadow" viewBox="0 0 50 40" aria-hidden="true">
+              <path d="M44 30 C24 34, 8 22, 4 6 C22 4, 38 14, 44 30Z" fill="#65a30d" stroke="#365314" stroke-width="2"/>
+              <path d="M40 32 C26 38, 12 34, 6 22 C20 18, 34 22, 40 32Z" fill="#84cc16" stroke="#365314" stroke-width="2"/>
+            </svg>
+            <div class="wooden-banner px-6 sm:px-10 py-1.5 sm:py-2 text-sm sm:text-xl font-extrabold tracking-wide whitespace-nowrap">
+              Create four groups of four!
+            </div>
+            <!-- Right Leaves -->
+            <svg class="w-11 h-9 -ml-3 rotate-[16deg] scale-x-[-1] drop-shadow" viewBox="0 0 50 40" aria-hidden="true">
+              <path d="M44 30 C24 34, 8 22, 4 6 C22 4, 38 14, 44 30Z" fill="#65a30d" stroke="#365314" stroke-width="2"/>
+              <path d="M40 32 C26 38, 12 34, 6 22 C20 18, 34 22, 40 32Z" fill="#84cc16" stroke="#365314" stroke-width="2"/>
+            </svg>
+          </div>
+
+          <!-- Cream Framed 4x4 Board -->
+          <div class="game-board-frame w-full pt-8 pb-4 px-3 sm:px-5 space-y-2.5 sm:space-y-3">
+            <!-- Solved Categories Container -->
+            <div id="solvedContainer" class="space-y-2 empty:hidden"></div>
+
+            <!-- 4x4 Word Grid -->
+            <div id="wordGrid" class="grid grid-cols-4 gap-2 sm:gap-3"></div>
+
+            <!-- Compact Action Controls (Deselect & Submit) -->
+            <div id="boardActionRow" class="flex items-center justify-center gap-2.5 pt-1">
+              <button id="btnDeselect" type="button" disabled
+                class="action-pill-secondary px-4 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm">
+                Deselect All
+              </button>
+              <button id="btnSubmit" type="button" disabled
+                class="action-pill-primary px-6 sm:px-8 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm">
+                Submit
+              </button>
+            </div>
+
+            <!-- End-of-Game Summary Card (inside board frame when finished) -->
+            <div id="resultCard" class="hidden rounded-2xl bg-white/95 border-2 border-amber-400 p-4 sm:p-5 shadow-lg text-center space-y-3 animate-pop-in">
+              <div>
+                <h2 id="resultTitle" class="text-xl sm:text-2xl font-black text-[#3b1768]" style="font-family:var(--font-display);"></h2>
+                <p id="resultSubtitle" class="text-xs sm:text-sm font-semibold text-amber-900/80 mt-0.5"></p>
+              </div>
+              <div id="emojiGrid" class="inline-block bg-amber-50 border-2 border-amber-200 rounded-xl px-4 py-2.5 font-mono text-lg leading-snug tracking-widest"></div>
+              <div class="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+                <button id="btnCopyResults" type="button" class="action-pill-secondary px-4 py-2 rounded-full text-xs sm:text-sm">
+                  Copy Results
+                </button>
+                <button id="btnPlayNext" type="button" class="action-pill-primary px-5 py-2 rounded-full text-xs sm:text-sm">
+                  Next Level →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT POWER-UP PANEL -->
+        <aside class="side-panel-card w-full max-w-md lg:w-28 p-2.5 sm:p-3 flex lg:flex-col items-center justify-around gap-3 shrink-0 order-3">
+          <!-- Hint Power-up -->
+          <button id="btnHint" type="button" class="powerup-btn" title="Hint: highlight 2 matching words" aria-label="Use Hint">
+            <span id="hintBadge" class="qty-badge">3</span>
+            <svg class="w-10 h-10 drop-shadow" viewBox="0 0 64 64">
+              <defs>
+                <radialGradient id="bulbGlow" cx="50%" cy="40%" r="50%">
+                  <stop offset="0%" stop-color="#fffbeb"/>
+                  <stop offset="60%" stop-color="#fde047"/>
+                  <stop offset="100%" stop-color="#f59e0b"/>
+                </radialGradient>
+              </defs>
+              <path d="M32 10c-10 0-17 7.5-17 16.5 0 6 3.5 10.5 7 13.5 1.5 1.3 2.5 3 2.5 5h15c0-2 1-3.7 2.5-5 3.5-3 7-7.5 7-13.5C49 17.5 42 10 32 10z" fill="url(#bulbGlow)" stroke="#92400e" stroke-width="2.5"/>
+              <rect x="25" y="46" width="14" height="4" rx="2" fill="#cbd5e1" stroke="#475569" stroke-width="1.5"/>
+              <rect x="27" y="51" width="10" height="4" rx="2" fill="#94a3b8" stroke="#475569" stroke-width="1.5"/>
+              <path d="M12 16l4 2M52 16l-4 2M32 3v4M9 28h4M55 28h-4" stroke="#fef08a" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+          </button>
+
+          <!-- Shuffle Power-up -->
+          <button id="btnShuffle" type="button" class="powerup-btn" title="Shuffle remaining tiles" aria-label="Shuffle Tiles">
+            <span id="shuffleBadge" class="qty-badge">∞</span>
+            <svg class="w-10 h-10 drop-shadow" viewBox="0 0 64 64">
+              <path d="M12 22h12c5 0 9 4 14 10s9 10 14 10h2" fill="none" stroke="#38bdf8" stroke-width="7" stroke-linecap="round"/>
+              <path d="M46 35l9 7-9 7" fill="none" stroke="#38bdf8" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M12 42h12c5 0 9-4 14-10s9-10 14-10h2" fill="none" stroke="#7dd3fc" stroke-width="7" stroke-linecap="round"/>
+              <path d="M46 15l9 7-9 7" fill="none" stroke="#7dd3fc" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+
+          <!-- Reveal / Category Clue Power-up -->
+          <button id="btnRevealClue" type="button" class="powerup-btn" title="Category Clue: reveal a hidden category name" aria-label="Reveal Category Clue">
+            <span id="clueBadge" class="qty-badge">3</span>
+            <svg class="w-10 h-10 drop-shadow" viewBox="0 0 64 64">
+              <circle cx="28" cy="27" r="15" fill="#e0f2fe" stroke="#0284c7" stroke-width="5"/>
+              <circle cx="24" cy="23" r="5" fill="#ffffff" opacity="0.8"/>
+              <path d="M39 38l13 13" stroke="#f59e0b" stroke-width="7" stroke-linecap="round"/>
+              <path d="M39 38l13 13" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </aside>
+      </div>
+
+      <!-- BOTTOM SECTION: TIMER & MISTAKES REMAINING -->
+      <div class="w-full max-w-[680px] flex flex-wrap items-center justify-between gap-3 pt-1 pb-2">
+        <!-- Timer Pill -->
+        <div class="timer-pill px-4 py-1.5 flex items-center gap-2.5">
+          <svg class="w-7 h-7 shrink-0 drop-shadow" viewBox="0 0 40 40" aria-hidden="true">
+            <circle cx="20" cy="22" r="14" fill="#fffbeb" stroke="#f59e0b" stroke-width="3.5"/>
+            <rect x="17" y="4" width="6" height="4" rx="1.5" fill="#fbbf24" stroke="#b45309" stroke-width="1.5"/>
+            <path d="M20 22V14M20 22l5 3" stroke="#b45309" stroke-width="2.8" stroke-linecap="round"/>
+          </svg>
+          <span id="timerDisplay" class="text-white font-black text-lg sm:text-xl tabular-nums tracking-wider" style="font-family:var(--font-display);">00:00</span>
+        </div>
+
+        <!-- Mistakes Remaining Pill -->
+        <div class="mistakes-pill px-5 py-2 flex items-center gap-3 mx-auto sm:mx-0">
+          <span class="text-xs sm:text-sm font-extrabold text-[#451a03]">Mistakes remaining:</span>
+          <div id="mistakesDots" class="flex items-center gap-2" aria-live="polite"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TEACHER STUDIO VIEW ==================== -->
+    <section id="viewTeacher" class="hidden w-full max-w-3xl mx-auto space-y-4 pb-8">
+      <div class="bg-white/95 rounded-3xl border-4 border-amber-400 p-4 sm:p-6 shadow-2xl space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-amber-200 pb-4">
+          <div>
+            <h2 class="text-xl sm:text-2xl font-black text-[#3b1768]" style="font-family:var(--font-display);">Teacher Puzzle Studio</h2>
+            <p class="text-xs sm:text-sm text-slate-600 mt-0.5">
+              Enter 4 categories with 4 words each. Click <span class="font-bold text-[#3b1768]">Launch Game</span> to shuffle and play immediately.
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button id="btnBackToPlay" type="button"
+              class="px-3 py-1.5 rounded-xl border-2 border-purple-300 bg-purple-50 text-xs font-bold text-purple-900 hover:bg-purple-100 transition">
+              ← Back to Game
+            </button>
+            <button id="btnTeacherLoadSample" type="button"
+              class="px-3 py-1.5 rounded-xl border border-slate-300 bg-slate-50 text-xs font-bold text-slate-700 hover:bg-slate-100 transition">
+              Fill Sample
+            </button>
+            <button id="btnTeacherClear" type="button"
+              class="px-3 py-1.5 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50 transition">
+              Clear All
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label for="teacherPuzzleTitle" class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-1.5">
+            Puzzle Title
+          </label>
+          <input id="teacherPuzzleTitle" type="text" maxlength="60" placeholder="e.g., Grade 6 Vocabulary Review"
+            class="w-full rounded-xl border-2 border-amber-200 px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:outline-none focus:border-purple-600" />
+        </div>
+
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-950">
+          <strong>Tip:</strong> Type words one by one, or paste 4 comma-separated words into the first box of any group to auto-fill all 4 slots.
+        </div>
+
+        <div id="teacherGroupsContainer" class="grid grid-cols-1 gap-4"></div>
+
+        <div id="teacherErrorBox" class="hidden rounded-xl bg-rose-50 border border-rose-300 px-4 py-3 text-xs sm:text-sm font-bold text-rose-700"></div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-amber-200">
+          <div class="flex flex-wrap items-center gap-2">
+            <button id="btnSavePuzzle" type="button" class="action-pill-secondary px-4 py-2 rounded-full text-xs sm:text-sm">
+              Save to Library
+            </button>
+            <button id="btnShareLink" type="button" class="action-pill-secondary px-4 py-2 rounded-full text-xs sm:text-sm">
+              Copy Share Link
+            </button>
+          </div>
+          <button id="btnLaunchGame" type="button" class="action-pill-primary px-6 py-2.5 rounded-full text-sm">
+            Launch Game →
+          </button>
+        </div>
+      </div>
+
+      <!-- Saved Custom Puzzles List -->
+      <div class="bg-white/95 rounded-3xl border-4 border-amber-400 p-4 sm:p-5 shadow-xl space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-base font-black text-[#3b1768]" style="font-family:var(--font-display);">Your Saved Puzzles</h3>
+          <span id="savedCountBadge" class="text-xs font-bold text-slate-500">0 saved</span>
+        </div>
+        <div id="savedPuzzlesList" class="space-y-2 text-sm text-slate-500"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ==================== HOW TO PLAY MODAL ==================== -->
+  <div id="helpModal" class="hidden fixed inset-0 z-50 bg-slate-950/65 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="helpModalTitle">
+    <div class="bg-white rounded-3xl border-4 border-amber-400 max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-pop-in">
+      <div class="flex items-center justify-between">
+        <h2 id="helpModalTitle" class="text-xl font-black text-[#3b1768]" style="font-family:var(--font-display);">How to Play Connections</h2>
+        <button id="btnCloseHelp" type="button" aria-label="Close"
+          class="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+      <ul class="text-sm text-slate-700 space-y-2 list-disc pl-5 font-semibold">
+        <li>Find <strong>four groups of four words</strong> that share a hidden connection.</li>
+        <li>Select four tiles and tap <strong>Submit</strong> to check your guess.</li>
+        <li>If 3 of your 4 words belong to the same group, you'll see a <strong>"One away!"</strong> hint.</li>
+        <li>You have <strong>4 mistakes</strong> before the remaining answers are revealed.</li>
+        <li>Use the <strong>Hint</strong> bulb to highlight 2 matching words, or the <strong>Search</strong> glass to reveal a category name.</li>
+      </ul>
+      <div class="space-y-1.5 pt-1">
+        <p class="text-xs font-extrabold uppercase tracking-wider text-slate-400">Difficulty Tiers</p>
+        <div class="grid grid-cols-2 gap-2 text-xs font-bold">
+          <div class="flex items-center gap-2 bg-[#F9DF6D]/50 px-2.5 py-1.5 rounded-xl text-slate-900">
+            <span class="w-3 h-3 rounded-sm bg-[#F9DF6D] border border-amber-500"></span> Straightforward
+          </div>
+          <div class="flex items-center gap-2 bg-[#A0C35A]/40 px-2.5 py-1.5 rounded-xl text-slate-900">
+            <span class="w-3 h-3 rounded-sm bg-[#A0C35A] border border-lime-600"></span> Medium
+          </div>
+          <div class="flex items-center gap-2 bg-[#B0C4EF]/50 px-2.5 py-1.5 rounded-xl text-slate-900">
+            <span class="w-3 h-3 rounded-sm bg-[#B0C4EF] border border-blue-500"></span> Tricky
+          </div>
+          <div class="flex items-center gap-2 bg-[#BA81C5]/40 px-2.5 py-1.5 rounded-xl text-slate-900">
+            <span class="w-3 h-3 rounded-sm bg-[#BA81C5] border border-purple-500"></span> Lateral / Deceptive
+          </div>
+        </div>
+      </div>
+      <button id="btnGotItHelp" type="button" class="action-pill-primary w-full py-2.5 rounded-full text-sm">
+        Got it!
+      </button>
+    </div>
+  </div>
+
+  <!-- ==================== SETTINGS & PUZZLE LIBRARY MODAL ==================== -->
+  <div id="settingsModal" class="hidden fixed inset-0 z-50 bg-slate-950/65 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+    <div class="bg-white rounded-3xl border-4 border-amber-400 max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-pop-in">
+      <div class="flex items-center justify-between">
+        <h2 id="settingsModalTitle" class="text-xl font-black text-[#3b1768]" style="font-family:var(--font-display);">Puzzles &amp; Settings</h2>
+        <button id="btnCloseSettings" type="button" aria-label="Close"
+          class="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Active Puzzle Selector -->
+      <div>
+        <label for="puzzleSelect" class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-1.5">
+          Active Puzzle
+        </label>
+        <select id="puzzleSelect"
+          class="w-full bg-amber-50 border-2 border-amber-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-900 focus:outline-none focus:border-purple-600">
+        </select>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="grid grid-cols-2 gap-2.5">
+        <button id="btnResetPuzzle" type="button" class="action-pill-secondary py-2.5 rounded-2xl text-xs sm:text-sm">
+          Restart Puzzle
+        </button>
+        <button id="btnEditCurrent" type="button" class="action-pill-secondary py-2.5 rounded-2xl text-xs sm:text-sm">
+          Edit in Studio
+        </button>
+      </div>
+
+      <!-- Teacher Studio Launcher -->
+      <button id="btnOpenTeacherStudio" type="button" class="action-pill-primary w-full py-2.5 rounded-full text-sm">
+        Open Teacher Studio
+      </button>
+
+      <!-- Preferences -->
+      <div class="pt-2 border-t border-amber-100 flex items-center justify-between">
+        <span class="text-sm font-bold text-slate-700">Reduced Motion</span>
+        <button id="btnReducedMotion" type="button"
+          class="px-3.5 py-1.5 rounded-full border-2 border-purple-300 bg-purple-50 text-xs font-extrabold text-purple-900 transition">
+          Off
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== CONGRATULATION CELEBRATION PAGE ==================== -->
+  <div id="congratsOverlay" class="hidden fixed inset-0 z-50 congrats-backdrop flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="congratsHeading">
+    <div class="congrats-card max-w-md w-full pt-10 pb-6 px-5 sm:px-7 text-center space-y-4">
+      <!-- Top Ribbon -->
+      <div class="congrats-ribbon inline-block px-7 py-2 text-xl sm:text-2xl font-black tracking-wide -mt-16 mx-auto shadow-xl">
+        <span id="congratsHeading">Congratulations!</span>
+      </div>
+
+      <!-- Trophy & Sunburst -->
+      <div class="relative flex items-center justify-center h-28">
+        <div class="congrats-sunburst" aria-hidden="true"></div>
+        <svg class="w-24 h-24 congrats-trophy-bounce relative z-10 drop-shadow-lg" viewBox="0 0 64 64" aria-hidden="true">
+          <defs>
+            <linearGradient id="congratsGold" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#fef08a"/>
+              <stop offset="45%" stop-color="#facc15"/>
+              <stop offset="100%" stop-color="#ca8a04"/>
+            </linearGradient>
+          </defs>
+          <path d="M18 14h28v14c0 9-6 16-14 16s-14-7-14-16V14z" fill="url(#congratsGold)" stroke="#92400e" stroke-width="2.5"/>
+          <path d="M18 17H9c0 8 4 13 10 13" fill="none" stroke="#facc15" stroke-width="4" stroke-linecap="round"/>
+          <path d="M46 17h9c0 8-4 13-10 13" fill="none" stroke="#facc15" stroke-width="4" stroke-linecap="round"/>
+          <rect x="28" y="44" width="8" height="8" fill="#eab308" stroke="#92400e" stroke-width="2"/>
+          <rect x="20" y="51" width="24" height="7" rx="3" fill="url(#congratsGold)" stroke="#92400e" stroke-width="2.5"/>
+          <path d="M32 20l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.3-4.5 2.3.9-5-3.6-3.5 5-.7z" fill="#fffbeb" opacity="0.9"/>
+        </svg>
+      </div>
+
+      <!-- 3 Animated Celebration Stars -->
+      <div id="congratsStars" class="flex items-center justify-center gap-3 -mt-2" aria-label="Earned stars"></div>
+
+      <p id="congratsSubtext" class="text-sm sm:text-base font-bold text-amber-950/85 leading-snug"></p>
+
+      <!-- Stats Pills -->
+      <div class="grid grid-cols-3 gap-2">
+        <div class="rounded-2xl bg-purple-100/90 border-2 border-purple-300 py-2 px-2">
+          <div id="congratsScore" class="text-lg sm:text-xl font-black text-[#4c1d95]" style="font-family:var(--font-display);">0</div>
+          <div class="text-[10px] uppercase tracking-wider font-extrabold text-purple-700">Score</div>
+        </div>
+        <div class="rounded-2xl bg-amber-100/90 border-2 border-amber-300 py-2 px-2">
+          <div id="congratsTime" class="text-lg sm:text-xl font-black text-amber-900 tabular-nums" style="font-family:var(--font-display);">00:00</div>
+          <div class="text-[10px] uppercase tracking-wider font-extrabold text-amber-700">Time</div>
+        </div>
+        <div class="rounded-2xl bg-emerald-100/90 border-2 border-emerald-300 py-2 px-2">
+          <div id="congratsMistakes" class="text-lg sm:text-xl font-black text-emerald-900" style="font-family:var(--font-display);">4/4</div>
+          <div class="text-[10px] uppercase tracking-wider font-extrabold text-emerald-700">Lives Left</div>
+        </div>
+      </div>
+
+      <!-- Emoji Guess Summary -->
+      <div id="congratsEmojiGrid" class="inline-block bg-white border-2 border-amber-200 rounded-2xl px-4 py-2 font-mono text-lg leading-snug tracking-widest shadow-inner"></div>
+
+      <!-- Actions -->
+      <div class="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+        <button id="btnCongratsReview" type="button" class="action-pill-secondary px-4 py-2 rounded-full text-xs sm:text-sm">
+          Review Board
+        </button>
+        <button id="btnCongratsCopy" type="button" class="action-pill-secondary px-4 py-2 rounded-full text-xs sm:text-sm">
+          Copy Results
+        </button>
+        <button id="btnCongratsNext" type="button" class="action-pill-primary px-6 py-2.5 rounded-full text-xs sm:text-sm">
+          Next Level →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // ==================== TIER CONFIG ====================
+      const TIERS = [
+        { level: 0, name: 'Straightforward', bg: '#F9DF6D', border: '#D9A714', emoji: '🟨' },
+        { level: 1, name: 'Medium',          bg: '#A0C35A', border: '#6A9324', emoji: '🟩' },
+        { level: 2, name: 'Tricky',          bg: '#B0C4EF', border: '#5A81D6', emoji: '🟦' },
+        { level: 3, name: 'Lateral',         bg: '#BA81C5', border: '#874896', emoji: '🟪' }
+      ];
+
+      // ==================== BUILT-IN SAMPLE PUZZLES ====================
+      const SAMPLE_PUZZLES = [
+        {
+          id: 'sample-classic',
+          title: 'Level 1: Classic Mix (Animals, Body, "-fish", Keys)',
+          isSample: true,
+          groups: [
+            { title: 'Baby Animals', level: 0, words: ['CALF', 'FOAL', 'JOEY', 'CUB'] },
+            { title: 'Body Parts', level: 1, words: ['ELBOW', 'KNEE', 'ANKLE', 'WRIST'] },
+            { title: 'Words Ending in "-fish"', level: 2, words: ['STARFISH', 'GOLDFISH', 'JELLYFISH', 'CLOWNFISH'] },
+            { title: 'Things That Have Keys', level: 3, words: ['PIANO', 'MAP', 'LOCK', 'TYPEWRITER'] }
+          ]
+        },
+        {
+          id: 'sample-english',
+          title: 'Level 2: English Vocabulary & Wordplay',
+          isSample: true,
+          groups: [
+            { title: 'Irregular Past Tense Verbs', level: 0, words: ['WENT', 'ATE', 'SAW', 'TOOK'] },
+            { title: 'Synonyms for "Happy"', level: 1, words: ['GLAD', 'JOYFUL', 'CHEERFUL', 'DELIGHTED'] },
+            { title: 'Words with a Silent Letter', level: 2, words: ['KNIGHT', 'ISLAND', 'DOUBT', 'HONEST'] },
+            { title: 'Words After "BOOK"', level: 3, words: ['WORM', 'MARK', 'STORE', 'SHELF'] }
+          ]
+        },
+        {
+          id: 'sample-science',
+          title: 'Level 3: Science & Nature',
+          isSample: true,
+          groups: [
+            { title: 'States of Matter', level: 0, words: ['SOLID', 'LIQUID', 'GAS', 'PLASMA'] },
+            { title: 'Parts of a Plant', level: 1, words: ['ROOT', 'STEM', 'LEAF', 'PETAL'] },
+            { title: 'Planets in Our Solar System', level: 2, words: ['MARS', 'VENUS', 'SATURN', 'NEPTUNE'] },
+            { title: 'Things That Have Rings', level: 3, words: ['TREE', 'PHONE', 'ONION', 'BOXING'] }
+          ]
+        },
+        {
+          id: 'sample-tech',
+          title: 'Level 4: Digital Literacy & Logic',
+          isSample: true,
+          groups: [
+            { title: 'Web Browsers', level: 0, words: ['CHROME', 'SAFARI', 'FIREFOX', 'EDGE'] },
+            { title: 'Computer Input Devices', level: 1, words: ['MOUSE', 'SCANNER', 'MIC', 'WEBCAM'] },
+            { title: 'Common File Extensions', level: 2, words: ['PDF', 'CSV', 'PNG', 'JSON'] },
+            { title: 'Words Before "Cloud"', level: 3, words: ['RAIN', 'STORM', 'THUNDER', 'DATA'] }
+          ]
+        }
+      ];
+
+      const STORAGE_KEY = 'edtechra_connections_custom_puzzles_v1';
+
+      // ==================== STATE ====================
+      let customPuzzles = [];
+      let currentPuzzle = null;
+      let remainingWords = [];
+      let selectedWords = [];
+      let hintedWords = [];
+      let revealedClueLevels = new Set();
+      let solvedGroups = [];
+      let mistakesLeft = 4;
+      let guessHistory = [];
+      let guessedKeys = new Set();
+      let gameOver = false;
+      let soundEnabled = true;
+      let reducedMotion = false;
+      let audioCtx = null;
+
+      let score = 0;
+      let displayedScore = 0;
+      let scoreAnimFrame = null;
+      let hintsLeft = 3;
+      let cluesLeft = 3;
+      let elapsedSeconds = 0;
+      let timerInterval = null;
+      let currentMode = 'play';
+      const edtechraBridge = {
+        active: false,
+        mode: 'student',
+        levelNumber: 1,
+        levelTitle: '',
+        maxPoints: 100,
+        startTime: Date.now(),
+        reported: false
+      };
+      function notifySfxDuck(ms = 1100) {
+        if (!edtechraBridge.active) return;
+        try {
+          window.parent.postMessage({ type: 'EDTECHRA_SFX_DUCK', durationMs: ms }, '*');
+        } catch (e) {}
+      }
+
+      // ==================== DOM ELEMENTS ====================
+      const viewPlay = document.getElementById('viewPlay');
+      const viewTeacher = document.getElementById('viewTeacher');
+
+      const btnHome = document.getElementById('btnHome');
+      const btnHelp = document.getElementById('btnHelp');
+      const btnSound = document.getElementById('btnSound');
+      const btnSettings = document.getElementById('btnSettings');
+      const iconSoundOn = document.getElementById('iconSoundOn');
+      const iconSoundOff = document.getElementById('iconSoundOff');
+
+      const levelLabel = document.getElementById('levelLabel');
+      const scoreValue = document.getElementById('scoreValue');
+      const starsContainer = document.getElementById('starsContainer');
+      const timerDisplay = document.getElementById('timerDisplay');
+
+      const solvedContainer = document.getElementById('solvedContainer');
+      const wordGrid = document.getElementById('wordGrid');
+      const mistakesDots = document.getElementById('mistakesDots');
+      const btnHint = document.getElementById('btnHint');
+      const btnShuffle = document.getElementById('btnShuffle');
+      const btnRevealClue = document.getElementById('btnRevealClue');
+      const hintBadge = document.getElementById('hintBadge');
+      const clueBadge = document.getElementById('clueBadge');
+
+      const btnDeselect = document.getElementById('btnDeselect');
+      const btnSubmit = document.getElementById('btnSubmit');
+
+      const resultCard = document.getElementById('resultCard');
+      const resultTitle = document.getElementById('resultTitle');
+      const resultSubtitle = document.getElementById('resultSubtitle');
+      const emojiGrid = document.getElementById('emojiGrid');
+      const btnCopyResults = document.getElementById('btnCopyResults');
+      const btnPlayNext = document.getElementById('btnPlayNext');
+
+      const congratsOverlay = document.getElementById('congratsOverlay');
+      const congratsHeading = document.getElementById('congratsHeading');
+      const congratsStars = document.getElementById('congratsStars');
+      const congratsSubtext = document.getElementById('congratsSubtext');
+      const congratsScore = document.getElementById('congratsScore');
+      const congratsTime = document.getElementById('congratsTime');
+      const congratsMistakes = document.getElementById('congratsMistakes');
+      const congratsEmojiGrid = document.getElementById('congratsEmojiGrid');
+      const btnCongratsReview = document.getElementById('btnCongratsReview');
+      const btnCongratsCopy = document.getElementById('btnCongratsCopy');
+      const btnCongratsNext = document.getElementById('btnCongratsNext');
+
+      const helpModal = document.getElementById('helpModal');
+      const btnCloseHelp = document.getElementById('btnCloseHelp');
+      const btnGotItHelp = document.getElementById('btnGotItHelp');
+
+      const settingsModal = document.getElementById('settingsModal');
+      const btnCloseSettings = document.getElementById('btnCloseSettings');
+      const puzzleSelect = document.getElementById('puzzleSelect');
+      const btnResetPuzzle = document.getElementById('btnResetPuzzle');
+      const btnEditCurrent = document.getElementById('btnEditCurrent');
+      const btnOpenTeacherStudio = document.getElementById('btnOpenTeacherStudio');
+      const btnReducedMotion = document.getElementById('btnReducedMotion');
+
+      const btnBackToPlay = document.getElementById('btnBackToPlay');
+      const teacherPuzzleTitle = document.getElementById('teacherPuzzleTitle');
+      const teacherGroupsContainer = document.getElementById('teacherGroupsContainer');
+      const teacherErrorBox = document.getElementById('teacherErrorBox');
+      const btnTeacherLoadSample = document.getElementById('btnTeacherLoadSample');
+      const btnTeacherClear = document.getElementById('btnTeacherClear');
+      const btnSavePuzzle = document.getElementById('btnSavePuzzle');
+      const btnShareLink = document.getElementById('btnShareLink');
+      const btnLaunchGame = document.getElementById('btnLaunchGame');
+      const savedPuzzlesList = document.getElementById('savedPuzzlesList');
+      const savedCountBadge = document.getElementById('savedCountBadge');
+      const toastContainer = document.getElementById('toastContainer');
+
+      // ==================== ASMR AUDIO SYNTHESIS ====================
+      function getAudioContext() {
+        if (!soundEnabled) return null;
+        if (!audioCtx) {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          if (Ctx) audioCtx = new Ctx();
+        }
+        if (audioCtx && audioCtx.state === 'suspended') {
+          audioCtx.resume().catch(() => {});
+        }
+        return audioCtx;
+      }
+
+      function playTone(freq, duration, type = 'sine', gainVal = 0.07, delay = 0, freqEnd = null) {
+        const ctx = getAudioContext();
+        if (!ctx) return;
+        const now = ctx.currentTime + delay;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, now);
+        if (freqEnd) {
+          osc.frequency.exponentialRampToValueAtTime(freqEnd, now + duration);
+        }
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(gainVal, now + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + duration + 0.02);
+      }
+
+      function playNoiseWhoosh(duration = 0.18) {
+        const ctx = getAudioContext();
+        if (!ctx) return;
+        const bufferSize = Math.floor(ctx.sampleRate * duration);
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.sin((i / bufferSize) * Math.PI);
+        }
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(600, ctx.currentTime);
+        filter.frequency.exponentialRampToValueAtTime(1600, ctx.currentTime + duration);
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.05, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        noise.start();
+      }
+
+      // Soft wooden tap
+      function sfxSelect() {
+        playTone(440, 0.055, 'triangle', 0.075, 0, 560);
+        playTone(880, 0.035, 'sine', 0.03, 0.005);
+      }
+      // Gentle release
+      function sfxDeselect() {
+        playTone(420, 0.06, 'sine', 0.05, 0, 290);
+      }
+      // Subtle tactile UI button click
+      function sfxClick() {
+        playTone(620, 0.04, 'triangle', 0.045, 0, 520);
+      }
+      // Soft wooden knock
+      function sfxWrong() {
+        playTone(170, 0.11, 'triangle', 0.09, 0, 120);
+        playTone(135, 0.14, 'triangle', 0.075, 0.09, 100);
+      }
+      // Pleasant chime
+      function sfxSolve() {
+        playTone(523.25, 0.16, 'sine', 0.08, 0);
+        playTone(659.25, 0.16, 'sine', 0.08, 0.07);
+        playTone(783.99, 0.24, 'sine', 0.085, 0.14);
+        playTone(1046.5, 0.28, 'triangle', 0.04, 0.20);
+      }
+      // Light whoosh
+      function sfxShuffle() {
+        playNoiseWhoosh(0.18);
+        playTone(340, 0.09, 'sine', 0.035, 0.02, 520);
+      }
+      // Magical sparkle
+      function sfxHint() {
+        [880, 1174.66, 1396.91, 1760].forEach((f, i) => {
+          playTone(f, 0.15, 'sine', 0.045, i * 0.045);
+        });
+      }
+      // Rewarding musical sequence
+      function sfxWin() {
+        [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => {
+          playTone(f, 0.28, 'sine', 0.08, i * 0.085);
+        });
+      }
+
+      // ==================== TOASTS ====================
+      function showToast(msg, tone = 'dark') {
+        const el = document.createElement('div');
+        const toneClasses = tone === 'warn'
+          ? 'bg-amber-400 text-amber-950 border-2 border-amber-600'
+          : tone === 'success'
+            ? 'bg-emerald-600 text-white border-2 border-emerald-300'
+            : 'bg-[#3b1768] text-white border-2 border-amber-300';
+        el.className = `${toneClasses} px-5 py-2 rounded-full text-xs sm:text-sm font-extrabold shadow-xl animate-pop-in text-center`;
+        el.textContent = msg;
+        toastContainer.appendChild(el);
+        setTimeout(() => {
+          el.style.transition = 'opacity 0.25s ease';
+          el.style.opacity = '0';
+          setTimeout(() => el.remove(), 260);
+        }, 2200);
+      }
+
+      // ==================== TIMER & SCORE ANIMATIONS ====================
+      function formatTime(sec) {
+        const m = String(Math.floor(sec / 60)).padStart(2, '0');
+        const s = String(sec % 60).padStart(2, '0');
+        return `${m}:${s}`;
+      }
+
+      function startTimer() {
+        stopTimer();
+        timerDisplay.textContent = formatTime(elapsedSeconds);
+        timerInterval = setInterval(() => {
+          if (!gameOver && currentMode === 'play') {
+            elapsedSeconds += 1;
+            timerDisplay.textContent = formatTime(elapsedSeconds);
+          }
+        }, 1000);
+      }
+
+      function stopTimer() {
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+      }
+
+      function addScore(points) {
+        score += points;
+        if (scoreAnimFrame) cancelAnimationFrame(scoreAnimFrame);
+        const startVal = displayedScore;
+        const targetVal = score;
+        const startTime = performance.now();
+        const duration = 450;
+
+        function tick(now) {
+          const progress = Math.min(1, (now - startTime) / duration);
+          const eased = 1 - Math.pow(1 - progress, 3);
+          displayedScore = Math.round(startVal + (targetVal - startVal) * eased);
+          scoreValue.textContent = displayedScore.toLocaleString();
+          if (progress < 1) {
+            scoreAnimFrame = requestAnimationFrame(tick);
+          }
+        }
+        scoreAnimFrame = requestAnimationFrame(tick);
+      }
+
+      function renderStars() {
+        const solvedCount = solvedGroups.length;
+        const earned = gameOver && remainingWords.length > 0
+          ? 0
+          : solvedCount >= 4 ? 3 : solvedCount >= 3 ? 2 : solvedCount >= 1 ? 1 : 0;
+
+        starsContainer.innerHTML = '';
+        for (let i = 0; i < 3; i++) {
+          const isLit = i < earned;
+          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('viewBox', '0 0 36 36');
+          svg.setAttribute('class', `w-7 h-7 sm:w-8 sm:h-8 ${isLit ? 'star-earned' : ''}`);
+          svg.innerHTML = `<path d="M18 3l4.6 9.3 10.2 1.5-7.4 7.2 1.7 10.2L18 26.4 8.9 31.2l1.7-10.2-7.4-7.2 10.2-1.5z"
+            fill="${isLit ? '#fde047' : '#64748b'}"
+            stroke="${isLit ? '#b45309' : '#334155'}"
+            stroke-width="2.2" stroke-linejoin="round"/>`;
+          starsContainer.appendChild(svg);
+        }
+      }
+
+      function spawnSparkles(containerEl) {
+        if (reducedMotion) return;
+        const colors = ['#fde047', '#ffffff', '#67e8f9', '#f472b6'];
+        for (let i = 0; i < 10; i++) {
+          const sp = document.createElement('div');
+          sp.className = 'sparkle-particle';
+          const angle = (Math.PI * 2 * i) / 10;
+          const dist = 28 + Math.random() * 34;
+          sp.style.setProperty('--tx', `${Math.cos(angle) * dist}px`);
+          sp.style.setProperty('--ty', `${Math.sin(angle) * dist}px`);
+          sp.style.left = `${15 + Math.random() * 70}%`;
+          sp.style.top = `${20 + Math.random() * 60}%`;
+          sp.style.background = colors[i % colors.length];
+          sp.style.clipPath = 'polygon(50% 0%, 63% 37%, 100% 50%, 63% 63%, 50% 100%, 37% 63%, 0% 50%, 37% 37%)';
+          containerEl.appendChild(sp);
+          setTimeout(() => sp.remove(), 720);
+        }
+      }
+
+      // ==================== STORAGE & URL SHARING ====================
+      function loadCustomPuzzles() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) customPuzzles = parsed;
+          }
+        } catch (e) {
+          customPuzzles = [];
+        }
+      }
+
+      function persistCustomPuzzles() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(customPuzzles));
+        } catch (e) {}
+      }
+
+      function encodePuzzleToHash(puzzle) {
+        const payload = {
+          t: puzzle.title,
+          g: puzzle.groups.map(g => ({ t: g.title, w: g.words }))
+        };
+        const json = JSON.stringify(payload);
+        const bytes = new TextEncoder().encode(json);
+        let bin = '';
+        bytes.forEach(b => { bin += String.fromCharCode(b); });
+        return '#p=' + btoa(bin);
+      }
+
+      function decodePuzzleFromHash() {
+        try {
+          const hash = window.location.hash || '';
+          if (!hash.startsWith('#p=')) return null;
+          const b64 = hash.slice(3);
+          const bin = atob(b64);
+          const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+          const json = new TextDecoder().decode(bytes);
+          const data = JSON.parse(json);
+          if (!data || !Array.isArray(data.g) || data.g.length !== 4) return null;
+          return {
+            id: 'shared-' + Date.now(),
+            title: String(data.t || 'Shared Teacher Puzzle'),
+            isSample: false,
+            groups: data.g.map((grp, idx) => ({
+              title: String(grp.t || `Group ${idx + 1}`),
+              level: idx,
+              words: (grp.w || []).slice(0, 4).map(w => String(w).trim().toUpperCase())
+            }))
+          };
+        } catch (e) {
+          return null;
+        }
+      }
+
+      // ==================== PUZZLE MANAGEMENT ====================
+      function getAllPuzzles() {
+        return [...customPuzzles, ...SAMPLE_PUZZLES];
+      }
+
+      function populatePuzzleSelect(selectedId) {
+        const all = getAllPuzzles();
+        puzzleSelect.innerHTML = '';
+
+        if (customPuzzles.length > 0) {
+          const optGroupCustom = document.createElement('optgroup');
+          optGroupCustom.label = 'Teacher / Custom Puzzles';
+          customPuzzles.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.title;
+            optGroupCustom.appendChild(opt);
+          });
+          puzzleSelect.appendChild(optGroupCustom);
+        }
+
+        const optGroupSamples = document.createElement('optgroup');
+        optGroupSamples.label = 'Built-in Levels';
+        SAMPLE_PUZZLES.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = p.title;
+          optGroupSamples.appendChild(opt);
+        });
+        puzzleSelect.appendChild(optGroupSamples);
+
+        if (selectedId && all.some(p => p.id === selectedId)) {
+          puzzleSelect.value = selectedId;
+        } else if (currentPuzzle) {
+          puzzleSelect.value = currentPuzzle.id;
+        }
+      }
+
+      function shuffleArray(arr) {
+        const copy = [...arr];
+        for (let i = copy.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [copy[i], copy[j]] = [copy[j], copy[i]];
+        }
+        return copy;
+      }
+
+      function startPuzzle(puzzle) {
+        currentPuzzle = JSON.parse(JSON.stringify(puzzle));
+        const allWords = [];
+        currentPuzzle.groups.forEach(grp => {
+          grp.words.forEach(word => {
+            allWords.push({
+              text: word.toUpperCase(),
+              level: grp.level,
+              groupTitle: grp.title
+            });
+          });
+        });
+
+        remainingWords = shuffleArray(allWords);
+        selectedWords = [];
+        hintedWords = [];
+        revealedClueLevels = new Set();
+        solvedGroups = [];
+        mistakesLeft = 4;
+        guessHistory = [];
+        guessedKeys = new Set();
+        gameOver = false;
+        hintsLeft = 3;
+        cluesLeft = 3;
+        elapsedSeconds = 0;
+
+        const all = getAllPuzzles();
+        const lvlIdx = all.findIndex(p => p.id === currentPuzzle.id);
+        levelLabel.textContent = edtechraBridge.active
+          ? `Level ${edtechraBridge.levelNumber}`
+          : `Level ${lvlIdx >= 0 ? lvlIdx + 1 : 1}`;
+
+        resultCard.classList.add('hidden');
+        congratsOverlay.classList.add('hidden');
+        populatePuzzleSelect(currentPuzzle.id);
+        renderGame();
+        startTimer();
+      }
+
+      // ==================== GAME RENDERING ====================
+      function renderGame(justShuffled = false) {
+        renderSolvedGroups();
+        renderGrid(justShuffled);
+        renderMistakes();
+        renderStars();
+        updateActionButtons();
+      }
+
+      function renderSolvedGroups() {
+        solvedContainer.innerHTML = '';
+        solvedGroups.forEach((grp, idx) => {
+          const tier = TIERS[grp.level] || TIERS[0];
+          const banner = document.createElement('div');
+          banner.className = 'solved-group-card px-4 py-2.5 sm:py-3 text-center';
+          banner.style.backgroundColor = tier.bg;
+          banner.style.borderColor = tier.border;
+
+          const titleEl = document.createElement('div');
+          titleEl.className = 'text-xs sm:text-sm font-black uppercase tracking-wide text-slate-900';
+          titleEl.textContent = grp.title;
+
+          const wordsEl = document.createElement('div');
+          wordsEl.className = 'text-xs sm:text-sm font-bold text-slate-800 mt-0.5 tracking-wide';
+          wordsEl.textContent = grp.words.join(', ');
+
+          banner.appendChild(titleEl);
+          banner.appendChild(wordsEl);
+          solvedContainer.appendChild(banner);
+
+          if (idx === solvedGroups.length - 1 && !gameOver) {
+            spawnSparkles(banner);
+          }
+        });
+      }
+
+      const tileElMap = new Map();
+
+      function syncTileState(btn, word) {
+        const isSelected = selectedWords.includes(word);
+        const isHinted = hintedWords.includes(word);
+        btn.classList.toggle('tile-selected', isSelected);
+        btn.classList.toggle('tile-hint', isHinted && !isSelected);
+      }
+
+      function renderGrid(justShuffled = false) {
+        const frag = document.createDocumentFragment();
+        tileElMap.clear();
+
+        remainingWords.forEach(item => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.dataset.word = item.text;
+          btn.disabled = gameOver;
+
+          const len = item.text.length;
+          const sizeClass = len >= 11
+            ? 'text-[10px] sm:text-xs'
+            : len >= 8
+              ? 'text-[11px] sm:text-sm'
+              : 'text-xs sm:text-base';
+
+          btn.className = [
+            'word-tile h-14 sm:h-[68px] px-1.5 uppercase tracking-tight flex items-center justify-center text-center leading-tight',
+            sizeClass,
+            justShuffled ? 'tile-shuffling' : '',
+            gameOver ? 'opacity-65 cursor-default' : 'cursor-pointer'
+          ].filter(Boolean).join(' ');
+
+          btn.textContent = item.text;
+          syncTileState(btn, item.text);
+          tileElMap.set(item.text, btn);
+          frag.appendChild(btn);
+        });
+
+        wordGrid.innerHTML = '';
+        wordGrid.appendChild(frag);
+      }
+
+      function renderMistakes() {
+        mistakesDots.innerHTML = '';
+        for (let i = 0; i < 4; i++) {
+          const dot = document.createElement('span');
+          const active = i < mistakesLeft;
+          dot.className = active ? 'mistake-orb' : 'mistake-orb used';
+          mistakesDots.appendChild(dot);
+        }
+      }
+
+      function updateActionButtons() {
+        const count = selectedWords.length;
+        btnDeselect.disabled = gameOver || count === 0;
+        btnSubmit.disabled = gameOver || count !== 4;
+        btnShuffle.disabled = gameOver || remainingWords.length <= 1;
+        btnHint.disabled = gameOver || hintsLeft <= 0 || remainingWords.length === 0;
+        btnRevealClue.disabled = gameOver || cluesLeft <= 0 || remainingWords.length === 0;
+        hintBadge.textContent = hintsLeft;
+        clueBadge.textContent = cluesLeft;
+      }
+
+      // ==================== GAME INTERACTIONS ====================
+      wordGrid.addEventListener('click', (e) => {
+        const btn = e.target.closest('.word-tile');
+        if (!btn || !btn.dataset.word) return;
+        handleTileClick(btn.dataset.word);
+      });
+
+      function handleTileClick(word) {
+        if (gameOver) return;
+        const idx = selectedWords.indexOf(word);
+        if (idx > -1) {
+          selectedWords.splice(idx, 1);
+          sfxDeselect();
+        } else {
+          if (selectedWords.length >= 4) {
+            showToast('Select up to 4 words');
+            return;
+          }
+          selectedWords.push(word);
+          sfxSelect();
+        }
+        const btn = tileElMap.get(word);
+        if (btn) syncTileState(btn, word);
+        updateActionButtons();
+      }
+
+      function handleSubmit() {
+        if (gameOver || selectedWords.length !== 4) return;
+
+        const key = [...selectedWords].sort().join('|');
+        if (guessedKeys.has(key)) {
+          showToast('Already guessed!');
+          return;
+        }
+        guessedKeys.add(key);
+
+        const selectedItems = selectedWords.map(w => remainingWords.find(item => item.text === w));
+        const levelCounts = {};
+        selectedItems.forEach(item => {
+          levelCounts[item.level] = (levelCounts[item.level] || 0) + 1;
+        });
+
+        guessHistory.push(selectedItems.map(item => item.level));
+
+        const matchedLevelEntry = Object.entries(levelCounts).find(([, count]) => count === 4);
+
+        if (matchedLevelEntry) {
+          const matchedLevel = Number(matchedLevelEntry[0]);
+          const matchedGroup = currentPuzzle.groups.find(g => g.level === matchedLevel);
+          solvedGroups.push(matchedGroup);
+          remainingWords = remainingWords.filter(item => item.level !== matchedLevel);
+          hintedWords = hintedWords.filter(w => !matchedGroup.words.includes(w));
+          selectedWords = [];
+
+          const groupPoints = 250 + matchedLevel * 100;
+          addScore(groupPoints);
+
+          if (remainingWords.length === 0) {
+            gameOver = true;
+            stopTimer();
+            addScore(mistakesLeft * 150);
+            sfxWin();
+            notifySfxDuck(1300);
+            renderGame();
+            showEndScreen(true, 4);
+          } else {
+            sfxSolve();
+            renderGame();
+          }
+          return;
+        }
+
+        sfxWrong();
+        const isOneAway = Object.values(levelCounts).some(count => count === 3);
+        mistakesLeft = Math.max(0, mistakesLeft - 1);
+
+        selectedWords.forEach(w => {
+          const el = tileElMap.get(w);
+          if (el) {
+            el.classList.remove('tile-wrong');
+            void el.offsetWidth;
+            el.classList.add('tile-wrong');
+            setTimeout(() => el.classList.remove('tile-wrong'), 440);
+          }
+        });
+
+        renderMistakes();
+
+        if (mistakesLeft === 0) {
+          gameOver = true;
+          stopTimer();
+          const solvedBeforeFail = solvedGroups.length;
+          setTimeout(() => {
+            revealRemainingGroups();
+            showEndScreen(false, solvedBeforeFail);
+          }, 460);
+        } else if (isOneAway) {
+          showToast('One away!', 'warn');
+        } else {
+          showToast('Not quite — try again');
+        }
+      }
+
+      function handleHint() {
+        if (gameOver || hintsLeft <= 0 || remainingWords.length === 0) return;
+        const solvedLevels = new Set(solvedGroups.map(g => g.level));
+        const unsolvedGroup = currentPuzzle.groups.find(g => !solvedLevels.has(g.level));
+        if (!unsolvedGroup) return;
+
+        hintsLeft -= 1;
+        hintedWords = unsolvedGroup.words.slice(0, 2);
+        sfxHint();
+        tileElMap.forEach((btn, word) => syncTileState(btn, word));
+        updateActionButtons();
+        showToast('Hint: Look at the glowing pair!', 'warn');
+      }
+
+      function handleRevealClue() {
+        if (gameOver || cluesLeft <= 0 || remainingWords.length === 0) return;
+        const solvedLevels = new Set(solvedGroups.map(g => g.level));
+        const unrevealedGroup = currentPuzzle.groups.find(g => !solvedLevels.has(g.level) && !revealedClueLevels.has(g.level))
+          || currentPuzzle.groups.find(g => !solvedLevels.has(g.level));
+        if (!unrevealedGroup) return;
+
+        cluesLeft -= 1;
+        revealedClueLevels.add(unrevealedGroup.level);
+        sfxHint();
+        updateActionButtons();
+        showToast(`Category Clue: "${unrevealedGroup.title}"`, 'success');
+      }
+
+      function revealRemainingGroups() {
+        const solvedLevels = new Set(solvedGroups.map(g => g.level));
+        currentPuzzle.groups.forEach(grp => {
+          if (!solvedLevels.has(grp.level)) {
+            solvedGroups.push(grp);
+          }
+        });
+        remainingWords = [];
+        selectedWords = [];
+        hintedWords = [];
+        renderGame();
+      }
+
+      function spawnCongratsConfetti() {
+        if (reducedMotion) return;
+        const colors = ['#fde047', '#34d399', '#38bdf8', '#f472b6', '#a855f7', '#fb923c'];
+        const frag = document.createDocumentFragment();
+        const pieces = [];
+        for (let i = 0; i < 32; i++) {
+          const el = document.createElement('div');
+          el.className = 'confetti-piece';
+          el.style.left = `${4 + Math.random() * 92}vw`;
+          el.style.backgroundColor = colors[i % colors.length];
+          el.style.setProperty('--dx', `${(Math.random() - 0.5) * 140}px`);
+          el.style.setProperty('--rot', `${360 + Math.random() * 540}deg`);
+          el.style.setProperty('--dur', `${1.9 + Math.random() * 0.9}s`);
+          el.style.setProperty('--delay', `${Math.random() * 0.35}s`);
+          frag.appendChild(el);
+          pieces.push(el);
+        }
+        document.body.appendChild(frag);
+        setTimeout(() => pieces.forEach(p => p.remove()), 3100);
+      }
+
+      function openCongratsPage(headline, lines) {
+        congratsHeading.textContent = headline;
+        congratsSubtext.textContent = `You solved "${currentPuzzle.title}"!`;
+        congratsTime.textContent = formatTime(elapsedSeconds);
+        congratsMistakes.textContent = `${mistakesLeft}/4`;
+        congratsEmojiGrid.innerHTML = lines.join('<br>');
+
+        // Animate score count-up inside modal
+        congratsScore.textContent = '0';
+        const target = score;
+        const startT = performance.now();
+        function tickCongratsScore(now) {
+          const p = Math.min(1, (now - startT) / 600);
+          const eased = 1 - Math.pow(1 - p, 3);
+          congratsScore.textContent = Math.round(target * eased).toLocaleString();
+          if (p < 1) requestAnimationFrame(tickCongratsScore);
+        }
+        requestAnimationFrame(tickCongratsScore);
+
+        // Sequential 3-star pop-in
+        const earnedStars = mistakesLeft >= 3 ? 3 : mistakesLeft >= 2 ? 2 : 1;
+        congratsStars.innerHTML = '';
+        for (let i = 0; i < 3; i++) {
+          const isLit = i < earnedStars;
+          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('viewBox', '0 0 40 40');
+          svg.setAttribute('class', `w-12 h-12 sm:w-14 sm:h-14 congrats-star drop-shadow`);
+          svg.style.animationDelay = `${0.18 + i * 0.16}s`;
+          svg.innerHTML = `<path d="M20 3l5.1 10.3 11.4 1.7-8.2 8 1.9 11.3L20 29l-10.2 5.3 1.9-11.3-8.2-8 11.4-1.7z"
+            fill="${isLit ? '#fde047' : '#cbd5e1'}"
+            stroke="${isLit ? '#b45309' : '#64748b'}"
+            stroke-width="2.4" stroke-linejoin="round"/>`;
+          congratsStars.appendChild(svg);
+          requestAnimationFrame(() => svg.classList.add('pop'));
+        }
+
+        congratsOverlay.classList.remove('hidden');
+        spawnCongratsConfetti();
+      }
+
+      function reportEdtechraCompletion(won, solvedBeforeFailCount) {
+        if (!edtechraBridge.active || edtechraBridge.reported) return;
+        edtechraBridge.reported = true;
+        const solvedCount = won ? 4 : Math.max(0, Math.min(4, solvedBeforeFailCount));
+        const earned = won
+          ? edtechraBridge.maxPoints
+          : Math.round((solvedCount / 4) * edtechraBridge.maxPoints);
+        const stars = won ? (mistakesLeft >= 3 ? 3 : mistakesLeft >= 2 ? 2 : 1) : 0;
+        const timeSec = Math.max(1, elapsedSeconds || Math.round((Date.now() - edtechraBridge.startTime) / 1000));
+        window.parent.postMessage({
+          type: 'EDTECHRA_GAME_COMPLETE',
+          payload: {
+            gameId: 'connections',
+            scoreEarned: earned,
+            maxAvailablePoints: edtechraBridge.maxPoints,
+            completionStatus: 'completed',
+            timeTakenSeconds: timeSec,
+            details: {
+              solved: solvedCount,
+              total: 4,
+              questionsCompleted: 4,
+              correctAnswers: solvedCount,
+              mistakesUsed: 4 - mistakesLeft,
+              mistakesRemaining: mistakesLeft,
+              stars,
+              hintsUsed: Math.max(0, 3 - hintsLeft),
+              cluesUsed: Math.max(0, 3 - cluesLeft),
+              rawScore: score
+            }
+          }
+        }, '*');
+      }
+
+      function showEndScreen(won, solvedBeforeFail = solvedGroups.length) {
+        resultCard.classList.remove('hidden');
+        const lines = guessHistory.map(row => row.map(lvl => TIERS[lvl].emoji).join(''));
+        emojiGrid.innerHTML = lines.join('<br>');
+
+        if (won) {
+          const msg = mistakesLeft === 4 ? 'Perfection!' : mistakesLeft >= 2 ? 'Great Job!' : 'Level Complete!';
+          resultTitle.textContent = msg;
+          resultSubtitle.textContent = `Solved "${currentPuzzle.title}" in ${formatTime(elapsedSeconds)} with ${mistakesLeft} mistake${mistakesLeft === 1 ? '' : 's'} left.`;
+          if (edtechraBridge.active) {
+            if (edtechraBridge.mode === 'preview') {
+              btnPlayNext.textContent = 'Play Again ↻';
+              btnCongratsNext.textContent = 'Play Again ↻';
+            }
+            setTimeout(() => openCongratsPage(msg, lines), 420);
+            setTimeout(() => reportEdtechraCompletion(true, 4), 1350);
+          } else {
+            setTimeout(() => openCongratsPage(msg, lines), 420);
+          }
+        } else {
+          resultTitle.textContent = 'Next Time!';
+          resultSubtitle.textContent = 'All four groups have been revealed above so you can review the connections.';
+          if (edtechraBridge.active) {
+            if (edtechraBridge.mode === 'preview') {
+              btnPlayNext.textContent = 'Play Again ↻';
+            }
+            setTimeout(() => reportEdtechraCompletion(false, solvedBeforeFail), 1500);
+          }
+        }
+      }
+
+      function copyResultsToClipboard() {
+        const lines = guessHistory.map(row => row.map(lvl => TIERS[lvl].emoji).join(''));
+        const text = `Connections: ${currentPuzzle.title}\nTime: ${formatTime(elapsedSeconds)} | Score: ${score}\n` + lines.join('\n');
+        copyText(text, 'Results copied to clipboard!');
+      }
+
+      function copyText(text, successMsg) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text)
+            .then(() => showToast(successMsg, 'success'))
+            .catch(() => fallbackCopy(text, successMsg));
+        } else {
+          fallbackCopy(text, successMsg);
+        }
+      }
+
+      function fallbackCopy(text, successMsg) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand('copy');
+          showToast(successMsg, 'success');
+        } catch (e) {
+          showToast('Could not copy automatically');
+        }
+        ta.remove();
+      }
+
+      // ==================== TEACHER STUDIO ====================
+      function buildTeacherGroupEditors() {
+        teacherGroupsContainer.innerHTML = '';
+        TIERS.forEach((tier, idx) => {
+          const card = document.createElement('div');
+          card.className = 'rounded-2xl border-2 p-4 space-y-3';
+          card.style.borderColor = tier.border;
+          card.style.backgroundColor = tier.bg + '28';
+
+          const badge = document.createElement('span');
+          badge.className = 'inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider px-3 py-1 rounded-full text-slate-900 border';
+          badge.style.backgroundColor = tier.bg;
+          badge.style.borderColor = tier.border;
+          badge.textContent = `Group ${idx + 1} · ${tier.name}`;
+          card.appendChild(badge);
+
+          const titleInput = document.createElement('input');
+          titleInput.type = 'text';
+          titleInput.id = `grpTitle_${idx}`;
+          titleInput.maxLength = 60;
+          titleInput.placeholder = 'Category connection (e.g., Baby Animals)';
+          titleInput.className = 'w-full bg-white rounded-xl border border-slate-300 px-3 py-2 text-sm font-bold text-slate-900 focus:outline-none focus:border-purple-600';
+          card.appendChild(titleInput);
+
+          const wordsRow = document.createElement('div');
+          wordsRow.className = 'grid grid-cols-2 sm:grid-cols-4 gap-2';
+          for (let w = 0; w < 4; w++) {
+            const wordInput = document.createElement('input');
+            wordInput.type = 'text';
+            wordInput.id = `grpWord_${idx}_${w}`;
+            wordInput.maxLength = 24;
+            wordInput.placeholder = `Word ${w + 1}`;
+            wordInput.className = 'w-full bg-white rounded-xl border border-slate-300 px-3 py-2 text-xs sm:text-sm font-extrabold uppercase text-slate-900 focus:outline-none focus:border-purple-600';
+
+            if (w === 0) {
+              wordInput.addEventListener('input', (e) => {
+                const val = e.target.value;
+                if (val.includes(',')) {
+                  const parts = val.split(',').map(s => s.trim()).filter(Boolean);
+                  if (parts.length >= 2) {
+                    for (let k = 0; k < 4; k++) {
+                      const slot = document.getElementById(`grpWord_${idx}_${k}`);
+                      if (slot && parts[k] !== undefined) {
+                        slot.value = parts[k].toUpperCase();
+                      }
+                    }
+                  }
+                }
+              });
+            }
+            wordsRow.appendChild(wordInput);
+          }
+          card.appendChild(wordsRow);
+          teacherGroupsContainer.appendChild(card);
+        });
+      }
+
+      function fillTeacherForm(puzzle) {
+        teacherErrorBox.classList.add('hidden');
+        teacherPuzzleTitle.value = puzzle.isSample ? `${puzzle.title.replace(/^Level \d+:\s*/, '')} (Copy)` : puzzle.title;
+        puzzle.groups.forEach((grp, idx) => {
+          const titleEl = document.getElementById(`grpTitle_${idx}`);
+          if (titleEl) titleEl.value = grp.title;
+          for (let w = 0; w < 4; w++) {
+            const wordEl = document.getElementById(`grpWord_${idx}_${w}`);
+            if (wordEl) wordEl.value = grp.words[w] || '';
+          }
+        });
+      }
+
+      function clearTeacherForm() {
+        teacherErrorBox.classList.add('hidden');
+        teacherPuzzleTitle.value = '';
+        for (let idx = 0; idx < 4; idx++) {
+          document.getElementById(`grpTitle_${idx}`).value = '';
+          for (let w = 0; w < 4; w++) {
+            document.getElementById(`grpWord_${idx}_${w}`).value = '';
+          }
+        }
+      }
+
+      function readAndValidateTeacherForm() {
+        teacherErrorBox.classList.add('hidden');
+        const title = teacherPuzzleTitle.value.trim() || 'Custom Teacher Puzzle';
+        const groups = [];
+        const seenWords = new Set();
+
+        for (let idx = 0; idx < 4; idx++) {
+          const grpTitle = document.getElementById(`grpTitle_${idx}`).value.trim();
+          if (!grpTitle) {
+            return { error: `Please enter a category connection name for Group ${idx + 1}.` };
+          }
+          const words = [];
+          for (let w = 0; w < 4; w++) {
+            const raw = document.getElementById(`grpWord_${idx}_${w}`).value.trim().toUpperCase();
+            if (!raw) {
+              return { error: `Please fill in all 4 words for Group ${idx + 1} ("${grpTitle}").` };
+            }
+            if (seenWords.has(raw)) {
+              return { error: `Duplicate word "${raw}" found. All 16 words in the grid must be unique.` };
+            }
+            seenWords.add(raw);
+            words.push(raw);
+          }
+          groups.push({ title: grpTitle, level: idx, words });
+        }
+
+        return {
+          puzzle: {
+            id: 'custom-' + Date.now(),
+            title,
+            isSample: false,
+            groups
+          }
+        };
+      }
+
+      function showTeacherError(msg) {
+        teacherErrorBox.textContent = msg;
+        teacherErrorBox.classList.remove('hidden');
+      }
+
+      function renderSavedPuzzlesList() {
+        savedCountBadge.textContent = `${customPuzzles.length} saved`;
+        if (customPuzzles.length === 0) {
+          savedPuzzlesList.innerHTML = '<p class="text-xs text-slate-500">No custom puzzles saved yet. Build one above and click "Save to Library".</p>';
+          return;
+        }
+        savedPuzzlesList.innerHTML = '';
+        customPuzzles.forEach(p => {
+          const row = document.createElement('div');
+          row.className = 'flex items-center justify-between gap-2 bg-amber-50/70 border border-amber-200 rounded-xl px-3 py-2';
+
+          const info = document.createElement('div');
+          info.className = 'min-w-0';
+          const nameEl = document.createElement('div');
+          nameEl.className = 'font-bold text-slate-900 truncate text-xs sm:text-sm';
+          nameEl.textContent = p.title;
+          const subEl = document.createElement('div');
+          subEl.className = 'text-[11px] text-slate-500 truncate';
+          subEl.textContent = p.groups.map(g => g.title).join(' · ');
+          info.appendChild(nameEl);
+          info.appendChild(subEl);
+
+          const actions = document.createElement('div');
+          actions.className = 'flex items-center gap-1.5 shrink-0';
+
+          const btnPlay = document.createElement('button');
+          btnPlay.type = 'button';
+          btnPlay.className = 'px-2.5 py-1 rounded-lg bg-[#3b1768] text-white text-xs font-bold hover:opacity-90 transition';
+          btnPlay.textContent = 'Play';
+          btnPlay.addEventListener('click', () => {
+            switchMode('play');
+            startPuzzle(p);
+          });
+
+          const btnLoad = document.createElement('button');
+          btnLoad.type = 'button';
+          btnLoad.className = 'px-2.5 py-1 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-bold hover:bg-slate-100 transition';
+          btnLoad.textContent = 'Edit';
+          btnLoad.addEventListener('click', () => {
+            fillTeacherForm(p);
+            showToast('Loaded into editor');
+          });
+
+          const btnDel = document.createElement('button');
+          btnDel.type = 'button';
+          btnDel.className = 'px-2 py-1 rounded-lg text-rose-600 hover:bg-rose-50 text-xs font-bold transition';
+          btnDel.textContent = 'Delete';
+          btnDel.addEventListener('click', () => {
+            customPuzzles = customPuzzles.filter(item => item.id !== p.id);
+            persistCustomPuzzles();
+            renderSavedPuzzlesList();
+            populatePuzzleSelect(currentPuzzle ? currentPuzzle.id : SAMPLE_PUZZLES[0].id);
+            showToast('Puzzle deleted');
+          });
+
+          actions.appendChild(btnPlay);
+          actions.appendChild(btnLoad);
+          actions.appendChild(btnDel);
+
+          row.appendChild(info);
+          row.appendChild(actions);
+          savedPuzzlesList.appendChild(row);
+        });
+      }
+
+      // ==================== NAVIGATION & MODALS ====================
+      function switchMode(mode) {
+        currentMode = mode;
+        if (mode === 'play') {
+          viewPlay.classList.remove('hidden');
+          viewTeacher.classList.add('hidden');
+        } else {
+          viewTeacher.classList.remove('hidden');
+          viewPlay.classList.add('hidden');
+        }
+      }
+
+      // ==================== EVENT LISTENERS ====================
+      btnHome.addEventListener('click', () => {
+        sfxClick();
+        if (edtechraBridge.active) {
+          window.parent.postMessage({ type: 'EDTECHRA_GAME_EXIT' }, '*');
+          return;
+        }
+        if (currentMode === 'teacher') {
+          switchMode('play');
+        } else {
+          settingsModal.classList.remove('hidden');
+        }
+      });
+
+      btnHelp.addEventListener('click', () => {
+        sfxClick();
+        helpModal.classList.remove('hidden');
+      });
+      btnCloseHelp.addEventListener('click', () => helpModal.classList.add('hidden'));
+      btnGotItHelp.addEventListener('click', () => {
+        sfxClick();
+        helpModal.classList.add('hidden');
+      });
+      helpModal.addEventListener('click', (e) => {
+        if (e.target === helpModal) helpModal.classList.add('hidden');
+      });
+
+      btnSettings.addEventListener('click', () => {
+        sfxClick();
+        settingsModal.classList.remove('hidden');
+      });
+      btnCloseSettings.addEventListener('click', () => settingsModal.classList.add('hidden'));
+      settingsModal.addEventListener('click', (e) => {
+        if (e.target === settingsModal) settingsModal.classList.add('hidden');
+      });
+
+      btnSound.addEventListener('click', () => {
+        soundEnabled = !soundEnabled;
+        iconSoundOn.classList.toggle('hidden', !soundEnabled);
+        iconSoundOff.classList.toggle('hidden', soundEnabled);
+        if (soundEnabled) sfxClick();
+        showToast(soundEnabled ? 'Sound on' : 'Sound muted');
+      });
+
+      btnReducedMotion.addEventListener('click', () => {
+        reducedMotion = !reducedMotion;
+        document.body.classList.toggle('reduced-motion', reducedMotion);
+        btnReducedMotion.textContent = reducedMotion ? 'On' : 'Off';
+        sfxClick();
+      });
+
+      puzzleSelect.addEventListener('change', (e) => {
+        const chosen = getAllPuzzles().find(p => p.id === e.target.value);
+        if (chosen) {
+          startPuzzle(chosen);
+          settingsModal.classList.add('hidden');
+        }
+      });
+
+      btnResetPuzzle.addEventListener('click', () => {
+        sfxClick();
+        if (currentPuzzle) startPuzzle(currentPuzzle);
+        settingsModal.classList.add('hidden');
+      });
+
+      btnEditCurrent.addEventListener('click', () => {
+        sfxClick();
+        if (currentPuzzle) {
+          fillTeacherForm(currentPuzzle);
+          switchMode('teacher');
+          settingsModal.classList.add('hidden');
+        }
+      });
+
+      btnOpenTeacherStudio.addEventListener('click', () => {
+        sfxClick();
+        switchMode('teacher');
+        settingsModal.classList.add('hidden');
+      });
+
+      btnBackToPlay.addEventListener('click', () => {
+        sfxClick();
+        switchMode('play');
+      });
+
+      btnHint.addEventListener('click', handleHint);
+      btnRevealClue.addEventListener('click', handleRevealClue);
+
+      btnShuffle.addEventListener('click', () => {
+        if (gameOver) return;
+        sfxShuffle();
+        remainingWords = shuffleArray(remainingWords);
+        renderGrid(true);
+      });
+
+      btnDeselect.addEventListener('click', () => {
+        if (gameOver || selectedWords.length === 0) return;
+        const prev = [...selectedWords];
+        selectedWords = [];
+        sfxDeselect();
+        prev.forEach(w => {
+          const btn = tileElMap.get(w);
+          if (btn) syncTileState(btn, w);
+        });
+        updateActionButtons();
+      });
+
+      btnSubmit.addEventListener('click', handleSubmit);
+      btnCopyResults.addEventListener('click', copyResultsToClipboard);
+
+      btnPlayNext.addEventListener('click', () => {
+        sfxClick();
+        if (edtechraBridge.active && currentPuzzle) {
+          if (edtechraBridge.mode === 'preview') {
+            startPuzzle(currentPuzzle);
+          } else {
+            window.parent.postMessage({ type: 'EDTECHRA_GAME_EXIT' }, '*');
+          }
+          return;
+        }
+        const all = getAllPuzzles();
+        const currIdx = all.findIndex(p => p.id === currentPuzzle.id);
+        const nextPuzzle = all[(currIdx + 1) % all.length];
+        startPuzzle(nextPuzzle);
+      });
+
+      btnCongratsReview.addEventListener('click', () => {
+        sfxClick();
+        congratsOverlay.classList.add('hidden');
+      });
+
+      btnCongratsCopy.addEventListener('click', copyResultsToClipboard);
+
+      btnCongratsNext.addEventListener('click', () => {
+        sfxClick();
+        congratsOverlay.classList.add('hidden');
+        if (edtechraBridge.active && currentPuzzle) {
+          if (edtechraBridge.mode === 'preview') {
+            startPuzzle(currentPuzzle);
+          } else {
+            window.parent.postMessage({ type: 'EDTECHRA_GAME_EXIT' }, '*');
+          }
+          return;
+        }
+        const all = getAllPuzzles();
+        const currIdx = all.findIndex(p => p.id === currentPuzzle.id);
+        const nextPuzzle = all[(currIdx + 1) % all.length];
+        startPuzzle(nextPuzzle);
+      });
+
+      btnTeacherLoadSample.addEventListener('click', () => {
+        fillTeacherForm(SAMPLE_PUZZLES[0]);
+        showToast('Sample loaded into editor');
+      });
+
+      btnTeacherClear.addEventListener('click', clearTeacherForm);
+
+      btnSavePuzzle.addEventListener('click', () => {
+        const res = readAndValidateTeacherForm();
+        if (res.error) {
+          showTeacherError(res.error);
+          return;
+        }
+        customPuzzles.unshift(res.puzzle);
+        persistCustomPuzzles();
+        renderSavedPuzzlesList();
+        populatePuzzleSelect(res.puzzle.id);
+        showToast('Saved to your library!', 'success');
+      });
+
+      btnShareLink.addEventListener('click', () => {
+        const res = readAndValidateTeacherForm();
+        if (res.error) {
+          showTeacherError(res.error);
+          return;
+        }
+        const hash = encodePuzzleToHash(res.puzzle);
+        const baseUrl = window.location.href.split('#')[0];
+        copyText(baseUrl + hash, 'Share link copied!');
+      });
+
+      btnLaunchGame.addEventListener('click', () => {
+        const res = readAndValidateTeacherForm();
+        if (res.error) {
+          showTeacherError(res.error);
+          return;
+        }
+        const exists = customPuzzles.some(p =>
+          p.title === res.puzzle.title &&
+          JSON.stringify(p.groups) === JSON.stringify(res.puzzle.groups)
+        );
+        if (!exists) {
+          customPuzzles.unshift(res.puzzle);
+          persistCustomPuzzles();
+          renderSavedPuzzlesList();
+        }
+        switchMode('play');
+        startPuzzle(res.puzzle);
+        showToast('Custom game launched!', 'success');
+      });
+
+      // ==================== INIT & EDTECHRA BRIDGE ====================
+      function init() {
+        loadCustomPuzzles();
+        buildTeacherGroupEditors();
+        fillTeacherForm(SAMPLE_PUZZLES[0]);
+        renderSavedPuzzlesList();
+
+        if (window.self === window.top) {
+          const sharedPuzzle = decodePuzzleFromHash();
+          if (sharedPuzzle) {
+            customPuzzles.unshift(sharedPuzzle);
+            persistCustomPuzzles();
+            renderSavedPuzzlesList();
+            startPuzzle(sharedPuzzle);
+          } else {
+            startPuzzle(SAMPLE_PUZZLES[0]);
+          }
+        } else {
+          // Wait briefly for parent EDTECHRA_INIT_GAME before initializing demo fallback
+          startPuzzle(SAMPLE_PUZZLES[0]);
+        }
+
+        window.parent.postMessage({ type: 'EDTECHRA_GAME_READY', gameId: 'connections' }, '*');
+      }
+
+      window.addEventListener('message', (ev) => {
+        const msg = ev.data;
+        if (!msg || msg.type !== 'EDTECHRA_INIT_GAME') return;
+        const p = msg.payload && typeof msg.payload === 'object' ? msg.payload : msg;
+        const cfg = p.config || {};
+
+        edtechraBridge.active = true;
+        edtechraBridge.mode = p.mode || 'student';
+        edtechraBridge.levelNumber = Number(p.levelNumber) || 1;
+        edtechraBridge.levelTitle = (cfg.title || p.levelTitle || p.title || 'Connections').trim();
+        edtechraBridge.maxPoints = Math.max(1, Number(p.maxPoints) || 100);
+        edtechraBridge.startTime = Date.now();
+        edtechraBridge.reported = false;
+
+        score = 0;
+        displayedScore = 0;
+        if (scoreValue) scoreValue.textContent = '0';
+
+        // Hide standalone Teacher Studio & puzzle selector when hosted in EdTechra classroom
+        btnSettings.classList.add('hidden');
+        settingsModal.classList.add('hidden');
+        switchMode('play');
+
+        const rawGroups = Array.isArray(cfg.groups) ? cfg.groups : [];
+        if (rawGroups.length === 4) {
+          const puzzle = {
+            id: p.levelId || 'edtechra-level-' + edtechraBridge.levelNumber,
+            title: edtechraBridge.levelTitle,
+            isSample: false,
+            groups: rawGroups.map((g, idx) => ({
+              title: String(g.title || `Category ${idx + 1}`).trim(),
+              level: [0, 1, 2, 3].includes(Number(g.level)) ? Number(g.level) : idx,
+              words: (Array.isArray(g.words) ? g.words : []).slice(0, 4).map(w => String(w || '').trim().toUpperCase())
+            }))
+          };
+          startPuzzle(puzzle);
+        }
+      });
+
+      init();
+    })();
+  </script>
+</body>
+</html>

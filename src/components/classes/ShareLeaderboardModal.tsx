@@ -1,25 +1,48 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Share2,
-  Copy,
+  AlertCircle,
+  Archive,
+  Award,
   Check,
-  X,
-  Trophy,
+  Copy,
+  Download,
+  ExternalLink,
+  Eye,
+  Link2,
   Loader2,
-  Sparkles
+  MessageCircle,
+  RefreshCw,
+  ShieldOff,
+  X,
 } from 'lucide-react';
-import { ClassroomLeaderboardEntry } from '@/types/classroom';
 import { classroomPointsService } from '@/services/classroomPointsService';
+import { ClassroomLeaderboardEntry } from '@/types/classroom';
 import {
-  LEADERBOARD_SHARE_TITLE,
-  formatLeaderboardShareText,
-  sanitizeLeaderboardStudentName
-} from '@/utils/leaderboardResetUtils';
+  AchievementSnapshot,
+  buildAchievementSnapshot,
+  encodeSnapshotToken,
+  getGallerySnapshots,
+  revokeSnapshotInGallery,
+  saveSnapshotToGallery,
+} from '@/utils/classChampionsUtils';
+import {
+  downloadCertificateBlob,
+  PreloadedCertificateAssets,
+  preloadCertificateAssets,
+  renderCertificateSvgToPngBlob,
+  shareCertificateOnWhatsApp,
+} from '@/utils/certificateExportUtils';
+import { ClassChampionsCertificateSvg } from './champions/ClassChampionsCertificateSvg';
+
+export type ShareQuickAction = 'preview' | 'whatsapp' | 'download' | 'link';
 
 export interface ShareLeaderboardModalProps {
   isOpen: boolean;
   onClose: () => void;
   classroomId?: string;
+  classroomName?: string;
+  periodLabel?: string;
+  initialAction?: ShareQuickAction;
   initialEntries?: ClassroomLeaderboardEntry[];
   onRefreshParentLeaderboard?: () => Promise<void> | void;
   onShowToast?: (message: string) => void;
@@ -29,121 +52,264 @@ export const ShareLeaderboardModal: React.FC<ShareLeaderboardModalProps> = ({
   isOpen,
   onClose,
   classroomId,
+  classroomName = 'Classroom',
+  periodLabel = 'Current Term',
+  initialAction = 'preview',
   initialEntries = [],
   onRefreshParentLeaderboard,
-  onShowToast
+  onShowToast,
 }) => {
-  const [entries, setEntries] = useState<ClassroomLeaderboardEntry[]>(initialEntries);
-  const [isLoading, setIsLoading] = useState(false);
-  const [hasCopied, setHasCopied] = useState(false);
-  const [copyError, setCopyError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'preview' | 'gallery'>('preview');
+  const [snapshot, setSnapshot] = useState<AchievementSnapshot | null>(null);
+  const [gallerySnapshots, setGallerySnapshots] = useState<AchievementSnapshot[]>([]);
+  const [assets, setAssets] = useState<PreloadedCertificateAssets>({
+    logoUrl: '/images/edtechra-classroom-logo.png',
+    avatarDataUrls: {},
+  });
 
-  // Sync entries from props when modal opens or initialEntries change
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [isLoadingAssets, setIsLoadingAssets] = useState(false);
+  const [isExporting, setIsExporting] = useState<'png' | 'whatsapp' | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const autoActionHandledRef = useRef(false);
+  const initialEntriesRef = useRef(initialEntries);
+  const refreshParentRef = useRef(onRefreshParentLeaderboard);
+
   useEffect(() => {
-    if (initialEntries && initialEntries.length > 0) {
-      setEntries(initialEntries);
-    }
+    initialEntriesRef.current = initialEntries;
   }, [initialEntries]);
 
-  // Fetch authoritative fresh leaderboard data from database when modal opens
-  const fetchFreshEntries = useCallback(async () => {
-    if (!classroomId) return;
-    setIsLoading(true);
-    setCopyError(null);
+  useEffect(() => {
+    refreshParentRef.current = onRefreshParentLeaderboard;
+  }, [onRefreshParentLeaderboard]);
+
+  const refreshGallery = useCallback(() => {
+    const scopeId = classroomId || 'classroom';
+    setGallerySnapshots(getGallerySnapshots(scopeId));
+  }, [classroomId]);
+
+  const loadSnapshotAndAssets = useCallback(async () => {
+    setIsLoadingData(true);
+    setErrorMsg(null);
+
+    let resolvedEntries = initialEntriesRef.current;
     try {
-      const fresh = await classroomPointsService.getClassroomLeaderboard(classroomId, {
-        throwOnError: true
-      });
-      setEntries(fresh);
-      // Also notify parent component to sync
-      if (onRefreshParentLeaderboard) {
-        await onRefreshParentLeaderboard();
+      if (classroomId) {
+        resolvedEntries = await classroomPointsService.getClassroomLeaderboard(classroomId, {
+          throwOnError: true,
+        });
+        await refreshParentRef.current?.();
       }
-    } catch (err: any) {
-      // Keep existing entries if refresh fails, but note in console
-      console.warn('Share modal background refresh warning:', err?.message || err);
+    } catch {
+      if (!resolvedEntries || resolvedEntries.length === 0) {
+        setErrorMsg('Unable to refresh the latest leaderboard. Using available data.');
+      }
     } finally {
-      setIsLoading(false);
+      setIsLoadingData(false);
     }
-  }, [classroomId, onRefreshParentLeaderboard]);
+
+    const nextSnapshot = buildAchievementSnapshot({
+      classroomId: classroomId || 'classroom',
+      classroomName: classroomName || 'Classroom',
+      periodLabel: periodLabel || 'Current Term',
+      entries: resolvedEntries || [],
+    });
+
+    setSnapshot(nextSnapshot);
+    setIsLoadingAssets(true);
+    try {
+      const preloaded = await preloadCertificateAssets(nextSnapshot);
+      setAssets(preloaded);
+    } finally {
+      setIsLoadingAssets(false);
+    }
+  }, [classroomId, classroomName, periodLabel]);
 
   useEffect(() => {
-    if (isOpen && classroomId) {
-      setHasCopied(false);
-      setCopyError(null);
-      fetchFreshEntries();
-    }
-  }, [isOpen, classroomId, fetchFreshEntries]);
-
-  if (!isOpen) return null;
-
-  // Take top 3 for display and sharing
-  const topEntries = entries.slice(0, 3);
-  const shareText = formatLeaderboardShareText(topEntries, 3);
-  const canUseNativeShare =
-    typeof navigator !== 'undefined' &&
-    typeof navigator.share === 'function';
-
-  const handleCopyUpdate = async () => {
-    setCopyError(null);
-    try {
-      if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareText);
-      } else {
-        // Fallback for older browsers
-        const textarea = document.createElement('textarea');
-        textarea.value = shareText;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.focus();
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-      }
-      setHasCopied(true);
-      onShowToast?.('Leaderboard update copied to clipboard.');
-      setTimeout(() => setHasCopied(false), 2500);
-    } catch (err: any) {
-      setCopyError('Unable to copy to clipboard. Please copy manually.');
-    }
-  };
-
-  const handleNativeShare = async () => {
-    if (!canUseNativeShare) {
-      handleCopyUpdate();
+    if (!isOpen) {
+      autoActionHandledRef.current = false;
+      setCopiedLink(false);
+      setErrorMsg(null);
       return;
     }
 
-    try {
-      await navigator.share({
-        title: LEADERBOARD_SHARE_TITLE,
-        text: shareText
-      });
-    } catch (err: any) {
-      // User cancelled native share sheet or it was aborted - ignore AbortError
-      if (err?.name !== 'AbortError') {
-        // Fallback to clipboard if share sheet encountered a system error
-        handleCopyUpdate();
+    setActiveTab('preview');
+    refreshGallery();
+    void loadSnapshotAndAssets();
+  }, [isOpen, refreshGallery, loadSnapshotAndAssets]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
       }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  const buildShareLinkForSnapshot = useCallback(
+    (targetSnapshot: AchievementSnapshot): string => {
+      saveSnapshotToGallery(targetSnapshot);
+      refreshGallery();
+      const token = encodeSnapshotToken(targetSnapshot);
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      return `${origin}/champions/certificate?s=${encodeURIComponent(token)}`;
+    },
+    [refreshGallery]
+  );
+
+  const handleCopyShareLink = useCallback(
+    async (targetSnapshot: AchievementSnapshot | null = snapshot) => {
+      if (!targetSnapshot) return;
+      try {
+        const shareUrl = buildShareLinkForSnapshot(targetSnapshot);
+        await navigator.clipboard.writeText(shareUrl);
+        setCopiedLink(true);
+        onShowToast?.('Shareable certificate link copied!');
+        window.setTimeout(() => setCopiedLink(false), 2500);
+      } catch {
+        setErrorMsg('Could not copy to clipboard automatically. Please try again.');
+      }
+    },
+    [snapshot, buildShareLinkForSnapshot, onShowToast]
+  );
+
+  const handleDownloadPng = useCallback(async () => {
+    if (!snapshot || !svgRef.current) return;
+    setIsExporting('png');
+    setErrorMsg(null);
+    try {
+      saveSnapshotToGallery(snapshot);
+      refreshGallery();
+      const blob = await renderCertificateSvgToPngBlob(svgRef.current, 1200, 1300);
+      downloadCertificateBlob(blob, snapshot.classroomName);
+      onShowToast?.('Achievement certificate downloaded!');
+    } catch {
+      setErrorMsg('Failed to generate PNG certificate. Please try again.');
+    } finally {
+      setIsExporting(null);
+    }
+  }, [snapshot, refreshGallery, onShowToast]);
+
+  const handleShareWhatsApp = useCallback(async () => {
+    if (!snapshot || !svgRef.current) return;
+    setIsExporting('whatsapp');
+    setErrorMsg(null);
+    try {
+      const shareUrl = buildShareLinkForSnapshot(snapshot);
+      const blob = await renderCertificateSvgToPngBlob(svgRef.current, 1200, 1300);
+      const mode = await shareCertificateOnWhatsApp({
+        blob,
+        classroomName: snapshot.classroomName,
+        shareUrl,
+      });
+
+      if (mode === 'native_file') {
+        onShowToast?.('Certificate ready to share!');
+      } else {
+        onShowToast?.('Certificate PNG downloaded & WhatsApp opened!');
+      }
+    } catch (err) {
+      if ((err as DOMException)?.name !== 'AbortError') {
+        setErrorMsg('Could not launch WhatsApp share. You can download PNG and share manually.');
+      }
+    } finally {
+      setIsExporting(null);
+    }
+  }, [snapshot, buildShareLinkForSnapshot, onShowToast]);
+
+  useEffect(() => {
+    if (
+      !isOpen ||
+      autoActionHandledRef.current ||
+      initialAction === 'preview' ||
+      isLoadingData ||
+      isLoadingAssets ||
+      !snapshot ||
+      !svgRef.current
+    ) {
+      return;
+    }
+
+    autoActionHandledRef.current = true;
+    const timer = window.setTimeout(() => {
+      if (initialAction === 'link') {
+        void handleCopyShareLink(snapshot);
+      } else if (initialAction === 'download') {
+        void handleDownloadPng();
+      } else if (initialAction === 'whatsapp') {
+        void handleShareWhatsApp();
+      }
+    }, 120);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    isOpen,
+    initialAction,
+    isLoadingData,
+    isLoadingAssets,
+    snapshot,
+    handleCopyShareLink,
+    handleDownloadPng,
+    handleShareWhatsApp,
+  ]);
+
+  const handlePreviewGalleryItem = async (item: AchievementSnapshot) => {
+    setSnapshot(item);
+    setActiveTab('preview');
+    setIsLoadingAssets(true);
+    try {
+      const preloaded = await preloadCertificateAssets(item);
+      setAssets(preloaded);
+    } finally {
+      setIsLoadingAssets(false);
     }
   };
 
+  const handleRevokeLink = (item: AchievementSnapshot) => {
+    revokeSnapshotInGallery(item.classroomId, item.id);
+    refreshGallery();
+    if (snapshot?.id === item.id) {
+      setSnapshot({ ...snapshot, revoked: true });
+    }
+    onShowToast?.('Certificate link revoked.');
+  };
+
+  if (!isOpen) return null;
+
+  const isBusy = isLoadingData || isLoadingAssets;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white rounded-3xl max-w-md w-full p-6 border border-stone-200 shadow-2xl space-y-5 animate-in zoom-in-95 flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-stone-100 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-500 shadow-2xs">
-              <Trophy className="w-5 h-5 text-amber-500" />
+    <div
+      className="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cc-share-modal-title"
+    >
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        {/* Top Modal Header */}
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3 bg-gradient-to-r from-indigo-50/70 via-white to-amber-50/60">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
+              <Award className="w-5 h-5" />
             </div>
-            <div>
-              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                <span>Share Leaderboard</span>
+            <div className="min-w-0">
+              <h3
+                id="cc-share-modal-title"
+                className="text-base sm:text-lg font-extrabold text-slate-900 truncate"
+              >
+                Share Class Champions Certificate
               </h3>
-              <p className="text-xs text-slate-400 font-medium">
-                Broadcast current rankings to your students or team.
+              <p className="text-xs text-slate-500 truncate">
+                {classroomName} • {periodLabel}
               </p>
             </div>
           </div>
@@ -151,117 +317,235 @@ export const ShareLeaderboardModal: React.FC<ShareLeaderboardModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-stone-100 transition-all cursor-pointer"
-            aria-label="Close"
+            aria-label="Close modal"
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Copy Error Banner */}
-        {copyError && (
-          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-xl">
-            {copyError}
-          </div>
-        )}
-
-        {/* Preview Card */}
-        <div className="relative rounded-2xl bg-gradient-to-br from-stone-900 via-slate-900 to-slate-950 p-5 text-white shadow-inner border border-stone-800 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-            <div className="flex items-center gap-2">
-              <Trophy className="w-4 h-4 text-amber-400" />
-              <span className="text-xs font-black tracking-wide text-amber-300 uppercase">
-                {LEADERBOARD_SHARE_TITLE}
-              </span>
-            </div>
-            {isLoading && (
-              <span className="flex items-center gap-1 text-[10px] text-slate-400 font-semibold">
-                <Loader2 className="w-3 h-3 animate-spin text-sky-400" />
-                <span>Syncing fresh XP...</span>
-              </span>
-            )}
-          </div>
-
-          {/* Student Rankings List */}
-          {topEntries.length > 0 ? (
-            <div className="space-y-2.5">
-              {topEntries.map((entry, index) => {
-                const rank = index + 1;
-                const medalColors =
-                  rank === 1
-                    ? 'text-amber-400 bg-amber-400/10 border-amber-400/20'
-                    : rank === 2
-                    ? 'text-slate-300 bg-slate-300/10 border-slate-300/20'
-                    : 'text-amber-600 bg-amber-600/10 border-amber-600/20';
-
-                return (
-                  <div
-                    key={entry.student_id || `${entry.name}-${index}`}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-all"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span
-                        className={`w-6 h-6 rounded-lg border flex items-center justify-center text-xs font-black shrink-0 ${medalColors}`}
-                      >
-                        {rank}
-                      </span>
-                      <span className="text-sm font-bold text-white truncate">
-                        {sanitizeLeaderboardStudentName(entry.name || 'Anonymous Student')}
-                      </span>
-                    </div>
-                    <span className="text-xs font-black text-amber-300 shrink-0 ml-2">
-                      {Number(entry.points) || 0} XP
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="py-6 text-center space-y-1">
-              <p className="text-xs text-slate-300 font-semibold">No student scores recorded yet</p>
-              <p className="text-[11px] text-slate-500">Students will appear once classroom points are earned.</p>
-            </div>
-          )}
-
-          {/* Card Footer Motto */}
-          <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-            <span className="italic font-medium">Keep learning. Keep growing.</span>
-            <Sparkles className="w-3.5 h-3.5 text-amber-400/80" />
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-1">
-          {canUseNativeShare && (
+        {/* Navigation Tabs */}
+        <div className="px-5 pt-3 pb-2 border-b border-slate-100 flex items-center justify-between gap-2 bg-slate-50/60 flex-wrap">
+          <div className="inline-flex rounded-xl bg-slate-200/70 p-1 gap-1">
             <button
               type="button"
-              onClick={handleNativeShare}
-              disabled={isLoading}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-slate-800 text-xs font-black transition-all cursor-pointer active:scale-95 border border-stone-200"
+              onClick={() => setActiveTab('preview')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'preview'
+                  ? 'bg-white text-indigo-700 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
             >
-              <Share2 className="w-3.5 h-3.5 text-slate-700" />
-              <span>Native Share</span>
+              <Eye className="w-3.5 h-3.5" />
+              Certificate Preview
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('gallery')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'gallery'
+                  ? 'bg-white text-indigo-700 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Archive className="w-3.5 h-3.5" />
+              Achievement Gallery
+              {gallerySnapshots.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-extrabold">
+                  {gallerySnapshots.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {activeTab === 'preview' && (
+            <button
+              type="button"
+              onClick={() => void loadSnapshotAndAssets()}
+              disabled={isBusy}
+              className="text-xs font-semibold text-slate-600 hover:text-indigo-700 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-white transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isBusy ? 'animate-spin' : ''}`} />
+              Refresh Latest
             </button>
           )}
+        </div>
 
-          <button
-            type="button"
-            onClick={handleCopyUpdate}
-            disabled={isLoading}
-            className="w-full inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#026fc3] hover:bg-[#025ca5] text-white text-xs font-black shadow-xs active:scale-95 transition-all cursor-pointer"
-          >
-            {hasCopied ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-emerald-300" />
-                <span>Copied!</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-3.5 h-3.5" />
-                <span>Copy Leaderboard Update</span>
-              </>
-            )}
-          </button>
+        {/* Modal Body */}
+        <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-4 bg-slate-50/30">
+          {errorMsg && (
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          {activeTab === 'preview' ? (
+            <>
+              {/* Certificate Canvas Preview */}
+              <div className="relative rounded-2xl bg-gradient-to-b from-slate-100 to-indigo-50/40 p-2 sm:p-4 border border-slate-200/80 flex items-center justify-center">
+                {isLoadingData && !snapshot ? (
+                  <div className="py-24 flex flex-col items-center justify-center text-slate-500 gap-2.5">
+                    <Loader2 className="w-7 h-7 animate-spin text-indigo-600" />
+                    <span className="text-xs font-semibold">Preparing certificate...</span>
+                  </div>
+                ) : snapshot ? (
+                  <div className="w-full max-w-[460px] mx-auto relative">
+                    <ClassChampionsCertificateSvg
+                      snapshot={snapshot}
+                      logoUrl={assets.logoUrl}
+                      avatarDataUrls={assets.avatarDataUrls}
+                      svgRef={svgRef}
+                      className="w-full h-auto rounded-2xl shadow-lg block bg-white"
+                    />
+                    {isLoadingAssets && (
+                      <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-white/90 border border-slate-200 text-[11px] font-semibold text-slate-600 shadow-sm inline-flex items-center gap-1.5">
+                        <Loader2 className="w-3 h-3 animate-spin text-indigo-600" />
+                        Syncing avatars...
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Action Controls */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => void handleShareWhatsApp()}
+                  disabled={isBusy || isExporting !== null || !snapshot}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow-sm transition-all disabled:opacity-50"
+                >
+                  {isExporting === 'whatsapp' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <MessageCircle className="w-4 h-4" />
+                  )}
+                  Share on WhatsApp
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void handleDownloadPng()}
+                  disabled={isBusy || isExporting !== null || !snapshot}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold shadow-sm transition-all disabled:opacity-50"
+                >
+                  {isExporting === 'png' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  Download PNG
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void handleCopyShareLink(snapshot)}
+                  disabled={isBusy || !snapshot || Boolean(snapshot?.revoked)}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-xs sm:text-sm font-bold shadow-sm transition-all disabled:opacity-50"
+                >
+                  {copiedLink ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-600" />
+                      <span className="text-emerald-700">Link Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 text-indigo-600" />
+                      Copy Share Link
+                    </>
+                  )}
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-3">
+              {gallerySnapshots.length === 0 ? (
+                <div className="py-12 px-4 text-center rounded-2xl border border-dashed border-slate-200 bg-white">
+                  <Archive className="w-9 h-9 text-slate-300 mx-auto mb-2.5" />
+                  <p className="text-sm font-bold text-slate-800">
+                    No saved certificates yet
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                    Certificates you share on WhatsApp, download as PNG, or copy a link for are saved here so you can reopen or revoke links anytime.
+                  </p>
+                </div>
+              ) : (
+                gallerySnapshots.map((item) => {
+                  const formattedDate = new Date(item.createdAt).toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  });
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="rounded-2xl bg-white border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+                    >
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-extrabold text-slate-900 truncate">
+                            {item.classroomName}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[11px] font-bold">
+                            {item.periodLabel}
+                          </span>
+                          {item.revoked ? (
+                            <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 text-[10px] font-extrabold uppercase">
+                              Revoked
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-extrabold uppercase">
+                              Active Link
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          Generated {formattedDate} •{' '}
+                          {item.champions
+                            .map((c) => `#${c.rank} ${c.name} (${c.points} XP)`)
+                            .join(' · ')}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => void handlePreviewGalleryItem(item)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Preview
+                        </button>
+
+                        {!item.revoked && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => void handleCopyShareLink(item)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-colors"
+                            >
+                              <Link2 className="w-3.5 h-3.5" />
+                              Copy Link
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRevokeLink(item)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-colors"
+                            >
+                              <ShieldOff className="w-3.5 h-3.5" />
+                              Revoke Link
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

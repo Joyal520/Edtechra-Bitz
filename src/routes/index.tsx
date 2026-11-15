@@ -16,6 +16,7 @@ const AdminPage = lazy(() => import('@/pages/AdminPage').then(m => ({ default: m
 const JoinClassroomPage = lazy(() => import('@/pages/classes/JoinClassroomPage').then(m => ({ default: m.JoinClassroomPage })));
 const CreateClassroomPage = lazy(() => import('@/pages/classes/CreateClassroomPage').then(m => ({ default: m.CreateClassroomPage })));
 const TeacherResourcesPage = lazy(() => import('@/pages/classes/TeacherResourcesPage').then(m => ({ default: m.TeacherResourcesPage })));
+const SharedChampionsCertificatePage = lazy(() => import('@/pages/classes/SharedChampionsCertificatePage').then(m => ({ default: m.SharedChampionsCertificatePage })));
 const LiveQuizLobbyPage = lazy(() => import('@/pages/classes/live-quiz/LiveQuizLobbyPage').then(m => ({ default: m.LiveQuizLobbyPage })));
 const LiveQuizHostPage = lazy(() => import('@/pages/classes/live-quiz/LiveQuizHostPage').then(m => ({ default: m.LiveQuizHostPage })));
 const LiveQuizPlayPage = lazy(() => import('@/pages/classes/live-quiz/LiveQuizPlayPage').then(m => ({ default: m.LiveQuizPlayPage })));
@@ -36,6 +37,7 @@ export const AppRoutes: React.FC = () => {
   return (
     <Suspense fallback={<CoursePlayerSkeleton />}>
       <Routes>
+        <Route path="/champions/certificate" element={<SharedChampionsCertificatePage />} />
         <Route path="/" element={<AppLayout />}>
           <Route index element={<HomePage />} />
           <Route path="explore" element={<ExplorePage />} />

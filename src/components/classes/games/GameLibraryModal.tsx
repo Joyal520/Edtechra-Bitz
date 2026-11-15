@@ -29,6 +29,7 @@ import { validateJigsawConfig } from '@/utils/jigsawQuestions';
 import type { Assignment } from '@/types/classroom';
 import type {
   ClassroomJigsawConfig,
+  ConnectionsConfig,
   GameConfig,
   GameId,
   GameLevelDefinition,
@@ -37,7 +38,8 @@ import type {
   LuminaWordsConfig,
   MemoryMatchConfig,
   SaveTheBalloonConfig,
-  SavedLibraryGame
+  SavedLibraryGame,
+  SnakeSpellConfig
 } from '@/types/gameLibrary';
 import { createLevelId } from '@/utils/gameLevelUtils';
 import { GameLevelManager } from './GameLevelManager';
@@ -172,6 +174,82 @@ function sanitizeLevelConfig(
           title: (c.title || '').trim() || 'Lumina Words',
           words: validation.validWords,
           puzzles: generatedPuzzles
+        }
+      };
+    }
+    case 'snake-spell': {
+      const c = cfg as SnakeSpellConfig;
+      const seen = new Set<string>();
+      const cleanWords: { word: string; hint: string }[] = [];
+      for (const item of c.words || []) {
+        const cleaned = [...String(item.word || '')]
+          .filter((ch) => /\p{L}/u.test(ch))
+          .join('')
+          .toLocaleUpperCase();
+        if (cleaned.length < 3 || cleaned.length > 12) continue;
+        if (seen.has(cleaned)) continue;
+        seen.add(cleaned);
+        cleanWords.push({ word: cleaned, hint: (item.hint || '').trim() });
+      }
+      if (cleanWords.length === 0) {
+        return {
+          error: `${levelLabel}: Please enter at least 1 valid word (3 to 12 letters each).`
+        };
+      }
+      return {
+        config: {
+          title: (c.title || '').trim() || 'Snake Spell',
+          words: cleanWords,
+          missingLetters: ([0, 1, 2, 3].includes(Number(c.missingLetters))
+            ? Number(c.missingLetters)
+            : 0) as 0 | 1 | 2 | 3,
+          lives: ([3, 5, 8].includes(Number(c.lives)) ? Number(c.lives) : 3) as 3 | 5 | 8,
+          speed: ([0.8, 1, 1.25].includes(Number(c.speed)) ? Number(c.speed) : 1) as 0.8 | 1 | 1.25
+        }
+      };
+    }
+    case 'connections': {
+      const c = cfg as ConnectionsConfig;
+      const groups = Array.isArray(c.groups) ? c.groups : [];
+      if (groups.length !== 4) {
+        return { error: `${levelLabel}: Connections requires exactly 4 category groups.` };
+      }
+      const seenWords = new Set<string>();
+      const normalizedGroups: ConnectionsConfig['groups'] = [];
+      for (let i = 0; i < 4; i++) {
+        const g = groups[i];
+        const grpTitle = (g?.title || '').trim();
+        if (!grpTitle) {
+          return {
+            error: `${levelLabel}: Please enter a category name for Group ${i + 1}.`
+          };
+        }
+        const words = (Array.isArray(g?.words) ? g.words : []).map((w) =>
+          String(w || '').trim().toUpperCase()
+        );
+        if (words.length !== 4 || words.some((w) => !w)) {
+          return {
+            error: `${levelLabel}: Group "${grpTitle}" must contain 4 words.`
+          };
+        }
+        for (const w of words) {
+          if (seenWords.has(w)) {
+            return {
+              error: `${levelLabel}: Duplicate word "${w}" found. All 16 words must be unique.`
+            };
+          }
+          seenWords.add(w);
+        }
+        normalizedGroups.push({
+          title: grpTitle,
+          level: ([0, 1, 2, 3].includes(Number(g?.level)) ? Number(g.level) : i) as 0 | 1 | 2 | 3,
+          words: words as [string, string, string, string]
+        });
+      }
+      return {
+        config: {
+          title: (c.title || '').trim() || 'Connections Challenge',
+          groups: normalizedGroups
         }
       };
     }
