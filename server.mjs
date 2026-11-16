@@ -25436,9 +25436,9 @@ app.get('/api/certificates/:shareId', async (req, res) => {
   }
 });
 
-app.get('/api/og/certificate', async (req, res) => {
+async function handleCertificateOgPage(req, res) {
   try {
-    const shareId = String(req.query.id || '').trim();
+    const shareId = String(req.params.shareId || req.query.id || '').trim();
     const proto = req.headers['x-forwarded-proto'] || 'https';
     const host = req.headers['x-forwarded-host'] || req.headers.host || 'edtechra-bitz.vercel.app';
     const origin = `${proto}://${host}`;
@@ -25459,7 +25459,10 @@ app.get('/api/og/certificate', async (req, res) => {
     console.error('[GET /api/og/certificate] error:', err);
     return res.status(500).send('Internal Server Error');
   }
-});
+}
+
+app.get('/api/og/certificate', handleCertificateOgPage);
+app.get('/api/c/:shareId', handleCertificateOgPage);
 
 // Global API 404 Handler - Guarantee valid JSON response for unmatched API routes
 app.use('/api', (req, res) => {

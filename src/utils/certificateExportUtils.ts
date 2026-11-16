@@ -175,14 +175,15 @@ export function downloadCertificateBlob(blob: Blob, classroomName: string): void
  */
 export function buildWhatsAppShareMessage(_classroomName: string, shareUrl?: string): string {
   const lines = [
-    '🏆 Celebrate our Class Champions!',
+    '🏆 Class Champions!',
     '',
-    'Discover the top three performers in our EdTechra classroom.',
+    'Celebrating the outstanding achievements of our top three performers.',
+    '',
+    'Discover their achievements with EdTechra!',
   ];
   if (shareUrl) {
-    lines.push('', 'View the achievement:', shareUrl);
+    lines.push('', shareUrl);
   }
-  lines.push('', 'Learn. Discover. Grow.');
   return lines.join('\n');
 }
 

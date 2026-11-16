@@ -246,7 +246,6 @@ export const ShareLeaderboardModal: React.FC<ShareLeaderboardModalProps> = ({
           await navigator.share({
             title: 'EdTechra Class Champions',
             text: message,
-            url: shareUrl,
           });
           onShowToast?.('Certificate link shared!');
           return;

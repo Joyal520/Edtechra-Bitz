@@ -150,7 +150,6 @@ export const SharedChampionsCertificatePage: React.FC = () => {
         await navigator.share({
           title: 'EdTechra Class Champions',
           text: message,
-          url: currentShareUrl,
         });
         return;
       } catch (err) {
@@ -181,7 +180,7 @@ export const SharedChampionsCertificatePage: React.FC = () => {
   };
 
   return (
-    <div className="ceremony-backdrop min-h-screen w-full overflow-x-hidden flex flex-col justify-between relative text-white selection:bg-amber-400 selection:text-amber-950">
+    <div className="ceremony-backdrop min-h-screen w-full overflow-x-hidden flex flex-col justify-between relative text-slate-900 selection:bg-amber-300 selection:text-amber-950">
       {/* Golden Dust Overlay when ceremony is active */}
       {status === 'valid' && <GoldenDustCanvas active />}
 
@@ -190,22 +189,22 @@ export const SharedChampionsCertificatePage: React.FC = () => {
         <main className="flex-1 flex flex-col items-center justify-center px-6 py-12 text-center relative z-30">
           <div className="relative flex flex-col items-center">
             <div
-              className="w-36 h-36 sm:w-44 sm:h-44 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-amber-400/20 blur-2xl pointer-events-none"
+              className="w-36 h-36 sm:w-44 sm:h-44 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-amber-300/35 blur-2xl pointer-events-none"
               aria-hidden="true"
             />
             <img
               src="/images/edtechra-classroom-logo.png"
               alt="EdTechra"
-              className="ceremony-intro-logo h-20 sm:h-24 w-auto object-contain drop-shadow-[0_10px_30px_rgba(251,191,36,0.35)]"
+              className="ceremony-intro-logo h-20 sm:h-24 w-auto object-contain drop-shadow-[0_10px_24px_rgba(30,58,138,0.18)]"
               onError={(e) => {
                 (e.currentTarget as HTMLImageElement).src = '/logo-emblem.png';
               }}
             />
-            <p className="ceremony-intro-text mt-5 text-base sm:text-xl font-extrabold tracking-wide text-amber-200">
+            <p className="ceremony-intro-text mt-5 text-base sm:text-xl font-extrabold tracking-wide text-blue-950">
               Celebrating Classroom Excellence
             </p>
             {status === 'loading' && (
-              <Loader2 className="w-5 h-5 animate-spin text-sky-300/80 mt-4" />
+              <Loader2 className="w-5 h-5 animate-spin text-blue-700 mt-4" />
             )}
           </div>
         </main>
@@ -215,18 +214,18 @@ export const SharedChampionsCertificatePage: React.FC = () => {
       {(status === 'invalid' || status === 'revoked' || status === 'expired') && (
         <main className="flex-1 flex items-center justify-center p-4 sm:p-8 relative z-30">
           <div className="ceremony-gold-frame rounded-3xl p-8 sm:p-10 max-w-md w-full text-center space-y-5">
-            <div className="w-14 h-14 rounded-2xl bg-rose-500/20 border border-rose-300/40 flex items-center justify-center text-rose-200 mx-auto">
+            <div className="w-14 h-14 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 mx-auto">
               <ShieldAlert className="w-7 h-7" />
             </div>
             <div className="space-y-2">
-              <h1 className="text-xl sm:text-2xl font-black text-white">
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900">
                 {status === 'revoked'
                   ? 'Certificate Link Revoked'
                   : status === 'expired'
                     ? 'Certificate Link Expired'
                     : 'Certificate Not Found'}
               </h1>
-              <p className="text-sm text-sky-100/80 leading-relaxed">
+              <p className="text-sm text-slate-600 leading-relaxed">
                 {status === 'revoked'
                   ? 'This achievement certificate link has been revoked by the classroom teacher and is no longer publicly available.'
                   : status === 'expired'
@@ -236,7 +235,7 @@ export const SharedChampionsCertificatePage: React.FC = () => {
             </div>
             <Link
               to="/"
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-amber-950 text-sm font-black shadow-lg transition-all min-h-[44px]"
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-sm font-black shadow-lg transition-all min-h-[44px]"
             >
               <Home className="w-4 h-4" />
               Return to EdTechra
@@ -257,7 +256,7 @@ export const SharedChampionsCertificatePage: React.FC = () => {
                 type="button"
                 onClick={() => void handleDownload()}
                 disabled={isDownloading}
-                className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-400 text-amber-950 text-xs sm:text-sm font-black shadow-[0_10px_24px_rgba(245,158,11,0.35)] transition-all disabled:opacity-60 min-h-[44px]"
+                className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-400 text-amber-950 text-xs sm:text-sm font-black shadow-[0_10px_24px_rgba(217,119,6,0.28)] border border-amber-200 transition-all disabled:opacity-60 min-h-[44px]"
               >
                 {isDownloading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -271,18 +270,18 @@ export const SharedChampionsCertificatePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => void handleShareAchievement()}
-                  className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-white/12 hover:bg-white/20 border border-white/25 backdrop-blur-md text-white text-xs sm:text-sm font-bold shadow-lg transition-all min-h-[44px]"
+                  className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-white/95 hover:bg-white border border-blue-200 text-blue-900 text-xs sm:text-sm font-bold shadow-md transition-all min-h-[44px]"
                 >
-                  <Share2 className="w-4 h-4 text-amber-300" />
+                  <Share2 className="w-4 h-4 text-blue-700" />
                   <span>Share Achievement</span>
                 </button>
 
                 {shareMenuOpen && (
-                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-56 rounded-2xl bg-slate-900/95 border border-amber-300/30 shadow-2xl p-2 space-y-1 backdrop-blur-md z-40">
+                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-56 rounded-2xl bg-white border border-amber-300/60 shadow-2xl p-2 space-y-1 z-40">
                     <button
                       type="button"
                       onClick={handleWhatsAppShare}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-emerald-500/20 text-left text-xs sm:text-sm font-bold text-emerald-300 transition-colors"
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-emerald-50 text-left text-xs sm:text-sm font-bold text-emerald-700 transition-colors"
                     >
                       <MessageCircle className="w-4 h-4 shrink-0" />
                       Share on WhatsApp
@@ -290,16 +289,16 @@ export const SharedChampionsCertificatePage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => void handleCopyLink()}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-white/10 text-left text-xs sm:text-sm font-bold text-white transition-colors"
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-slate-100 text-left text-xs sm:text-sm font-bold text-slate-800 transition-colors"
                     >
                       {copied ? (
                         <>
-                          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                          <span className="text-emerald-300">Link Copied!</span>
+                          <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span className="text-emerald-700">Link Copied!</span>
                         </>
                       ) : (
                         <>
-                          <Copy className="w-4 h-4 text-amber-300 shrink-0" />
+                          <Copy className="w-4 h-4 text-blue-700 shrink-0" />
                           <span>Copy Short Link</span>
                         </>
                       )}
@@ -310,7 +309,7 @@ export const SharedChampionsCertificatePage: React.FC = () => {
 
               <Link
                 to="/"
-                className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-slate-950/50 hover:bg-slate-900/70 border border-white/15 text-sky-100 text-xs sm:text-sm font-bold transition-all min-h-[44px]"
+                className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-white/80 hover:bg-white border border-slate-200 text-slate-700 text-xs sm:text-sm font-bold shadow-sm transition-all min-h-[44px]"
               >
                 <Home className="w-4 h-4" />
                 <span>Return to EdTechra</span>

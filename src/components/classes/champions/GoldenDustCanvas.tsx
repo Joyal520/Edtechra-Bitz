@@ -48,17 +48,17 @@ export const GoldenDustCanvas: React.FC<GoldenDustCanvasProps> = ({ active = tru
     resize();
     window.addEventListener('resize', resize);
 
-    const particleCount = width < 640 ? 28 : 46;
+    const particleCount = width < 640 ? 26 : 42;
     const particles: Particle[] = Array.from({ length: particleCount }, (_, i) => ({
       x: Math.random() * width,
       y: Math.random() * height,
-      size: 1.5 + Math.random() * 2.8,
-      speedY: 0.25 + Math.random() * 0.45,
-      driftAmp: 0.25 + Math.random() * 0.45,
+      size: 1.8 + Math.random() * 2.8,
+      speedY: 0.25 + Math.random() * 0.42,
+      driftAmp: 0.22 + Math.random() * 0.4,
       driftFreq: 0.004 + Math.random() * 0.006,
       phase: Math.random() * Math.PI * 2,
-      baseOpacity: 0.25 + Math.random() * 0.55,
-      isSparkle: i % 9 === 0,
+      baseOpacity: 0.35 + Math.random() * 0.45,
+      isSparkle: i % 8 === 0,
     }));
 
     let tick = 0;
@@ -79,13 +79,13 @@ export const GoldenDustCanvas: React.FC<GoldenDustCanvasProps> = ({ active = tru
         if (p.x > width + 12) p.x = -12;
 
         const twinkle = 0.65 + 0.35 * Math.sin(tick * 0.03 + p.phase);
-        const alpha = Math.max(0.1, Math.min(0.9, p.baseOpacity * twinkle));
+        const alpha = Math.max(0.15, Math.min(0.85, p.baseOpacity * twinkle));
 
         if (p.isSparkle) {
           ctx.save();
           ctx.translate(p.x, p.y);
-          ctx.fillStyle = `rgba(254, 240, 138, ${alpha})`;
-          const r = p.size * 1.4;
+          ctx.fillStyle = `rgba(217, 119, 6, ${alpha})`;
+          const r = p.size * 1.45;
           ctx.beginPath();
           ctx.moveTo(0, -r);
           ctx.lineTo(r * 0.28, -r * 0.28);
@@ -100,9 +100,9 @@ export const GoldenDustCanvas: React.FC<GoldenDustCanvasProps> = ({ active = tru
           ctx.restore();
         } else {
           const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 1.8);
-          grad.addColorStop(0, `rgba(254, 249, 195, ${alpha})`);
-          grad.addColorStop(0.5, `rgba(251, 191, 36, ${alpha * 0.75})`);
-          grad.addColorStop(1, 'rgba(245, 158, 11, 0)');
+          grad.addColorStop(0, `rgba(253, 224, 71, ${alpha})`);
+          grad.addColorStop(0.45, `rgba(245, 158, 11, ${alpha * 0.85})`);
+          grad.addColorStop(1, 'rgba(217, 119, 6, 0)');
           ctx.fillStyle = grad;
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.size * 1.8, 0, Math.PI * 2);

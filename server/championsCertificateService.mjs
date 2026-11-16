@@ -373,20 +373,20 @@ export async function generateCertificateOgImagePng(certificate) {
   <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
     <defs>
       <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stop-color="#071530" />
-        <stop offset="50%" stop-color="#0f295c" />
-        <stop offset="100%" stop-color="#091a3d" />
+        <stop offset="0%" stop-color="#eff6ff" />
+        <stop offset="50%" stop-color="#fefdf7" />
+        <stop offset="100%" stop-color="#f3e8ff" />
       </linearGradient>
       <radialGradient id="goldGlow" cx="50%" cy="54%" r="48%">
-        <stop offset="0%" stop-color="#fde047" stop-opacity="0.34" />
-        <stop offset="55%" stop-color="#f59e0b" stop-opacity="0.10" />
-        <stop offset="100%" stop-color="#0f295c" stop-opacity="0" />
+        <stop offset="0%" stop-color="#fde047" stop-opacity="0.38" />
+        <stop offset="55%" stop-color="#fbbf24" stop-opacity="0.12" />
+        <stop offset="100%" stop-color="#fefdf7" stop-opacity="0" />
       </radialGradient>
       <linearGradient id="goldBorder" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stop-color="#f59e0b" />
-        <stop offset="30%" stop-color="#fef08a" />
-        <stop offset="65%" stop-color="#d97706" />
-        <stop offset="100%" stop-color="#fde047" />
+        <stop offset="0%" stop-color="#d97706" />
+        <stop offset="30%" stop-color="#fde047" />
+        <stop offset="65%" stop-color="#b45309" />
+        <stop offset="100%" stop-color="#f59e0b" />
       </linearGradient>
       <linearGradient id="goldPillar" x1="0" y1="0" x2="1" y2="0">
         <stop offset="0%" stop-color="#b45309" />
@@ -395,14 +395,14 @@ export async function generateCertificateOgImagePng(certificate) {
         <stop offset="100%" stop-color="#b45309" />
       </linearGradient>
       <linearGradient id="silverPillar" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0%" stop-color="#64748b" />
-        <stop offset="45%" stop-color="#e2e8f0" />
-        <stop offset="100%" stop-color="#475569" />
+        <stop offset="0%" stop-color="#94a3b8" />
+        <stop offset="45%" stop-color="#f1f5f9" />
+        <stop offset="100%" stop-color="#64748b" />
       </linearGradient>
       <linearGradient id="bronzePillar" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0%" stop-color="#7c2d12" />
+        <stop offset="0%" stop-color="#9a3412" />
         <stop offset="45%" stop-color="#fdba74" />
-        <stop offset="100%" stop-color="#7c2d12" />
+        <stop offset="100%" stop-color="#9a3412" />
       </linearGradient>
     </defs>
 
@@ -410,48 +410,48 @@ export async function generateCertificateOgImagePng(certificate) {
     <rect width="1200" height="630" fill="url(#goldGlow)" />
 
     <!-- Gold Outer Frame -->
-    <rect x="20" y="20" width="1160" height="590" rx="28" fill="none" stroke="url(#goldBorder)" stroke-width="4" />
-    <rect x="32" y="32" width="1136" height="566" rx="20" fill="none" stroke="rgba(253, 224, 71, 0.25)" stroke-width="1.5" />
+    <rect x="20" y="20" width="1160" height="590" rx="28" fill="rgba(255,255,255,0.72)" stroke="url(#goldBorder)" stroke-width="4" />
+    <rect x="32" y="32" width="1136" height="566" rx="20" fill="none" stroke="rgba(217, 119, 6, 0.22)" stroke-width="1.5" />
 
     <!-- Header -->
-    <text x="600" y="78" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="20" font-weight="800" fill="#bae6fd" letter-spacing="4">EDTECHRA DIGITAL CLASSROOM</text>
+    <text x="600" y="78" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="20" font-weight="800" fill="#1e3a8a" letter-spacing="4">EDTECHRA DIGITAL CLASSROOM</text>
 
     <!-- Ribbon -->
     <rect x="330" y="96" width="540" height="54" rx="27" fill="url(#goldBorder)" />
     <text x="600" y="131" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="26" font-weight="900" fill="#451a03" letter-spacing="2">CLASS CHAMPIONS</text>
 
     <!-- Classroom & Period -->
-    <text x="600" y="182" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="22" font-weight="700" fill="#fef08a">${classroomName}  •  ${periodLabel}</text>
+    <text x="600" y="182" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="22" font-weight="700" fill="#1e40af">${classroomName}  •  ${periodLabel}</text>
 
-    <!-- Crown above #1 -->
-    <path d="M565 232 L555 204 L582 218 L600 194 L618 218 L645 204 L635 232 Z" fill="#fbbf24" stroke="#fef08a" stroke-width="2" />
+    <!-- Crown attached to #1 top -->
+    <path d="M565 246 L555 218 L582 232 L600 208 L618 232 L645 218 L635 246 Z" fill="#fbbf24" stroke="#b45309" stroke-width="2" />
 
     <!-- #2 Silver Left -->
-    <circle cx="310" cy="306" r="46" fill="#1e293b" stroke="#cbd5e1" stroke-width="5" />
-    <text x="310" y="318" text-anchor="middle" font-family="system-ui, sans-serif" font-size="28" font-weight="800" fill="#f8fafc">${escapeXml(getInitials(second.name))}</text>
-    <text x="310" y="382" text-anchor="middle" font-family="system-ui, sans-serif" font-size="22" font-weight="800" fill="#ffffff">${escapeXml(truncateText(second.name, 16))}</text>
-    <text x="310" y="408" text-anchor="middle" font-family="system-ui, sans-serif" font-size="18" font-weight="700" fill="#cbd5e1">${Number(second.points || 0).toLocaleString()} XP</text>
+    <circle cx="310" cy="306" r="46" fill="#f1f5f9" stroke="#94a3b8" stroke-width="5" />
+    <text x="310" y="318" text-anchor="middle" font-family="system-ui, sans-serif" font-size="28" font-weight="800" fill="#0f172a">${escapeXml(getInitials(second.name))}</text>
+    <text x="310" y="382" text-anchor="middle" font-family="system-ui, sans-serif" font-size="22" font-weight="800" fill="#0f172a">${escapeXml(truncateText(second.name, 16))}</text>
+    <text x="310" y="408" text-anchor="middle" font-family="system-ui, sans-serif" font-size="18" font-weight="700" fill="#475569">${Number(second.points || 0).toLocaleString()} XP</text>
     <rect x="230" y="424" width="160" height="122" rx="14" fill="url(#silverPillar)" />
     <text x="310" y="498" text-anchor="middle" font-family="system-ui, sans-serif" font-size="44" font-weight="900" fill="#0f172a">2</text>
 
     <!-- #1 Gold Center -->
-    <circle cx="600" cy="288" r="56" fill="#1e293b" stroke="#fde047" stroke-width="6" />
-    <text x="600" y="302" text-anchor="middle" font-family="system-ui, sans-serif" font-size="34" font-weight="900" fill="#fef08a">${escapeXml(getInitials(first.name))}</text>
-    <text x="600" y="372" text-anchor="middle" font-family="system-ui, sans-serif" font-size="26" font-weight="900" fill="#fef08a">${escapeXml(truncateText(first.name, 18))}</text>
-    <text x="600" y="400" text-anchor="middle" font-family="system-ui, sans-serif" font-size="20" font-weight="800" fill="#fde047">${Number(first.points || 0).toLocaleString()} XP</text>
+    <circle cx="600" cy="288" r="56" fill="#fef3c7" stroke="#f59e0b" stroke-width="6" />
+    <text x="600" y="302" text-anchor="middle" font-family="system-ui, sans-serif" font-size="34" font-weight="900" fill="#78350f">${escapeXml(getInitials(first.name))}</text>
+    <text x="600" y="372" text-anchor="middle" font-family="system-ui, sans-serif" font-size="26" font-weight="900" fill="#451a03">${escapeXml(truncateText(first.name, 18))}</text>
+    <text x="600" y="400" text-anchor="middle" font-family="system-ui, sans-serif" font-size="20" font-weight="800" fill="#b45309">${Number(first.points || 0).toLocaleString()} XP</text>
     <rect x="510" y="416" width="180" height="130" rx="16" fill="url(#goldPillar)" />
     <text x="600" y="494" text-anchor="middle" font-family="system-ui, sans-serif" font-size="52" font-weight="900" fill="#451a03">1</text>
 
     <!-- #3 Bronze Right -->
-    <circle cx="890" cy="322" r="44" fill="#1e293b" stroke="#fdba74" stroke-width="5" />
-    <text x="890" y="334" text-anchor="middle" font-family="system-ui, sans-serif" font-size="26" font-weight="800" fill="#ffedd5">${escapeXml(getInitials(third.name))}</text>
-    <text x="890" y="394" text-anchor="middle" font-family="system-ui, sans-serif" font-size="22" font-weight="800" fill="#ffffff">${escapeXml(truncateText(third.name, 16))}</text>
-    <text x="890" y="420" text-anchor="middle" font-family="system-ui, sans-serif" font-size="18" font-weight="700" fill="#fed7aa">${Number(third.points || 0).toLocaleString()} XP</text>
+    <circle cx="890" cy="322" r="44" fill="#ffedd5" stroke="#c2410c" stroke-width="5" />
+    <text x="890" y="334" text-anchor="middle" font-family="system-ui, sans-serif" font-size="26" font-weight="800" fill="#7c2d12">${escapeXml(getInitials(third.name))}</text>
+    <text x="890" y="394" text-anchor="middle" font-family="system-ui, sans-serif" font-size="22" font-weight="800" fill="#0f172a">${escapeXml(truncateText(third.name, 16))}</text>
+    <text x="890" y="420" text-anchor="middle" font-family="system-ui, sans-serif" font-size="18" font-weight="700" fill="#9a3412">${Number(third.points || 0).toLocaleString()} XP</text>
     <rect x="810" y="436" width="160" height="110" rx="14" fill="url(#bronzePillar)" />
     <text x="890" y="504" text-anchor="middle" font-family="system-ui, sans-serif" font-size="42" font-weight="900" fill="#431407">3</text>
 
     <!-- Footer -->
-    <text x="600" y="582" text-anchor="middle" font-family="system-ui, sans-serif" font-size="17" font-weight="600" fill="#93c5fd">Celebrating Classroom Excellence • Learn. Discover. Grow.</text>
+    <text x="600" y="582" text-anchor="middle" font-family="system-ui, sans-serif" font-size="17" font-weight="600" fill="#334155">Celebrating Classroom Excellence • Learn. Discover. Grow.</text>
   </svg>
   `;
 
