@@ -110,6 +110,87 @@ export function getDefaultCoverDataUri(fileType: LibraryFileType, _title?: strin
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
   }
 
+  if (fileType === 'game') {
+    // Educational Game cover: Vibrant violet/indigo arcade & classroom activity motif
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+        <defs>
+          <linearGradient id="game-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#1e1b4b" />
+            <stop offset="50%" stop-color="#4c1d95" />
+            <stop offset="100%" stop-color="#0f172a" />
+          </linearGradient>
+          <pattern id="game-grid" width="36" height="36" patternUnits="userSpaceOnUse">
+            <path d="M 36 0 L 0 0 0 36" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+          </pattern>
+        </defs>
+        <rect width="800" height="500" fill="url(#game-bg)" />
+        <rect width="800" height="500" fill="url(#game-grid)" />
+        <circle cx="650" cy="110" r="160" fill="#a855f7" opacity="0.14" />
+        <circle cx="140" cy="390" r="130" fill="#ec4899" opacity="0.12" />
+
+        <!-- Game Controller / Play Card -->
+        <rect x="190" y="95" width="420" height="250" rx="28" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.18)" stroke-width="1.5" />
+        <!-- D-Pad -->
+        <rect x="255" y="195" width="54" height="18" rx="5" fill="#e9d5ff" opacity="0.9" />
+        <rect x="273" y="177" width="18" height="54" rx="5" fill="#e9d5ff" opacity="0.9" />
+        <!-- Action Buttons -->
+        <circle cx="515" cy="185" r="11" fill="#34d399" />
+        <circle cx="545" cy="205" r="11" fill="#fbbf24" />
+        <circle cx="485" cy="205" r="11" fill="#60a5fa" />
+        <circle cx="515" cy="225" r="11" fill="#f472b6" />
+        <!-- Center Play Pill -->
+        <rect x="355" y="192" width="90" height="30" rx="15" fill="#8b5cf6" />
+        <polygon points="392,199 392,215 408,207" fill="#ffffff" />
+
+        <g transform="translate(60, 410)">
+          <rect width="120" height="32" rx="10" fill="#7c3aed" />
+          <text x="60" y="21" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="12" text-anchor="middle" letter-spacing="1">GAME</text>
+          <text x="140" y="22" fill="rgba(255,255,255,0.65)" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="14">Interactive Learning Game</text>
+        </g>
+      </svg>
+    `.trim();
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  }
+
+  if (fileType === 'training') {
+    // Training Resource cover: Deep teal/cyan & sky gradient with graduation/play motif
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+        <defs>
+          <linearGradient id="train-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#082f49" />
+            <stop offset="50%" stop-color="#0f766e" />
+            <stop offset="100%" stop-color="#0f172a" />
+          </linearGradient>
+          <pattern id="train-dots" width="32" height="32" patternUnits="userSpaceOnUse">
+            <circle cx="4" cy="4" r="1.5" fill="rgba(255,255,255,0.06)" />
+          </pattern>
+        </defs>
+        <rect width="800" height="500" fill="url(#train-bg)" />
+        <rect width="800" height="500" fill="url(#train-dots)" />
+        <circle cx="670" cy="110" r="160" fill="#14b8a6" opacity="0.14" />
+
+        <!-- Course / Video Player Mockup -->
+        <rect x="170" y="85" width="460" height="270" rx="22" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.16)" stroke-width="1.5" />
+        <circle cx="400" cy="200" r="42" fill="#0d9488" opacity="0.95" />
+        <polygon points="388,182 388,218 420,200" fill="#ffffff" />
+        <!-- Progress Bar -->
+        <rect x="210" y="285" width="380" height="8" rx="4" fill="rgba(255,255,255,0.18)" />
+        <rect x="210" y="285" width="190" height="8" rx="4" fill="#2dd4bf" />
+        <rect x="210" y="310" width="140" height="10" rx="5" fill="rgba(255,255,255,0.3)" />
+        <rect x="365" y="310" width="90" height="10" rx="5" fill="rgba(45,212,191,0.5)" />
+
+        <g transform="translate(60, 410)">
+          <rect width="128" height="32" rx="10" fill="#0d9488" />
+          <text x="64" y="21" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="12" text-anchor="middle" letter-spacing="1">TRAINING</text>
+          <text x="148" y="22" fill="rgba(255,255,255,0.65)" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="14">EdTechra Skill & PD Module</text>
+        </g>
+      </svg>
+    `.trim();
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  }
+
   // PDF default cover: Deep EdTechra navy blue with vibrant sky & crimson accents
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">

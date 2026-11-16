@@ -5,14 +5,24 @@ import {
   FileText,
   Presentation,
   Globe,
+  Gamepad2,
+  GraduationCap,
+  Link as LinkIcon,
   Image as ImageIcon,
   AlertCircle,
   Loader2,
   Save
 } from 'lucide-react';
-import { LibraryResource, LibraryFileType } from '@/types/library';
+import { LibraryResource, LibraryFileType, TrainingFormat } from '@/types/library';
 import { libraryService } from '@/services/libraryService';
-import { SUBJECT_OPTIONS, CATEGORY_OPTIONS, GRADE_OPTIONS } from '@/components/library/LibraryFilters';
+import {
+  SUBJECT_OPTIONS,
+  CATEGORY_OPTIONS,
+  GRADE_OPTIONS,
+  GAME_CATEGORY_OPTIONS,
+  TRAINING_CATEGORY_OPTIONS,
+  TRAINING_DIFFICULTY_OPTIONS
+} from '@/components/library/LibraryFilters';
 import { extractPptxCover } from '@/utils/pptxParser';
 
 interface AdminLibraryModalProps {
@@ -40,6 +50,14 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
   const [fileType, setFileType] = useState<LibraryFileType>('pdf');
   const [published, setPublished] = useState(true);
 
+  // Game & Training specific fields
+  const [externalUrl, setExternalUrl] = useState('');
+  const [coverUrlInput, setCoverUrlInput] = useState('');
+  const [instructor, setInstructor] = useState('');
+  const [difficulty, setDifficulty] = useState('Beginner');
+  const [duration, setDuration] = useState('');
+  const [trainingFormat, setTrainingFormat] = useState<TrainingFormat>('video');
+
   // File upload states
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [coverFile, setCoverFile] = useState<File | null>(null);
@@ -64,6 +82,12 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
       setFileType(resourceToEdit.file_type || 'pdf');
       setPublished(resourceToEdit.published !== false);
       setCoverPreviewUrl(resourceToEdit.cover_image_url || null);
+      setCoverUrlInput(resourceToEdit.cover_image_url || '');
+      setExternalUrl(resourceToEdit.file_url || '');
+      setInstructor(resourceToEdit.instructor || resourceToEdit.author || '');
+      setDifficulty(resourceToEdit.difficulty || 'Beginner');
+      setDuration(resourceToEdit.duration || '');
+      setTrainingFormat(resourceToEdit.training_format || 'video');
       setSelectedFile(null);
       setCoverFile(null);
     } else {
@@ -76,6 +100,12 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
       setAuthor('');
       setFileType('pdf');
       setPublished(true);
+      setExternalUrl('');
+      setCoverUrlInput('');
+      setInstructor('');
+      setDifficulty('Beginner');
+      setDuration('');
+      setTrainingFormat('video');
       setSelectedFile(null);
       setCoverFile(null);
       setCoverPreviewUrl(null);
@@ -102,25 +132,39 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
       lowerName.endsWith('.html') ||
       lowerName.endsWith('.htm') ||
       file.type === 'text/html';
+    const isVideo =
+      file.type.startsWith('video/') ||
+      lowerName.endsWith('.mp4') ||
+      lowerName.endsWith('.webm') ||
+      lowerName.endsWith('.mov') ||
+      lowerName.endsWith('.m4v');
 
-    if (!isPdf && !isPptx && !isHtml) {
-      setError('Please select a valid PDF (.pdf), PowerPoint (.pptx), or Web / Blog (.html) file.');
+    if (!isPdf && !isPptx && !isHtml && !isVideo) {
+      setError('Please select a valid PDF (.pdf), PowerPoint (.pptx), Web/HTML (.html), or Video (.mp4, .webm, .mov) file.');
       return;
     }
 
-    if (file.size > 100 * 1024 * 1024) {
-      setError('File exceeds 100MB limit.');
+    const maxBytes = isVideo ? 250 * 1024 * 1024 : 100 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setError(isVideo ? 'Video file exceeds 250MB limit.' : 'File exceeds 100MB limit.');
       return;
     }
 
     setSelectedFile(file);
-    if (isHtml) {
-      setFileType('web_blog');
-      setCategory('Web / Blogs');
-    } else if (isPptx) {
-      setFileType('pptx');
-    } else {
-      setFileType('pdf');
+    if (fileType === 'training') {
+      if (isVideo) setTrainingFormat('video');
+      else if (isPdf) setTrainingFormat('pdf');
+      else if (isPptx) setTrainingFormat('pptx');
+      else if (isHtml) setTrainingFormat('interactive');
+    } else if (fileType !== 'game') {
+      if (isHtml) {
+        setFileType('web_blog');
+        setCategory('Web / Blogs');
+      } else if (isPptx) {
+        setFileType('pptx');
+      } else if (isPdf) {
+        setFileType('pdf');
+      }
     }
     setError(null);
 
@@ -172,8 +216,17 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
       return;
     }
 
-    if (!isEditing && !selectedFile) {
-      setError('Please select a PDF, PPTX, or Web / Blog file to upload.');
+    const usesUrlOption = fileType === 'game' || fileType === 'training' || fileType === 'web_blog';
+    const trimmedExternalUrl = externalUrl.trim();
+
+    if (!isEditing && !selectedFile && !(usesUrlOption && trimmedExternalUrl)) {
+      setError(
+        fileType === 'game'
+          ? 'Please enter a playable Game URL or upload an HTML5 game file.'
+          : fileType === 'training'
+          ? 'Please upload a training file (Video/PDF/PPTX/HTML) or enter a training URL.'
+          : 'Please select a PDF, PPTX, or Web / Blog file to upload.'
+      );
       return;
     }
 
@@ -181,11 +234,13 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
     setUploadProgress('Preparing upload...');
 
     try {
-      let finalFileUrl = resourceToEdit?.file_url || '';
-      let finalFileKey = resourceToEdit?.file_key || null;
+      let finalFileUrl = (usesUrlOption && trimmedExternalUrl) ? trimmedExternalUrl : (resourceToEdit?.file_url || '');
+      let finalFileKey = (usesUrlOption && trimmedExternalUrl && trimmedExternalUrl !== resourceToEdit?.file_url)
+        ? null
+        : (resourceToEdit?.file_key || null);
       let finalFileSize = resourceToEdit?.file_size || 0;
 
-      let finalCoverUrl = resourceToEdit?.cover_image_url || null;
+      let finalCoverUrl = coverUrlInput.trim() || resourceToEdit?.cover_image_url || null;
       let finalCoverKey = resourceToEdit?.cover_image_key || null;
 
       // 1. Upload Cover Image if changed
@@ -215,7 +270,11 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
           subject: subject.trim(),
           category: category.trim(),
           grade_level: gradeLevel.trim(),
-          author: author.trim() || null,
+          author: author.trim() || (fileType === 'training' ? instructor.trim() : '') || null,
+          instructor: fileType === 'training' ? (instructor.trim() || null) : null,
+          difficulty: fileType === 'training' ? difficulty : null,
+          duration: fileType === 'training' ? (duration.trim() || null) : null,
+          training_format: fileType === 'training' ? trainingFormat : null,
           file_type: fileType,
           published,
           file_url: finalFileUrl,
@@ -238,7 +297,11 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
           subject: subject.trim(),
           category: category.trim(),
           grade_level: gradeLevel.trim(),
-          author: author.trim() || null,
+          author: author.trim() || (fileType === 'training' ? instructor.trim() : '') || null,
+          instructor: fileType === 'training' ? (instructor.trim() || null) : null,
+          difficulty: fileType === 'training' ? difficulty : null,
+          duration: fileType === 'training' ? (duration.trim() || null) : null,
+          training_format: fileType === 'training' ? trainingFormat : null,
           file_type: fileType,
           file_url: finalFileUrl,
           file_key: finalFileKey,
@@ -273,7 +336,11 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-600 border border-purple-200/60 flex items-center justify-center">
-              {fileType === 'web_blog' ? (
+              {fileType === 'game' ? (
+                <Gamepad2 className="w-5 h-5 text-violet-600" />
+              ) : fileType === 'training' ? (
+                <GraduationCap className="w-5 h-5 text-teal-600" />
+              ) : fileType === 'web_blog' ? (
                 <Globe className="w-5 h-5 text-emerald-500" />
               ) : fileType === 'pptx' ? (
                 <Presentation className="w-5 h-5 text-amber-500" />
@@ -310,16 +377,91 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
             </div>
           )}
 
-          {/* 1. Main Resource File Dropzone */}
+          {/* 1. Content Type Selector */}
           <div className="space-y-1.5">
             <label className="block text-xs font-black uppercase tracking-wider text-slate-700">
-              Resource File {!isEditing && <span className="text-rose-500">*</span>} (PDF, PPTX, or Web / Blog HTML)
+              Resource Type
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              {([
+                { id: 'pdf', label: 'PDF', Icon: FileText, active: 'bg-rose-600 text-white border-rose-600' },
+                { id: 'pptx', label: 'PowerPoint', Icon: Presentation, active: 'bg-amber-500 text-white border-amber-500' },
+                { id: 'web_blog', label: 'Web / Blog', Icon: Globe, active: 'bg-emerald-600 text-white border-emerald-600' },
+                { id: 'game', label: 'Game', Icon: Gamepad2, active: 'bg-violet-600 text-white border-violet-600' },
+                { id: 'training', label: 'Training', Icon: GraduationCap, active: 'bg-teal-600 text-white border-teal-600' }
+              ] as const).map((item) => {
+                const Icon = item.Icon;
+                const isSelected = fileType === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      setFileType(item.id);
+                      if (item.id === 'web_blog') setCategory('Web / Blogs');
+                      else if (item.id === 'game') setCategory(GAME_CATEGORY_OPTIONS[0]);
+                      else if (item.id === 'training') setCategory(TRAINING_CATEGORY_OPTIONS[0]);
+                      else if (item.id === 'pptx') setCategory('Presentation');
+                      else setCategory('Study Guide');
+                    }}
+                    className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black border transition-all cursor-pointer ${
+                      isSelected
+                        ? item.active
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 1b. URL Input for Game / Training / Web */}
+          {(fileType === 'game' || fileType === 'training' || fileType === 'web_blog') && (
+            <div className="space-y-1.5">
+              <label className="block text-xs font-black uppercase tracking-wider text-slate-700">
+                {fileType === 'game'
+                  ? 'Playable Game URL'
+                  : fileType === 'training'
+                  ? 'Training URL (Video, YouTube, Interactive Tutorial, or Document URL)'
+                  : 'External Web / Blog URL (Optional if uploading HTML)'}
+                {fileType === 'game' && !isEditing && !selectedFile && <span className="text-rose-500"> *</span>}
+              </label>
+              <div className="relative">
+                <LinkIcon className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={externalUrl}
+                  onChange={(e) => setExternalUrl(e.target.value)}
+                  placeholder={
+                    fileType === 'game'
+                      ? 'https://edtechra.org/games/vocab-quest or /classes/games/...'
+                      : fileType === 'training'
+                      ? 'https://www.youtube.com/watch?v=... or interactive tutorial URL'
+                      : 'https://...'
+                  }
+                  className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-600 focus:bg-white"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* 1c. Main Resource File Dropzone */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-black uppercase tracking-wider text-slate-700">
+              {fileType === 'game'
+                ? 'Or Upload HTML5 Game File (Optional)'
+                : fileType === 'training'
+                ? 'Or Upload Training File (Video .mp4/.webm, PDF, PPTX, or HTML)'
+                : <>Resource File {!isEditing && <span className="text-rose-500">*</span>} (PDF, PPTX, or Web / Blog HTML)</>}
             </label>
 
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.pptx,.ppt,.html,.htm,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/html"
+              accept=".pdf,.pptx,.ppt,.html,.htm,.mp4,.webm,.mov,.m4v,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/html,video/*"
               onChange={handleFileChange}
               className="hidden"
             />
@@ -399,29 +541,8 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
             </div>
           </div>
 
-          {/* 3. Classification: Type, Subject, Category, Grade Level */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div>
-              <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
-                Content Type
-              </label>
-              <select
-                value={fileType}
-                onChange={(e) => {
-                  const newType = e.target.value as LibraryFileType;
-                  setFileType(newType);
-                  if (newType === 'web_blog' && category !== 'Web / Blogs') {
-                    setCategory('Web / Blogs');
-                  }
-                }}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-purple-600 cursor-pointer"
-              >
-                <option value="pdf">PDF Document</option>
-                <option value="pptx">PowerPoint Presentation</option>
-                <option value="web_blog">Web / Blog</option>
-              </select>
-            </div>
-
+          {/* 3. Classification: Subject, Category, Grade Level */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
                 Subject
@@ -448,7 +569,12 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-purple-600 cursor-pointer"
               >
-                {CATEGORY_OPTIONS.filter((c) => c !== 'All Categories').map((cat) => (
+                {(fileType === 'game'
+                  ? GAME_CATEGORY_OPTIONS
+                  : fileType === 'training'
+                  ? TRAINING_CATEGORY_OPTIONS
+                  : CATEGORY_OPTIONS.filter((c) => c !== 'All Categories')
+                ).map((cat) => (
                   <option key={cat} value={cat}>
                     {cat}
                   </option>
@@ -473,6 +599,75 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
               </select>
             </div>
           </div>
+
+          {/* 3b. Training Learning Details (Format, Instructor, Difficulty, Duration) */}
+          {fileType === 'training' && (
+            <div className="p-4 rounded-2xl bg-teal-50/60 border border-teal-200/80 space-y-3">
+              <div className="text-xs font-black uppercase tracking-wider text-teal-800">
+                Training Learning Details
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-[11px] font-black text-slate-700 mb-1">
+                    Training Format
+                  </label>
+                  <select
+                    value={trainingFormat}
+                    onChange={(e) => setTrainingFormat(e.target.value as TrainingFormat)}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-teal-600 cursor-pointer"
+                  >
+                    <option value="video">Video</option>
+                    <option value="pdf">PDF Guide</option>
+                    <option value="pptx">Presentation (PPTX)</option>
+                    <option value="interactive">Interactive Tutorial</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-black text-slate-700 mb-1">
+                    Instructor
+                  </label>
+                  <input
+                    type="text"
+                    value={instructor}
+                    onChange={(e) => setInstructor(e.target.value)}
+                    placeholder="e.g. Dr. Sarah Lin"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-black text-slate-700 mb-1">
+                    Difficulty
+                  </label>
+                  <select
+                    value={difficulty}
+                    onChange={(e) => setDifficulty(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-teal-600 cursor-pointer"
+                  >
+                    {TRAINING_DIFFICULTY_OPTIONS.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-black text-slate-700 mb-1">
+                    Duration
+                  </label>
+                  <input
+                    type="text"
+                    value={duration}
+                    onChange={(e) => setDuration(e.target.value)}
+                    placeholder="e.g. 45 mins"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 4. Author & Published Toggle */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
@@ -560,6 +755,18 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
                     ? 'Cover automatically captured from Slide 1 of presentation (click Change to replace if desired).'
                     : '16:9 ratio recommended. JPG, PNG, or WebP up to 10MB.'}
                 </p>
+                <input
+                  type="text"
+                  value={coverUrlInput}
+                  onChange={(e) => {
+                    setCoverUrlInput(e.target.value);
+                    if (e.target.value.trim() && !coverFile) {
+                      setCoverPreviewUrl(e.target.value.trim());
+                    }
+                  }}
+                  placeholder="Or paste thumbnail image URL (https://...)"
+                  className="mt-2 w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-600"
+                />
               </div>
             </div>
           </div>

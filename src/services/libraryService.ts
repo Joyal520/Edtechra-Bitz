@@ -11,6 +11,7 @@ import {
   LibraryFilterState,
   PresentationSession,
   LibraryFileType,
+  TrainingFormat,
   getNormalizedFileType
 } from '@/types/library';
 
@@ -81,7 +82,7 @@ class LibraryService {
 
       if (filters?.search && filters.search.trim()) {
         const term = `%${filters.search.trim()}%`;
-        query = query.or(`title.ilike.${term},description.ilike.${term},author.ilike.${term},subject.ilike.${term}`);
+        query = query.or(`title.ilike.${term},description.ilike.${term},author.ilike.${term},subject.ilike.${term},category.ilike.${term}`);
       }
 
       const { data, error } = await query;
@@ -143,6 +144,10 @@ class LibraryService {
     cover_image_url?: string | null;
     cover_image_key?: string | null;
     author?: string | null;
+    instructor?: string | null;
+    difficulty?: string | null;
+    duration?: string | null;
+    training_format?: TrainingFormat | null;
     published?: boolean;
     total_slides?: number;
   }): Promise<{ data?: LibraryResource; error?: string }> {
@@ -162,11 +167,16 @@ class LibraryService {
         file_size: payload.file_size || 0,
         cover_image_url: payload.cover_image_url || null,
         cover_image_key: payload.cover_image_key || null,
-        author: payload.author?.trim() || null,
+        author: payload.author?.trim() || payload.instructor?.trim() || null,
         published: payload.published !== false,
         total_slides: payload.total_slides || 0,
         uploaded_by: userId
       };
+
+      if (payload.instructor !== undefined) insertData.instructor = payload.instructor?.trim() || null;
+      if (payload.difficulty !== undefined) insertData.difficulty = payload.difficulty || null;
+      if (payload.duration !== undefined) insertData.duration = payload.duration?.trim() || null;
+      if (payload.training_format !== undefined) insertData.training_format = payload.training_format || null;
 
       let { data, error } = await supabase
         .from('library_resources')
@@ -177,13 +187,39 @@ class LibraryService {
         `)
         .single();
 
-      // Graceful fallback if database check constraint does not yet permit 'web_blog'
-      if (error && (error.code === '23514' || error.message?.includes('check constraint')) && payload.file_type === 'web_blog') {
-        console.warn('[LibraryService] Falling back to compatible file_type: pdf with category: Web / Blogs');
+      // Graceful fallback if new training columns are not yet migrated in live DB
+      if (
+        error &&
+        (error.code === '42703' ||
+          error.code === 'PGRST204' ||
+          error.message?.includes('column') ||
+          error.message?.includes('schema cache'))
+      ) {
+        const { instructor: _i, difficulty: _d, duration: _dur, training_format: _tf, ...baseInsert } = insertData;
+        const retry = await supabase
+          .from('library_resources')
+          .insert(baseInsert)
+          .select(`
+            *,
+            uploader:profiles!uploaded_by (id, full_name, email)
+          `)
+          .single();
+        data = retry.data;
+        error = retry.error;
+        insertData = baseInsert;
+      }
+
+      // Graceful fallback if database check constraint does not yet permit 'web_blog', 'game', or 'training'
+      if (
+        error &&
+        (error.code === '23514' || error.message?.includes('check constraint')) &&
+        (payload.file_type === 'web_blog' || payload.file_type === 'game' || payload.file_type === 'training')
+      ) {
+        console.warn(`[LibraryService] Falling back to compatible file_type for ${payload.file_type}`);
         insertData = {
           ...insertData,
           file_type: 'pdf',
-          category: 'Web / Blogs'
+          category: payload.file_type === 'web_blog' ? 'Web / Blogs' : insertData.category
         };
         const fbResult = await supabase
           .from('library_resources')
@@ -228,7 +264,7 @@ class LibraryService {
       delete updateData.created_at;
       delete updateData.uploader;
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('library_resources')
         .update(updateData)
         .eq('id', id)
@@ -238,11 +274,38 @@ class LibraryService {
         `)
         .single();
 
+      if (
+        error &&
+        (error.code === '42703' ||
+          error.code === 'PGRST204' ||
+          error.message?.includes('column') ||
+          error.message?.includes('schema cache'))
+      ) {
+        const { instructor: _i, difficulty: _d, duration: _dur, training_format: _tf, ...baseUpdate } = updateData;
+        const retry = await supabase
+          .from('library_resources')
+          .update(baseUpdate)
+          .eq('id', id)
+          .select(`
+            *,
+            uploader:profiles!uploaded_by (id, full_name, email)
+          `)
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
+
       if (error) {
         return { error: error.message };
       }
 
-      return { data: data as LibraryResource };
+      const res = data as LibraryResource;
+      return {
+        data: {
+          ...res,
+          file_type: getNormalizedFileType(res)
+        }
+      };
     } catch (err: any) {
       return { error: err.message || 'Failed to update library resource.' };
     }

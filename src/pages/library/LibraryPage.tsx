@@ -5,18 +5,31 @@ import {
   FileText,
   Presentation,
   Globe,
+  Gamepad2,
+  GraduationCap,
   ShieldCheck,
   Sparkles,
   Loader2,
   RefreshCw,
   Plus
 } from 'lucide-react';
-import { LibraryResource, LibraryFilterState } from '@/types/library';
+import {
+  LibraryResource,
+  LibraryFilterState,
+  getNormalizedTrainingFormat
+} from '@/types/library';
 import { libraryService } from '@/services/libraryService';
 import { LibraryCard } from '@/components/library/LibraryCard';
-import { LibraryFilters } from '@/components/library/LibraryFilters';
+import { GameCard } from '@/components/library/GameCard';
+import { TrainingCard } from '@/components/library/TrainingCard';
+import {
+  LibraryFilters,
+  GAME_CATEGORY_OPTIONS,
+  TRAINING_CATEGORY_OPTIONS
+} from '@/components/library/LibraryFilters';
 import { PdfViewerModal } from '@/components/library/PdfViewerModal';
 import { WebBlogViewerModal } from '@/components/library/WebBlogViewerModal';
+import { TrainingViewerModal } from '@/components/library/TrainingViewerModal';
 import { UploadResourceModal } from '@/components/library/UploadResourceModal';
 import { useAuth } from '@/context/AuthContext';
 
@@ -41,6 +54,7 @@ export const LibraryPage: React.FC = () => {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
   const [activePdfResource, setActivePdfResource] = useState<LibraryResource | null>(null);
   const [activeWebBlogResource, setActiveWebBlogResource] = useState<LibraryResource | null>(null);
+  const [activeTrainingResource, setActiveTrainingResource] = useState<LibraryResource | null>(null);
 
   const handleOpenUploadModal = () => {
     if (!isAuthenticated) {
@@ -78,6 +92,29 @@ export const LibraryPage: React.FC = () => {
   }, [loadResources]);
 
   const handleOpenResource = (res: LibraryResource) => {
+    if (res.file_type === 'game') {
+      const targetUrl = (res.file_url || '').trim();
+      if (!targetUrl) return;
+      if (targetUrl.startsWith('/')) {
+        navigate(targetUrl);
+      } else {
+        window.open(targetUrl, '_blank', 'noopener,noreferrer');
+      }
+      return;
+    }
+
+    if (res.file_type === 'training') {
+      const format = getNormalizedTrainingFormat(res);
+      if (format === 'pdf') {
+        setActivePdfResource(res);
+      } else if (format === 'pptx') {
+        navigate(`/library/present/${res.id}`);
+      } else {
+        setActiveTrainingResource(res);
+      }
+      return;
+    }
+
     if (res.file_type === 'pptx') {
       navigate(`/library/present/${res.id}`);
     } else if (res.file_type === 'web_blog') {
@@ -95,6 +132,8 @@ export const LibraryPage: React.FC = () => {
   const pdfCount = resources.filter((r) => r.file_type === 'pdf').length;
   const pptxCount = resources.filter((r) => r.file_type === 'pptx').length;
   const webBlogCount = resources.filter((r) => r.file_type === 'web_blog').length;
+  const gameCount = resources.filter((r) => r.file_type === 'game').length;
+  const trainingCount = resources.filter((r) => r.file_type === 'training').length;
 
   return (
     <div className="min-h-screen bg-[#fbfbf7] text-slate-900 pb-16">
@@ -190,6 +229,16 @@ export const LibraryPage: React.FC = () => {
               <Globe className="w-3.5 h-3.5" />
               <span>{webBlogCount} Web / Blogs</span>
             </div>
+
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-violet-50 text-violet-800 border border-violet-200/60 text-xs font-bold shrink-0">
+              <Gamepad2 className="w-3.5 h-3.5" />
+              <span>{gameCount} Games</span>
+            </div>
+
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-teal-50 text-teal-800 border border-teal-200/60 text-xs font-bold shrink-0">
+              <GraduationCap className="w-3.5 h-3.5" />
+              <span>{trainingCount} Training</span>
+            </div>
           </div>
 
         </div>
@@ -206,6 +255,104 @@ export const LibraryPage: React.FC = () => {
           onChange={setFilters}
           totalCount={resources.length}
         />
+
+        {/* Dedicated Section Banner & Quick Category Chips for Games */}
+        {filters.file_type === 'game' && (
+          <div className="bg-gradient-to-r from-violet-950 via-indigo-900 to-purple-900 rounded-2xl sm:rounded-3xl p-5 sm:p-6 text-white shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
+                  <Gamepad2 className="w-6 h-6 text-violet-300" />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-black tracking-tight">
+                    Educational Games & Classroom Activities
+                  </h2>
+                  <p className="text-xs text-violet-200 font-medium">
+                    Playable learning games and interactive classroom activities across core subjects.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setFilters({ ...filters, category: 'all' })}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  filters.category === 'all'
+                    ? 'bg-white text-violet-950 shadow-xs'
+                    : 'bg-white/10 hover:bg-white/20 text-white/90'
+                }`}
+              >
+                All Games
+              </button>
+              {GAME_CATEGORY_OPTIONS.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setFilters({ ...filters, category: cat })}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                    filters.category === cat
+                      ? 'bg-white text-violet-950 shadow-xs'
+                      : 'bg-white/10 hover:bg-white/20 text-white/90'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Dedicated Section Banner & Quick Topic Chips for Training */}
+        {filters.file_type === 'training' && (
+          <div className="bg-gradient-to-r from-slate-900 via-teal-900 to-sky-950 rounded-2xl sm:rounded-3xl p-5 sm:p-6 text-white shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
+                  <GraduationCap className="w-6 h-6 text-teal-300" />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-black tracking-tight">
+                    Educational Training & Professional Development
+                  </h2>
+                  <p className="text-xs text-teal-200 font-medium">
+                    Video courses, PDF guides, slide decks, and interactive tutorials for educators and learners.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setFilters({ ...filters, category: 'all' })}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  filters.category === 'all'
+                    ? 'bg-white text-teal-950 shadow-xs'
+                    : 'bg-white/10 hover:bg-white/20 text-white/90'
+                }`}
+              >
+                All Training
+              </button>
+              {TRAINING_CATEGORY_OPTIONS.map((topic) => (
+                <button
+                  key={topic}
+                  type="button"
+                  onClick={() => setFilters({ ...filters, category: topic })}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                    filters.category === topic
+                      ? 'bg-white text-teal-950 shadow-xs'
+                      : 'bg-white/10 hover:bg-white/20 text-white/90'
+                  }`}
+                >
+                  {topic}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Resources Grid */}
         {loading ? (
@@ -242,14 +389,34 @@ export const LibraryPage: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-            {resources.map((res) => (
-              <LibraryCard
-                key={res.id}
-                resource={res}
-                onOpen={handleOpenResource}
-                onPresent={handlePresent}
-              />
-            ))}
+            {resources.map((res) => {
+              if (res.file_type === 'game') {
+                return (
+                  <GameCard
+                    key={res.id}
+                    resource={res}
+                    onPlay={handleOpenResource}
+                  />
+                );
+              }
+              if (res.file_type === 'training') {
+                return (
+                  <TrainingCard
+                    key={res.id}
+                    resource={res}
+                    onStart={handleOpenResource}
+                  />
+                );
+              }
+              return (
+                <LibraryCard
+                  key={res.id}
+                  resource={res}
+                  onOpen={handleOpenResource}
+                  onPresent={handlePresent}
+                />
+              );
+            })}
           </div>
         )}
 
@@ -267,6 +434,13 @@ export const LibraryPage: React.FC = () => {
         isOpen={Boolean(activeWebBlogResource)}
         resource={activeWebBlogResource}
         onClose={() => setActiveWebBlogResource(null)}
+      />
+
+      {/* Embedded Training Video & Interactive Tutorial Viewer Modal */}
+      <TrainingViewerModal
+        isOpen={Boolean(activeTrainingResource)}
+        resource={activeTrainingResource}
+        onClose={() => setActiveTrainingResource(null)}
       />
 
       {/* Upload Resource Modal */}

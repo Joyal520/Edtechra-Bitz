@@ -15,14 +15,17 @@ import {
   Loader2,
   ArrowLeft,
   BookOpen,
-  Globe
+  Globe,
+  Gamepad2,
+  GraduationCap
 } from 'lucide-react';
-import { LibraryResource, LibraryFileType } from '@/types/library';
+import { LibraryResource, LibraryFileType, getNormalizedTrainingFormat } from '@/types/library';
 import { libraryService } from '@/services/libraryService';
 import { AdminLibraryModal } from '@/components/admin/AdminLibraryModal';
 import { SUBJECT_OPTIONS } from '@/components/library/LibraryFilters';
 import { PdfViewerModal } from '@/components/library/PdfViewerModal';
 import { WebBlogViewerModal } from '@/components/library/WebBlogViewerModal';
+import { TrainingViewerModal } from '@/components/library/TrainingViewerModal';
 
 export const AdminLibraryPage: React.FC = () => {
   const navigate = useNavigate();
@@ -43,6 +46,7 @@ export const AdminLibraryPage: React.FC = () => {
   // Preview Modals
   const [activePdfResource, setActivePdfResource] = useState<LibraryResource | null>(null);
   const [activeWebBlogResource, setActiveWebBlogResource] = useState<LibraryResource | null>(null);
+  const [activeTrainingResource, setActiveTrainingResource] = useState<LibraryResource | null>(null);
 
   const loadResources = useCallback(async () => {
     setLoading(true);
@@ -107,6 +111,18 @@ export const AdminLibraryPage: React.FC = () => {
   };
 
   const handleOpenPreview = (res: LibraryResource) => {
+    if (res.file_type === 'game') {
+      if (res.file_url?.startsWith('/')) navigate(res.file_url);
+      else if (res.file_url) window.open(res.file_url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (res.file_type === 'training') {
+      const fmt = getNormalizedTrainingFormat(res);
+      if (fmt === 'pdf') setActivePdfResource(res);
+      else if (fmt === 'pptx') navigate(`/library/present/${res.id}`);
+      else setActiveTrainingResource(res);
+      return;
+    }
     if (res.file_type === 'pdf') {
       setActivePdfResource(res);
     } else if (res.file_type === 'web_blog') {
@@ -121,6 +137,8 @@ export const AdminLibraryPage: React.FC = () => {
   const publishedCount = resources.filter((r) => r.published).length;
   const pdfCount = resources.filter((r) => r.file_type === 'pdf').length;
   const pptxCount = resources.filter((r) => r.file_type === 'pptx').length;
+  const gameCount = resources.filter((r) => r.file_type === 'game').length;
+  const trainingCount = resources.filter((r) => r.file_type === 'training').length;
 
   return (
     <div className="min-h-screen bg-[#fbfbf7] text-slate-900 pb-16">
@@ -179,7 +197,7 @@ export const AdminLibraryPage: React.FC = () => {
           </div>
 
           {/* Quick Metrics Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-2">
             <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80">
               <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total Files</span>
               <div className="text-xl font-black text-slate-900">{totalCount}</div>
@@ -198,6 +216,16 @@ export const AdminLibraryPage: React.FC = () => {
             <div className="p-3 bg-amber-50/60 rounded-2xl border border-amber-200/80">
               <span className="text-[10px] font-black uppercase tracking-wider text-amber-700">Presentations</span>
               <div className="text-xl font-black text-amber-800">{pptxCount}</div>
+            </div>
+
+            <div className="p-3 bg-violet-50/60 rounded-2xl border border-violet-200/80">
+              <span className="text-[10px] font-black uppercase tracking-wider text-violet-600">Games</span>
+              <div className="text-xl font-black text-violet-700">{gameCount}</div>
+            </div>
+
+            <div className="p-3 bg-teal-50/60 rounded-2xl border border-teal-200/80">
+              <span className="text-[10px] font-black uppercase tracking-wider text-teal-600">Training</span>
+              <div className="text-xl font-black text-teal-700">{trainingCount}</div>
             </div>
           </div>
 
@@ -245,6 +273,8 @@ export const AdminLibraryPage: React.FC = () => {
               <option value="pdf">PDFs only</option>
               <option value="pptx">PowerPoint only</option>
               <option value="web_blog">Web / Blogs only</option>
+              <option value="game">Games only</option>
+              <option value="training">Training only</option>
             </select>
 
             {/* Status Filter */}
@@ -305,6 +335,10 @@ export const AdminLibraryPage: React.FC = () => {
                                   <Presentation className="w-4 h-4 text-amber-400" />
                                 ) : res.file_type === 'web_blog' ? (
                                   <Globe className="w-4 h-4 text-emerald-400" />
+                                ) : res.file_type === 'game' ? (
+                                  <Gamepad2 className="w-4 h-4 text-violet-400" />
+                                ) : res.file_type === 'training' ? (
+                                  <GraduationCap className="w-4 h-4 text-teal-400" />
                                 ) : (
                                   <FileText className="w-4 h-4 text-rose-400" />
                                 )}
@@ -328,6 +362,10 @@ export const AdminLibraryPage: React.FC = () => {
                               ? 'bg-amber-50 text-amber-800 border border-amber-200'
                               : res.file_type === 'web_blog'
                               ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                              : res.file_type === 'game'
+                              ? 'bg-violet-50 text-violet-800 border border-violet-200'
+                              : res.file_type === 'training'
+                              ? 'bg-teal-50 text-teal-800 border border-teal-200'
                               : 'bg-rose-50 text-rose-800 border border-rose-200'
                           }`}
                         >
@@ -484,6 +522,13 @@ export const AdminLibraryPage: React.FC = () => {
         isOpen={Boolean(activeWebBlogResource)}
         resource={activeWebBlogResource}
         onClose={() => setActiveWebBlogResource(null)}
+      />
+
+      {/* Embedded Training Video & Interactive Tutorial Viewer Modal */}
+      <TrainingViewerModal
+        isOpen={Boolean(activeTrainingResource)}
+        resource={activeTrainingResource}
+        onClose={() => setActiveTrainingResource(null)}
       />
 
     </div>

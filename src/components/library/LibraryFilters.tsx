@@ -5,6 +5,8 @@ import {
   FileText,
   Presentation,
   Globe,
+  Gamepad2,
+  GraduationCap,
   RotateCcw
 } from 'lucide-react';
 import { LibraryFilterState } from '@/types/library';
@@ -22,6 +24,32 @@ export const SUBJECT_OPTIONS = [
   'Other'
 ];
 
+export const GAME_CATEGORY_OPTIONS = [
+  'English',
+  'Mathematics',
+  'Science',
+  'ICT',
+  'Brain Games',
+  'Classroom Activities'
+];
+
+export const TRAINING_CATEGORY_OPTIONS = [
+  'AI',
+  'ICT',
+  'Google Workspace',
+  'Microsoft Office',
+  'Robotics',
+  'Programming',
+  'Digital Literacy',
+  'Teacher Development'
+];
+
+export const TRAINING_DIFFICULTY_OPTIONS = [
+  'Beginner',
+  'Intermediate',
+  'Advanced'
+];
+
 export const CATEGORY_OPTIONS = [
   'All Categories',
   'Presentation',
@@ -31,6 +59,8 @@ export const CATEGORY_OPTIONS = [
   'Lesson Notes',
   'Exam Preparation',
   'Web / Blogs',
+  ...GAME_CATEGORY_OPTIONS,
+  ...TRAINING_CATEGORY_OPTIONS.filter((c) => c !== 'ICT'),
   'Other'
 ];
 
@@ -71,10 +101,17 @@ export const LibraryFilters: React.FC<LibraryFiltersProps> = ({
     });
   };
 
+  const activeCategoryOptions =
+    filters.file_type === 'game'
+      ? ['All Categories', ...GAME_CATEGORY_OPTIONS]
+      : filters.file_type === 'training'
+      ? ['All Categories', ...TRAINING_CATEGORY_OPTIONS]
+      : CATEGORY_OPTIONS;
+
   return (
     <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-4">
       {/* Top Row: Search Input + File Type Toggle */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         {/* Search Bar */}
         <div className="relative flex-1">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -82,7 +119,7 @@ export const LibraryFilters: React.FC<LibraryFiltersProps> = ({
             type="search"
             value={filters.search}
             onChange={(e) => onChange({ ...filters, search: e.target.value })}
-            placeholder="Search by title, description, subject, or author..."
+            placeholder="Search by title, description, subject, instructor, or category..."
             className="w-full pl-10 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#026fc3] focus:bg-white transition-all"
           />
           {filters.search && (
@@ -97,11 +134,11 @@ export const LibraryFilters: React.FC<LibraryFiltersProps> = ({
         </div>
 
         {/* File Type Pill Toggle */}
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl border border-slate-200/80 shrink-0 self-start md:self-auto">
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl border border-slate-200/80 shrink-0 overflow-x-auto no-scrollbar max-w-full">
           <button
             type="button"
-            onClick={() => onChange({ ...filters, file_type: 'all' })}
-            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+            onClick={() => onChange({ ...filters, file_type: 'all', category: 'all' })}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               filters.file_type === 'all'
                 ? 'bg-slate-900 text-white shadow-2xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -112,8 +149,8 @@ export const LibraryFilters: React.FC<LibraryFiltersProps> = ({
 
           <button
             type="button"
-            onClick={() => onChange({ ...filters, file_type: 'pdf' })}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+            onClick={() => onChange({ ...filters, file_type: 'pdf', category: 'all' })}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               filters.file_type === 'pdf'
                 ? 'bg-rose-600 text-white shadow-2xs'
                 : 'text-slate-600 hover:text-rose-700'
@@ -125,8 +162,8 @@ export const LibraryFilters: React.FC<LibraryFiltersProps> = ({
 
           <button
             type="button"
-            onClick={() => onChange({ ...filters, file_type: 'pptx' })}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+            onClick={() => onChange({ ...filters, file_type: 'pptx', category: 'all' })}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               filters.file_type === 'pptx'
                 ? 'bg-amber-500 text-white shadow-2xs'
                 : 'text-slate-600 hover:text-amber-700'
@@ -138,15 +175,41 @@ export const LibraryFilters: React.FC<LibraryFiltersProps> = ({
 
           <button
             type="button"
-            onClick={() => onChange({ ...filters, file_type: 'web_blog' })}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+            onClick={() => onChange({ ...filters, file_type: 'web_blog', category: 'all' })}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               filters.file_type === 'web_blog'
                 ? 'bg-emerald-600 text-white shadow-2xs'
                 : 'text-slate-600 hover:text-emerald-700'
             }`}
           >
             <Globe className="w-3.5 h-3.5" />
-            <span>Web / Blogs</span>
+            <span>Web/Blogs</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onChange({ ...filters, file_type: 'game', category: 'all' })}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+              filters.file_type === 'game'
+                ? 'bg-violet-600 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-violet-700'
+            }`}
+          >
+            <Gamepad2 className="w-3.5 h-3.5" />
+            <span>Games</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onChange({ ...filters, file_type: 'training', category: 'all' })}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+              filters.file_type === 'training'
+                ? 'bg-teal-600 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-teal-700'
+            }`}
+          >
+            <GraduationCap className="w-3.5 h-3.5" />
+            <span>Training</span>
           </button>
         </div>
       </div>
@@ -176,7 +239,7 @@ export const LibraryFilters: React.FC<LibraryFiltersProps> = ({
               onChange={(e) => onChange({ ...filters, category: e.target.value })}
               className="pl-3 pr-8 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#026fc3] cursor-pointer"
             >
-              {CATEGORY_OPTIONS.map((cat) => (
+              {activeCategoryOptions.map((cat) => (
                 <option key={cat} value={cat === 'All Categories' ? 'all' : cat}>
                   {cat}
                 </option>
