@@ -20,18 +20,23 @@ import { ClassroomLeaderboardEntry } from '@/types/classroom';
 import {
   AchievementSnapshot,
   buildAchievementSnapshot,
-  encodeSnapshotToken,
   getGallerySnapshots,
   revokeSnapshotInGallery,
   saveSnapshotToGallery,
 } from '@/utils/classChampionsUtils';
 import {
+  buildWhatsAppShareMessage,
   downloadCertificateBlob,
   PreloadedCertificateAssets,
   preloadCertificateAssets,
   renderCertificateSvgToPngBlob,
-  shareCertificateOnWhatsApp,
 } from '@/utils/certificateExportUtils';
+import {
+  buildShortShareUrl,
+  createShortShareCertificate,
+  listClassroomSharedCertificates,
+  revokeSharedCertificateOnServer,
+} from '@/services/certificateShareService';
 import { ClassChampionsCertificateSvg } from './champions/ClassChampionsCertificateSvg';
 
 export type ShareQuickAction = 'preview' | 'whatsapp' | 'download' | 'link';
@@ -86,9 +91,26 @@ export const ShareLeaderboardModal: React.FC<ShareLeaderboardModalProps> = ({
     refreshParentRef.current = onRefreshParentLeaderboard;
   }, [onRefreshParentLeaderboard]);
 
-  const refreshGallery = useCallback(() => {
+  const refreshGallery = useCallback(async () => {
     const scopeId = classroomId || 'classroom';
-    setGallerySnapshots(getGallerySnapshots(scopeId));
+    const localItems = getGallerySnapshots(scopeId);
+    setGallerySnapshots(localItems);
+
+    if (classroomId) {
+      try {
+        const remoteItems = await listClassroomSharedCertificates(classroomId);
+        if (remoteItems.length > 0) {
+          const seen = new Set(remoteItems.map((i) => i.shareId || i.id));
+          const merged = [
+            ...remoteItems,
+            ...localItems.filter((i) => i.shareId && !seen.has(i.shareId)),
+          ];
+          setGallerySnapshots(merged);
+        }
+      } catch {
+        // Keep local gallery fallback
+      }
+    }
   }, [classroomId]);
 
   const loadSnapshotAndAssets = useCallback(async () => {
@@ -152,13 +174,29 @@ export const ShareLeaderboardModal: React.FC<ShareLeaderboardModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  const buildShareLinkForSnapshot = useCallback(
-    (targetSnapshot: AchievementSnapshot): string => {
-      saveSnapshotToGallery(targetSnapshot);
-      refreshGallery();
-      const token = encodeSnapshotToken(targetSnapshot);
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      return `${origin}/champions/certificate?s=${encodeURIComponent(token)}`;
+  const ensureShortShareLink = useCallback(
+    async (targetSnapshot: AchievementSnapshot): Promise<{ shareUrl: string; updated: AchievementSnapshot }> => {
+      if (targetSnapshot.shareId) {
+        return {
+          shareUrl: buildShortShareUrl(targetSnapshot.shareId),
+          updated: targetSnapshot,
+        };
+      }
+
+      const created = await createShortShareCertificate(targetSnapshot);
+      const updatedSnapshot: AchievementSnapshot = {
+        ...targetSnapshot,
+        id: created.shareId || created.id,
+        shareId: created.shareId,
+        createdAt: created.createdAt || targetSnapshot.createdAt,
+      };
+      saveSnapshotToGallery(updatedSnapshot);
+      setSnapshot((prev) => (prev && prev.id === targetSnapshot.id ? updatedSnapshot : prev));
+      void refreshGallery();
+      return {
+        shareUrl: buildShortShareUrl(created.shareId || created.id),
+        updated: updatedSnapshot,
+      };
     },
     [refreshGallery]
   );
@@ -167,16 +205,17 @@ export const ShareLeaderboardModal: React.FC<ShareLeaderboardModalProps> = ({
     async (targetSnapshot: AchievementSnapshot | null = snapshot) => {
       if (!targetSnapshot) return;
       try {
-        const shareUrl = buildShareLinkForSnapshot(targetSnapshot);
+        setErrorMsg(null);
+        const { shareUrl } = await ensureShortShareLink(targetSnapshot);
         await navigator.clipboard.writeText(shareUrl);
         setCopiedLink(true);
-        onShowToast?.('Shareable certificate link copied!');
+        onShowToast?.('Short certificate link copied!');
         window.setTimeout(() => setCopiedLink(false), 2500);
-      } catch {
-        setErrorMsg('Could not copy to clipboard automatically. Please try again.');
+      } catch (err: any) {
+        setErrorMsg(err?.message || 'Could not generate or copy the short link. Please try again.');
       }
     },
-    [snapshot, buildShareLinkForSnapshot, onShowToast]
+    [snapshot, ensureShortShareLink, onShowToast]
   );
 
   const handleDownloadPng = useCallback(async () => {
@@ -184,8 +223,6 @@ export const ShareLeaderboardModal: React.FC<ShareLeaderboardModalProps> = ({
     setIsExporting('png');
     setErrorMsg(null);
     try {
-      saveSnapshotToGallery(snapshot);
-      refreshGallery();
       const blob = await renderCertificateSvgToPngBlob(svgRef.current, 1200, 1500);
       downloadCertificateBlob(blob, snapshot.classroomName);
       onShowToast?.('Achievement certificate downloaded!');
@@ -194,34 +231,41 @@ export const ShareLeaderboardModal: React.FC<ShareLeaderboardModalProps> = ({
     } finally {
       setIsExporting(null);
     }
-  }, [snapshot, refreshGallery, onShowToast]);
+  }, [snapshot, onShowToast]);
 
   const handleShareWhatsApp = useCallback(async () => {
-    if (!snapshot || !svgRef.current) return;
+    if (!snapshot) return;
     setIsExporting('whatsapp');
     setErrorMsg(null);
     try {
-      const shareUrl = buildShareLinkForSnapshot(snapshot);
-      const blob = await renderCertificateSvgToPngBlob(svgRef.current, 1200, 1500);
-      const mode = await shareCertificateOnWhatsApp({
-        blob,
-        classroomName: snapshot.classroomName,
-        shareUrl,
-      });
+      const { shareUrl } = await ensureShortShareLink(snapshot);
+      const message = buildWhatsAppShareMessage(snapshot.classroomName, shareUrl);
 
-      if (mode === 'native_file') {
-        onShowToast?.('Certificate ready to share!');
-      } else {
-        onShowToast?.('Certificate PNG downloaded & WhatsApp opened!');
+      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        try {
+          await navigator.share({
+            title: 'EdTechra Class Champions',
+            text: message,
+            url: shareUrl,
+          });
+          onShowToast?.('Certificate link shared!');
+          return;
+        } catch (err) {
+          if ((err as DOMException)?.name === 'AbortError') {
+            return;
+          }
+        }
       }
-    } catch (err) {
-      if ((err as DOMException)?.name !== 'AbortError') {
-        setErrorMsg('Could not launch WhatsApp share. You can download PNG and share manually.');
-      }
+
+      const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+      window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+      onShowToast?.('WhatsApp share opened with short link!');
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Could not launch WhatsApp share. Please try again.');
     } finally {
       setIsExporting(null);
     }
-  }, [snapshot, buildShareLinkForSnapshot, onShowToast]);
+  }, [snapshot, ensureShortShareLink, onShowToast]);
 
   useEffect(() => {
     if (
@@ -271,13 +315,20 @@ export const ShareLeaderboardModal: React.FC<ShareLeaderboardModalProps> = ({
     }
   };
 
-  const handleRevokeLink = (item: AchievementSnapshot) => {
-    revokeSnapshotInGallery(item.classroomId, item.id);
-    refreshGallery();
-    if (snapshot?.id === item.id) {
-      setSnapshot({ ...snapshot, revoked: true });
+  const handleRevokeLink = async (item: AchievementSnapshot) => {
+    try {
+      if (item.shareId) {
+        await revokeSharedCertificateOnServer(item.shareId);
+      }
+      revokeSnapshotInGallery(item.classroomId, item.id);
+      void refreshGallery();
+      if (snapshot?.id === item.id) {
+        setSnapshot({ ...snapshot, revoked: true });
+      }
+      onShowToast?.('Certificate link revoked.');
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to revoke certificate link.');
     }
-    onShowToast?.('Certificate link revoked.');
   };
 
   if (!isOpen) return null;

@@ -13,10 +13,12 @@ export interface AchievementChampion {
 
 export interface AchievementSnapshot {
   id: string;
+  shareId?: string;
   classroomId: string;
   classroomName: string;
   periodLabel: string;
   createdAt: string;
+  expiresAt?: string | null;
   revoked?: boolean;
   champions: AchievementChampion[];
 }

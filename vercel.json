@@ -5,10 +5,15 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 60,
-      "memory": 1024
+      "memory": 1024,
+      "includeFiles": "dist/index.html"
     }
   },
   "rewrites": [
+    {
+      "source": "/c/:shareId",
+      "destination": "/api/og/certificate?id=:shareId"
+    },
     {
       "source": "/api/(.*)",
       "destination": "/api"

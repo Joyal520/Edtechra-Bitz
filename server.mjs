@@ -166,6 +166,14 @@ import { evaluateStudentEssay } from './server/courseEssayEvaluationService.mjs'
 import { evaluateStudentAnswer } from './server/courseAnswerEvaluationService.mjs';
 import { knowledgeBitzService } from './server/knowledgeBitzService.mjs';
 import { searchPixabay } from './server/pixabayService.mjs';
+import {
+  createSharedCertificate,
+  generateCertificateOgImagePng,
+  getSharedCertificateByShareId,
+  injectOgIntoDistHtml,
+  listClassroomCertificates,
+  revokeSharedCertificate,
+} from './server/championsCertificateService.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25279,6 +25287,177 @@ app.get('/api/teacher/games/dashboard', async (req, res) => {
   } catch (err) {
     console.error('[teacher/games/dashboard] error:', err);
     return res.status(500).json({ success: false, error: err.message || 'Failed to load teacher games dashboard' });
+  }
+});
+
+// ============================================================================
+// Class Champions Short Share Certificates & Open Graph Preview Routes
+// ============================================================================
+
+app.post('/api/certificates', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData?.user?.id) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const { classroomId, classroomName, periodLabel, champions, expiresInDays } = req.body || {};
+    const created = await createSharedCertificate({
+      serverSupabase,
+      classroomId,
+      userId: authData.user.id,
+      profileRole: authData.profile?.role,
+      classroomName,
+      periodLabel,
+      champions,
+      expiresInDays,
+    });
+
+    return res.status(201).json({
+      success: true,
+      certificate: created,
+    });
+  } catch (err) {
+    console.error('[POST /api/certificates] error:', err);
+    return res.status(err.status || 500).json({
+      success: false,
+      error: err.message || 'Failed to create shared certificate',
+    });
+  }
+});
+
+app.get('/api/certificates/classroom/:classroomId', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData?.user?.id) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const items = await listClassroomCertificates({
+      serverSupabase,
+      classroomId: req.params.classroomId,
+      userId: authData.user.id,
+      profileRole: authData.profile?.role,
+    });
+
+    return res.json({ success: true, certificates: items });
+  } catch (err) {
+    console.error('[GET /api/certificates/classroom/:classroomId] error:', err);
+    return res.status(err.status || 500).json({
+      success: false,
+      error: err.message || 'Failed to list classroom certificates',
+    });
+  }
+});
+
+app.post('/api/certificates/:shareId/revoke', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData?.user?.id) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const updated = await revokeSharedCertificate({
+      serverSupabase,
+      shareId: req.params.shareId,
+      userId: authData.user.id,
+      profileRole: authData.profile?.role,
+    });
+
+    return res.json({ success: true, certificate: updated });
+  } catch (err) {
+    console.error('[POST /api/certificates/:shareId/revoke] error:', err);
+    return res.status(err.status || 500).json({
+      success: false,
+      error: err.message || 'Failed to revoke certificate',
+    });
+  }
+});
+
+app.get('/api/certificates/:shareId/og-image.png', async (req, res) => {
+  try {
+    const result = await getSharedCertificateByShareId({
+      serverSupabase,
+      shareId: req.params.shareId,
+    });
+
+    if (result.status !== 'valid' || !result.certificate) {
+      return res.status(404).send('Not found');
+    }
+
+    const pngBuffer = await generateCertificateOgImagePng(result.certificate);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
+    return res.send(pngBuffer);
+  } catch (err) {
+    console.error('[GET /api/certificates/:shareId/og-image.png] error:', err);
+    return res.status(500).send('Failed to generate preview image');
+  }
+});
+
+app.get('/api/certificates/:shareId', async (req, res) => {
+  try {
+    const result = await getSharedCertificateByShareId({
+      serverSupabase,
+      shareId: req.params.shareId,
+    });
+
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+
+    if (result.status === 'invalid' || result.status === 'not_found') {
+      return res.status(404).json({
+        success: false,
+        status: result.status,
+        error: 'Achievement certificate not found',
+      });
+    }
+
+    if (result.status === 'revoked' || result.status === 'expired') {
+      return res.status(410).json({
+        success: false,
+        status: result.status,
+        error: result.status === 'revoked'
+          ? 'This achievement certificate has been revoked'
+          : 'This achievement certificate has expired',
+      });
+    }
+
+    return res.json({
+      success: true,
+      status: 'valid',
+      certificate: result.certificate,
+    });
+  } catch (err) {
+    console.error('[GET /api/certificates/:shareId] error:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to load certificate',
+    });
+  }
+});
+
+app.get('/api/og/certificate', async (req, res) => {
+  try {
+    const shareId = String(req.query.id || '').trim();
+    const proto = req.headers['x-forwarded-proto'] || 'https';
+    const host = req.headers['x-forwarded-host'] || req.headers.host || 'edtechra-bitz.vercel.app';
+    const origin = `${proto}://${host}`;
+
+    let certificate = null;
+    if (shareId) {
+      const result = await getSharedCertificateByShareId({ serverSupabase, shareId });
+      if (result.status === 'valid') {
+        certificate = result.certificate;
+      }
+    }
+
+    const html = injectOgIntoDistHtml(shareId, certificate, origin);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300');
+    return res.status(200).send(html);
+  } catch (err) {
+    console.error('[GET /api/og/certificate] error:', err);
+    return res.status(500).send('Internal Server Error');
   }
 });
 

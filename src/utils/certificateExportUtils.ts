@@ -171,17 +171,18 @@ export function downloadCertificateBlob(blob: Blob, classroomName: string): void
 }
 
 /**
- * Builds the default WhatsApp/share message accompanying the certificate.
+ * Builds the concise WhatsApp/share message accompanying the certificate.
  */
-export function buildWhatsAppShareMessage(classroomName: string, shareUrl?: string): string {
-  const name = classroomName?.trim() || 'our Classroom';
+export function buildWhatsAppShareMessage(_classroomName: string, shareUrl?: string): string {
   const lines = [
-    `🏆 *EdTechra Class Champions — ${name}*`,
-    'Congratulations to our Top 3 performers! Keep learning, keep growing, and reach even greater heights! ✨',
+    '🏆 Celebrate our Class Champions!',
+    '',
+    'Discover the top three performers in our EdTechra classroom.',
   ];
   if (shareUrl) {
-    lines.push('', `View certificate: ${shareUrl}`);
+    lines.push('', 'View the achievement:', shareUrl);
   }
+  lines.push('', 'Learn. Discover. Grow.');
   return lines.join('\n');
 }
 

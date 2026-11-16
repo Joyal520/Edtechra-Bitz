@@ -37,6 +37,7 @@ export const AppRoutes: React.FC = () => {
   return (
     <Suspense fallback={<CoursePlayerSkeleton />}>
       <Routes>
+        <Route path="/c/:shareId" element={<SharedChampionsCertificatePage />} />
         <Route path="/champions/certificate" element={<SharedChampionsCertificatePage />} />
         <Route path="/" element={<AppLayout />}>
           <Route index element={<HomePage />} />

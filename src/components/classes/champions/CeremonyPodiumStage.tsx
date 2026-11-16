@@ -1,0 +1,293 @@
+import React from 'react';
+import { Sparkles } from 'lucide-react';
+import { AchievementChampion, AchievementSnapshot } from '@/utils/classChampionsUtils';
+import {
+  GoldAchievementSeal,
+  GoldCrownIllustration,
+  GoldLaurelSprig,
+  GoldenTrophyIllustration,
+  PodiumLeavesDecor,
+} from './ClassChampionsAssets';
+import './classChampions.css';
+import './classChampionsCeremony.css';
+
+export interface CeremonyPodiumStageProps {
+  snapshot: AchievementSnapshot;
+  logoUrl?: string;
+}
+
+function getInitials(name: string): string {
+  const parts = (name || 'S').trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
+  }
+  return (parts[0]?.slice(0, 2) || 'ST').toUpperCase();
+}
+
+interface CeremonyAvatarProps {
+  champion?: AchievementChampion | null;
+  rank: 1 | 2 | 3;
+}
+
+const CeremonyAvatar: React.FC<CeremonyAvatarProps> = ({ champion, rank }) => {
+  const isFirst = rank === 1;
+  const sizeClass = isFirst
+    ? 'w-20 h-20 sm:w-28 sm:h-28'
+    : 'w-14 h-14 sm:w-20 sm:h-20';
+
+  const ringStyle =
+    rank === 1
+      ? 'border-[3.5px] sm:border-4 border-amber-300 shadow-[0_0_28px_rgba(251,191,36,0.65)]'
+      : rank === 2
+        ? 'border-[3px] border-slate-200 shadow-[0_0_20px_rgba(226,232,240,0.4)]'
+        : 'border-[3px] border-amber-600/90 shadow-[0_0_18px_rgba(217,119,6,0.4)]';
+
+  const bgFallback =
+    rank === 1
+      ? 'bg-gradient-to-br from-amber-300 via-amber-500 to-amber-700 text-amber-950'
+      : rank === 2
+        ? 'bg-gradient-to-br from-slate-200 via-slate-400 to-slate-600 text-slate-900'
+        : 'bg-gradient-to-br from-orange-300 via-amber-700 to-amber-900 text-amber-50';
+
+  const animClass = isFirst ? 'ceremony-avatar-first' : 'ceremony-avatar-side';
+
+  return (
+    <div className={`relative flex items-center justify-center ${animClass}`}>
+      {isFirst && (
+        <>
+          <div className="ceremony-crown-descend absolute -top-9 sm:-top-12 left-1/2 -translate-x-1/2 w-12 h-9 sm:w-16 sm:h-11 z-20 drop-shadow-[0_6px_12px_rgba(245,158,11,0.5)]">
+            <GoldCrownIllustration />
+          </div>
+          <Sparkles
+            className="ceremony-crown-sparkle w-4 h-4 sm:w-5 sm:h-5 text-amber-200 absolute -top-8 -right-2 sm:-top-10 sm:-right-3 z-20"
+            aria-hidden="true"
+          />
+          <Sparkles
+            className="ceremony-crown-sparkle w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-300 absolute -top-6 -left-2 sm:-top-8 sm:-left-3 z-20"
+            style={{ animationDelay: '1.1s' }}
+            aria-hidden="true"
+          />
+        </>
+      )}
+
+      <div
+        className={`${sizeClass} rounded-full overflow-hidden ${ringStyle} ${bgFallback} flex items-center justify-center font-black select-none relative z-10`}
+      >
+        {champion?.avatarUrl ? (
+          <img
+            src={champion.avatarUrl}
+            alt={champion.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <span className={isFirst ? 'text-xl sm:text-3xl' : 'text-sm sm:text-xl'}>
+            {getInitials(champion?.name || `#${rank}`)}
+          </span>
+        )}
+      </div>
+
+      <span
+        className={`absolute -bottom-2 left-1/2 -translate-x-1/2 z-20 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-black tracking-wide shadow-md ${
+          rank === 1
+            ? 'bg-gradient-to-r from-amber-300 to-yellow-500 text-amber-950 border border-amber-100'
+            : rank === 2
+              ? 'bg-gradient-to-r from-slate-100 to-slate-300 text-slate-900 border border-white'
+              : 'bg-gradient-to-r from-amber-600 to-orange-700 text-amber-50 border border-amber-400/50'
+        }`}
+      >
+        #{rank}
+      </span>
+    </div>
+  );
+};
+
+export const CeremonyPodiumStage: React.FC<CeremonyPodiumStageProps> = ({
+  snapshot,
+  logoUrl = '/images/edtechra-classroom-logo.png',
+}) => {
+  const first = snapshot.champions.find((c) => c.rank === 1) || snapshot.champions[0] || null;
+  const second = snapshot.champions.find((c) => c.rank === 2) || snapshot.champions[1] || null;
+  const third = snapshot.champions.find((c) => c.rank === 3) || snapshot.champions[2] || null;
+
+  return (
+    <section
+      aria-label={`Class Champions Ceremony for ${snapshot.classroomName}`}
+      className="ceremony-gold-frame relative w-full max-w-4xl mx-auto rounded-3xl sm:rounded-[36px] px-3.5 py-6 sm:px-10 sm:py-9 overflow-hidden text-white"
+    >
+      {/* Stage 1: Soft Golden Light Rays & Ambient Halo */}
+      <div className="ceremony-light-rays absolute inset-0 pointer-events-none" aria-hidden="true" />
+      <div
+        className="ceremony-ambient-halo absolute left-1/2 top-[48%] w-[260px] h-[260px] sm:w-[420px] sm:h-[420px] rounded-full pointer-events-none"
+        aria-hidden="true"
+      />
+
+      {/* Gold Decorative Corner Ornaments */}
+      <div className="pointer-events-none absolute top-3 left-3 w-7 h-7 sm:w-10 sm:h-10 border-t-2 border-l-2 border-amber-300/60 rounded-tl-xl" aria-hidden="true" />
+      <div className="pointer-events-none absolute top-3 right-3 w-7 h-7 sm:w-10 sm:h-10 border-t-2 border-r-2 border-amber-300/60 rounded-tr-xl" aria-hidden="true" />
+      <div className="pointer-events-none absolute bottom-3 left-3 w-7 h-7 sm:w-10 sm:h-10 border-b-2 border-l-2 border-amber-300/60 rounded-bl-xl" aria-hidden="true" />
+      <div className="pointer-events-none absolute bottom-3 right-3 w-7 h-7 sm:w-10 sm:h-10 border-b-2 border-r-2 border-amber-300/60 rounded-br-xl" aria-hidden="true" />
+
+      {/* TOP: EdTechra Logo, Digital Classroom Branding & Class Champions Ribbon */}
+      <header className="ceremony-stage-header relative z-10 flex flex-col items-center text-center">
+        <div className="flex items-center justify-center gap-2.5 sm:gap-3 mb-4">
+          <img
+            src={logoUrl}
+            alt="EdTechra"
+            className="h-8 sm:h-10 w-auto object-contain drop-shadow-[0_4px_12px_rgba(255,255,255,0.2)]"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src = '/logo-emblem.png';
+            }}
+          />
+          <div className="flex items-center gap-2">
+            <span className="text-lg sm:text-xl font-black tracking-tight text-white">
+              EdTechra
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full bg-sky-500/20 border border-sky-300/40 text-sky-200 text-[10px] sm:text-xs font-bold tracking-wide uppercase">
+              Digital Classroom
+            </span>
+          </div>
+        </div>
+
+        {/* Gold Class Champions Ribbon */}
+        <div className="relative inline-flex items-center justify-center">
+          <div className="hidden sm:block w-8 h-12 -mr-2 opacity-90" aria-hidden="true">
+            <GoldLaurelSprig side="left" />
+          </div>
+          <div className="px-6 sm:px-10 py-2 sm:py-2.5 rounded-full bg-gradient-to-r from-amber-500 via-yellow-300 to-amber-500 shadow-[0_10px_28px_rgba(245,158,11,0.45)] border border-amber-100/80">
+            <h1 className="text-lg sm:text-2xl md:text-3xl font-black tracking-[0.14em] uppercase text-amber-950 drop-shadow-[0_1px_0_rgba(255,255,255,0.5)]">
+              Class Champions
+            </h1>
+          </div>
+          <div className="hidden sm:block w-8 h-12 -ml-2 opacity-90" aria-hidden="true">
+            <GoldLaurelSprig side="right" />
+          </div>
+        </div>
+
+        <p className="mt-2.5 text-xs sm:text-sm font-semibold tracking-wide text-amber-100/90">
+          Top 3 Performers in This Classroom
+        </p>
+      </header>
+
+      {/* CENTRE: Animated 3-Position Podium */}
+      <div className="relative z-10 mt-10 sm:mt-14 mb-6 sm:mb-8">
+        {/* Decorative Leaves */}
+        <div className="hidden md:block pointer-events-none absolute -left-3 bottom-4 w-20 h-28 opacity-75" aria-hidden="true">
+          <PodiumLeavesDecor side="left" />
+        </div>
+        <div className="hidden md:block pointer-events-none absolute -right-3 bottom-4 w-20 h-28 opacity-75" aria-hidden="true">
+          <PodiumLeavesDecor side="right" />
+        </div>
+
+        <div className="grid grid-cols-3 items-end gap-2 sm:gap-5 max-w-2xl mx-auto pt-4">
+          {/* 2nd Place (Left) */}
+          <div className="flex flex-col items-center">
+            <CeremonyAvatar champion={second} rank={2} />
+
+            <div className="ceremony-meta-2 mt-3.5 mb-2.5 text-center px-1 min-h-[48px] sm:min-h-[54px] flex flex-col justify-start">
+              <p className="text-xs sm:text-base font-extrabold text-white leading-tight line-clamp-2 break-words">
+                {second?.name || 'Position Open'}
+              </p>
+              <span className="mt-1 inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-slate-200/15 border border-slate-200/30 text-[11px] sm:text-xs font-bold text-slate-200">
+                {second ? `${second.points.toLocaleString()} XP` : '— XP'}
+              </span>
+            </div>
+
+            <div className="ceremony-podium-rise-side w-full">
+              <div className="cc-pillar-silver h-24 sm:h-32 rounded-t-2xl flex flex-col items-center justify-center relative border-t border-white/60">
+                <span className="text-3xl sm:text-5xl font-black text-slate-800/85 drop-shadow-[0_1px_0_rgba(255,255,255,0.6)]">
+                  2
+                </span>
+                <span className="text-[10px] sm:text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                  2nd Place
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* 1st Place (Center - Tallest & Prominent) */}
+          <div className="flex flex-col items-center">
+            <CeremonyAvatar champion={first} rank={1} />
+
+            <div className="ceremony-meta-1 mt-3.5 mb-2.5 text-center px-1 min-h-[52px] sm:min-h-[58px] flex flex-col justify-start">
+              <p className="text-sm sm:text-lg font-black text-amber-200 leading-tight line-clamp-2 break-words drop-shadow-[0_2px_8px_rgba(251,191,36,0.35)]">
+                {first?.name || 'Position Open'}
+              </p>
+              <span className="mt-1 inline-flex items-center justify-center px-2.5 py-0.5 rounded-full bg-amber-400/20 border border-amber-300/50 text-xs sm:text-sm font-extrabold text-amber-200">
+                {first ? `${first.points.toLocaleString()} XP` : '— XP'}
+              </span>
+            </div>
+
+            <div className="ceremony-podium-rise-first w-full">
+              <div className="cc-pillar-gold ceremony-gold-shimmer h-32 sm:h-44 rounded-t-2xl flex flex-col items-center justify-center relative border-t-2 border-amber-100/80 shadow-[0_0_35px_rgba(251,191,36,0.35)]">
+                <div className="w-7 h-7 sm:w-9 sm:h-9 mb-0.5 opacity-95" aria-hidden="true">
+                  <GoldenTrophyIllustration />
+                </div>
+                <span className="text-4xl sm:text-6xl font-black text-amber-950/90 drop-shadow-[0_1px_0_rgba(255,255,255,0.5)] leading-none">
+                  1
+                </span>
+                <span className="mt-0.5 text-[10px] sm:text-xs font-black uppercase tracking-wider text-amber-950/85">
+                  Champion
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* 3rd Place (Right) */}
+          <div className="flex flex-col items-center">
+            <CeremonyAvatar champion={third} rank={3} />
+
+            <div className="ceremony-meta-3 mt-3.5 mb-2.5 text-center px-1 min-h-[48px] sm:min-h-[54px] flex flex-col justify-start">
+              <p className="text-xs sm:text-base font-extrabold text-white leading-tight line-clamp-2 break-words">
+                {third?.name || 'Position Open'}
+              </p>
+              <span className="mt-1 inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-amber-700/30 border border-amber-400/35 text-[11px] sm:text-xs font-bold text-amber-200">
+                {third ? `${third.points.toLocaleString()} XP` : '— XP'}
+              </span>
+            </div>
+
+            <div className="ceremony-podium-rise-side w-full">
+              <div className="cc-pillar-bronze h-20 sm:h-28 rounded-t-2xl flex flex-col items-center justify-center relative border-t border-amber-200/45">
+                <span className="text-3xl sm:text-5xl font-black text-amber-950/85 drop-shadow-[0_1px_0_rgba(255,255,255,0.35)]">
+                  3
+                </span>
+                <span className="text-[10px] sm:text-xs font-extrabold uppercase tracking-wider text-amber-950/80">
+                  3rd Place
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* BOTTOM: Classroom Name, Period, Achievement Message & Gold Seal */}
+      <footer className="ceremony-stage-footer relative z-10 border-t border-amber-300/20 pt-5 flex flex-col items-center text-center gap-3.5">
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <span className="px-3.5 py-1 rounded-full bg-white/10 border border-white/20 text-xs sm:text-sm font-bold text-white">
+            {snapshot.classroomName}
+          </span>
+          <span className="px-3.5 py-1 rounded-full bg-amber-400/15 border border-amber-300/35 text-xs sm:text-sm font-bold text-amber-200">
+            {snapshot.periodLabel}
+          </span>
+        </div>
+
+        <p className="text-sm sm:text-base font-medium italic text-sky-100/90 max-w-xl leading-relaxed">
+          &ldquo;Keep learning, keep growing, and reach even greater heights!&rdquo;
+        </p>
+
+        <div className="flex items-center justify-center gap-3 pt-1">
+          <div className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 drop-shadow-[0_6px_14px_rgba(245,158,11,0.45)]">
+            <GoldAchievementSeal />
+          </div>
+          <div className="text-left">
+            <div className="text-xs sm:text-sm font-extrabold text-amber-200 tracking-wide uppercase">
+              Verified Achievement
+            </div>
+            <div className="text-[11px] sm:text-xs text-sky-200/80 font-medium">
+              EdTechra Digital Classroom • Learn. Discover. Grow.
+            </div>
+          </div>
+        </div>
+      </footer>
+    </section>
+  );
+};
