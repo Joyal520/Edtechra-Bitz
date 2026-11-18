@@ -40,6 +40,7 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
 }) => {
   const isPublished = isAssignmentPublished(assignment);
   const isGameLibrary = Boolean(assignment.settings?.is_game_library);
+  const isCourseGame = Boolean(assignment.settings?.is_course_game);
   const gameLevels = isGameLibrary ? normalizeAssignmentLevels(assignment) : [];
   const gameProgress = isGameLibrary ? parseStudentLevelProgress(assignment.my_submission) : null;
   const sub = assignment.my_submission;
@@ -106,6 +107,30 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
           <h3 className="text-base font-black text-slate-900 pt-1">
             {assignment.title}
           </h3>
+
+          {isCourseGame && (
+            <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] font-bold text-slate-600">
+              {assignment.settings?.course_title && (
+                <span className="px-2 py-0.5 rounded-md bg-sky-50 text-[#026fc3] border border-sky-200">
+                  {String(assignment.settings.course_title)}
+                </span>
+              )}
+              {assignment.settings?.teacher_name && (
+                <span className="text-slate-500">By {String(assignment.settings.teacher_name)}</span>
+              )}
+              {assignment.settings?.difficulty && (
+                <span className="px-2 py-0.5 rounded-md bg-slate-100 capitalize">
+                  {String(assignment.settings.difficulty)}
+                </span>
+              )}
+              {assignment.settings?.total_questions && (
+                <span>{Number(assignment.settings.total_questions)} Questions</span>
+              )}
+              {Number(assignment.settings?.time_limit_sec) > 0 && (
+                <span>{Math.ceil(Number(assignment.settings?.time_limit_sec) / 60)} min limit</span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Teacher Actions */}
@@ -223,7 +248,13 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
               >
                 <FileText className="w-3.5 h-3.5" />
                 <span>
-                  {assignment.settings?.is_game_library
+                  {isCourseGame
+                    ? isGraded
+                      ? 'Play Again / View Score'
+                      : assignment.settings?.mode === 'competition'
+                      ? 'Join Competition'
+                      : 'Play Game'
+                    : assignment.settings?.is_game_library
                     ? isGameFullyCompleted
                       ? 'Completed'
                       : isSubmitted

@@ -35,7 +35,8 @@ import {
   Camera,
   Pause,
   Play,
-  ShieldCheck
+  ShieldCheck,
+  Gamepad2
 } from 'lucide-react';
 import {
   Course,
@@ -47,6 +48,7 @@ import {
 } from '@/types/courseStudio';
 import { courseStudioService } from '@/services/courseStudioService';
 import { CourseStudioWorkspaceBackground } from '@/components/course-studio/CourseStudioWorkspaceBackground';
+import { CourseGamesSection } from '@/components/course-studio/games/CourseGamesSection';
 import { CourseContentRenderer, getValidLessonQuestions } from '@/components/course-studio/CourseContentRenderer';
 import { CourseRoadmap } from '@/components/course-studio/CourseRoadmap';
 import { LessonCompletionModal } from '@/components/course-studio/LessonCompletionModal';
@@ -84,7 +86,7 @@ export const CoursePreviewPage: React.FC = () => {
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedEpisode, setSelectedEpisode] = useState<CourseEpisode | null>(null);
-  const [viewMode, setViewMode] = useState<'lesson' | 'roadmap'>('lesson');
+  const [viewMode, setViewMode] = useState<'lesson' | 'roadmap' | 'games'>('lesson');
 
   // Mode: Default to Student Preview if opened via /preview, ?mode=student, or for featured interactive video courses
   const [isEditMode, setIsEditMode] = useState<boolean>(() => {
@@ -1343,6 +1345,18 @@ export const CoursePreviewPage: React.FC = () => {
               >
                 Plan Questions
               </LiquidButton>
+
+              {/* Games & Competitions View Toggle */}
+              <LiquidButton
+                variant={viewMode === 'games' ? 'primary' : 'secondary'}
+                size="sm"
+                onClick={() => setViewMode(viewMode === 'games' ? 'lesson' : 'games')}
+                icon={<Gamepad2 className="w-3.5 h-3.5 text-amber-500" />}
+                title="Create & manage games and competitions for this course"
+                className="!px-2.5 !py-1 !text-xs shrink-0"
+              >
+                <span className="hidden sm:inline">Games &amp; Competitions</span>
+              </LiquidButton>
             </div>
           ) : (
             <div className="flex items-center gap-1 sm:gap-2">
@@ -1542,7 +1556,11 @@ export const CoursePreviewPage: React.FC = () => {
               : 'px-3 sm:px-6 md:px-8 pt-5 pb-24 sm:py-8 md:py-10 [--reader-gutter:0.75rem] sm:[--reader-gutter:1.5rem]'
           }`}
         >
-          {viewMode === 'roadmap' ? (
+          {viewMode === 'games' ? (
+            <div className="max-w-6xl mx-auto">
+              <CourseGamesSection courseId={course.id} courseTitle={course.title} />
+            </div>
+          ) : viewMode === 'roadmap' ? (
             <CourseRoadmap
               courseTitle={course.title}
               roadmapItems={roadmapData?.items || []}

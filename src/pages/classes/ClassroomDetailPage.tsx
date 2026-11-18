@@ -29,6 +29,7 @@ import {
 import { GameLibraryModal } from '@/components/classes/games/GameLibraryModal';
 import { GamePlayerModal } from '@/components/classes/games/GamePlayerModal';
 import { GameLevelSelectModal } from '@/components/classes/games/GameLevelSelectModal';
+import { CourseGamePlayerModal } from '@/components/course-studio/games/CourseGamePlayerModal';
 import type {
   CompletedLevelRecord,
   GameConfig,
@@ -192,6 +193,7 @@ export const ClassroomDetailPage: React.FC = () => {
   const [initialGameIdForLibrary, setInitialGameIdForLibrary] = useState<GameId | null>(null);
   const [editingSavedGame, setEditingSavedGame] = useState<SavedLibraryGame | null>(null);
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
+  const [activeCourseGameAssignmentId, setActiveCourseGameAssignmentId] = useState<string | null>(null);
   const [activeGameAssignment, setActiveGameAssignment] = useState<Assignment | null>(null);
   const [publishingAssignmentId, setPublishingAssignmentId] = useState<string | null>(null);
   const [recentLevelCompletions, setRecentLevelCompletions] = useState<
@@ -2294,7 +2296,9 @@ export const ClassroomDetailPage: React.FC = () => {
                   onCreateAssignment={() => setShowQuickCreateTask(true)}
                   onOpenSubmissions={(a) => setActiveReviewAssignment(a)}
                   onSubmitWork={(a) => {
-                    if (a.settings?.is_game_library) {
+                    if (a.settings?.is_course_game && a.settings?.game_assignment_id) {
+                      setActiveCourseGameAssignmentId(String(a.settings.game_assignment_id));
+                    } else if (a.settings?.is_game_library) {
                       handleOpenStudentGame(a);
                     } else {
                       setActiveSubmitAssignment(a);
@@ -3147,6 +3151,17 @@ export const ClassroomDetailPage: React.FC = () => {
           />
         );
       })()}
+
+      {/* Course Studio Game & Competition Player Modal */}
+      <CourseGamePlayerModal
+        isOpen={Boolean(activeCourseGameAssignmentId)}
+        gameAssignmentId={activeCourseGameAssignmentId}
+        onClose={() => setActiveCourseGameAssignmentId(null)}
+        onCompleted={() => {
+          loadAllClassroomData(true);
+          refreshLeaderboard();
+        }}
+      />
 
       {/* Subtle, non-intrusive success notification */}
       {toastMessage && (

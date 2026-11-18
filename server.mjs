@@ -111,6 +111,12 @@ import {
   clampQuestionPoints
 } from './server/courseStudioService.mjs';
 import {
+  extractMaterialsContext,
+  generateGroundedGameQuestions,
+  sanitizeQuestionsForStudent,
+  gradeCourseGameSubmission
+} from './server/courseGamesService.mjs';
+import {
   generateExam,
   validateGenerationPayload,
   gradeExamAttempt,
@@ -25463,6 +25469,866 @@ async function handleCertificateOgPage(req, res) {
 
 app.get('/api/og/certificate', handleCertificateOgPage);
 app.get('/api/c/:shareId', handleCertificateOgPage);
+
+// ============================================================================
+// COURSE STUDIO: GAMES & COMPETITIONS API ROUTES
+// ============================================================================
+
+app.get('/api/course-games', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth) return res.status(401).json({ success: false, error: 'Authentication required' });
+    if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database unavailable' });
+
+    const { courseId } = req.query;
+    let query = serverSupabase
+      .from('course_games')
+      .select(`
+        *,
+        course:courses (id, title, subject),
+        assignments:course_game_assignments (
+          id, classroom_id, assignment_id, start_date, end_date, time_limit_sec, max_attempts,
+          visibility, public_leaderboard, live_quiz_id, is_published, created_at,
+          classroom:classrooms (id, title)
+        )
+      `)
+      .eq('teacher_id', auth.user.id)
+      .order('updated_at', { ascending: false });
+
+    if (courseId) {
+      query = query.eq('course_id', String(courseId));
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return res.json({ success: true, data: data || [] });
+  } catch (err) {
+    console.error('[GET /api/course-games] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to load course games' });
+  }
+});
+
+app.get('/api/course-games/play/:gameAssignmentId', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth) return res.status(401).json({ success: false, error: 'Authentication required' });
+    if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database unavailable' });
+
+    const { gameAssignmentId } = req.params;
+    const { data: ga, error: gaErr } = await serverSupabase
+      .from('course_game_assignments')
+      .select(`
+        *,
+        classroom:classrooms (id, name, teacher_id),
+        game:course_games (
+          *,
+          course:courses (id, title, subject),
+          teacher:profiles!teacher_id (id, full_name, email)
+        )
+      `)
+      .eq('id', gameAssignmentId)
+      .maybeSingle();
+
+    if (gaErr || !ga || !ga.game) {
+      return res.status(404).json({ success: false, error: 'Game assignment not found' });
+    }
+
+    const isTeacher =
+      ga.assigned_by === auth.user.id ||
+      ga.classroom?.teacher_id === auth.user.id ||
+      auth.profile?.role === 'admin';
+
+    if (!isTeacher) {
+      if (!ga.is_published || ga.game.status !== 'published') {
+        return res.status(403).json({ success: false, error: 'This game is not currently published.' });
+      }
+      const { data: membership } = await serverSupabase
+        .from('classroom_members')
+        .select('id')
+        .eq('classroom_id', ga.classroom_id)
+        .eq('profile_id', auth.user.id)
+        .maybeSingle();
+
+      if (!membership) {
+        return res.status(403).json({ success: false, error: 'You are not a member of this classroom.' });
+      }
+      if (
+        ga.visibility === 'selected_students' &&
+        Array.isArray(ga.participant_ids) &&
+        ga.participant_ids.length > 0 &&
+        !ga.participant_ids.includes(auth.user.id)
+      ) {
+        return res.status(403).json({ success: false, error: 'You are not assigned to this activity.' });
+      }
+    }
+
+    const { data: rawQuestions, error: qErr } = await serverSupabase
+      .from('course_game_questions')
+      .select('*')
+      .eq('game_id', ga.game_id)
+      .order('order_index', { ascending: true });
+
+    if (qErr) throw qErr;
+
+    const { data: attempts } = await serverSupabase
+      .from('course_game_attempts')
+      .select('*')
+      .eq('game_assignment_id', gameAssignmentId)
+      .eq('student_id', auth.user.id)
+      .order('attempt_number', { ascending: false });
+
+    let leaderboard = [];
+    if (ga.public_leaderboard || isTeacher) {
+      const { data: allAttempts } = await serverSupabase
+        .from('course_game_attempts')
+        .select('student_id, score, accuracy_pct, time_taken_sec, team_name, student:profiles!student_id(full_name)')
+        .eq('game_assignment_id', gameAssignmentId)
+        .eq('status', 'completed')
+        .order('score', { ascending: false });
+
+      const bestByStudent = new Map();
+      for (const att of allAttempts || []) {
+        const existing = bestByStudent.get(att.student_id);
+        if (!existing || att.score > existing.score) {
+          bestByStudent.set(att.student_id, {
+            student_id: att.student_id,
+            full_name: att.student?.full_name || 'Student',
+            team_name: att.team_name || null,
+            score: att.score,
+            accuracy_pct: att.accuracy_pct,
+            time_taken_sec: att.time_taken_sec
+          });
+        }
+      }
+      leaderboard = Array.from(bestByStudent.values()).sort((a, b) => b.score - a.score || a.time_taken_sec - b.time_taken_sec);
+    }
+
+    const sanitizedQuestions = sanitizeQuestionsForStudent(rawQuestions || []);
+    return res.json({
+      success: true,
+      data: {
+        assignment: ga,
+        game: ga.game,
+        questions: sanitizedQuestions,
+        attempts: attempts || [],
+        leaderboard
+      }
+    });
+  } catch (err) {
+    console.error('[GET /api/course-games/play/:id] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to load game' });
+  }
+});
+
+app.post('/api/course-games/submit/:gameAssignmentId', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth) return res.status(401).json({ success: false, error: 'Authentication required' });
+    if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database unavailable' });
+
+    const { gameAssignmentId } = req.params;
+    const { answers = {}, timeTakenSec = 0, teamName = null } = req.body || {};
+
+    const { data: ga, error: gaErr } = await serverSupabase
+      .from('course_game_assignments')
+      .select('*, game:course_games(*)')
+      .eq('id', gameAssignmentId)
+      .maybeSingle();
+
+    if (gaErr || !ga || !ga.game) {
+      return res.status(404).json({ success: false, error: 'Game assignment not found' });
+    }
+
+    const { data: prevAttempts } = await serverSupabase
+      .from('course_game_attempts')
+      .select('id, attempt_number, score, completed_at')
+      .eq('game_assignment_id', gameAssignmentId)
+      .eq('student_id', auth.user.id)
+      .order('attempt_number', { ascending: false });
+
+    const attemptCount = (prevAttempts || []).length;
+    const maxAttempts = Number(ga.max_attempts) || 3;
+    if (attemptCount >= maxAttempts) {
+      return res.status(400).json({ success: false, error: `Maximum attempts (${maxAttempts}) reached.` });
+    }
+
+    const { data: questions, error: qErr } = await serverSupabase
+      .from('course_game_questions')
+      .select('*')
+      .eq('game_id', ga.game_id)
+      .order('order_index', { ascending: true });
+
+    if (qErr) throw qErr;
+    if (!questions || questions.length === 0) {
+      return res.status(400).json({ success: false, error: 'This game has no questions configured.' });
+    }
+
+    const graded = gradeCourseGameSubmission({
+      game: ga.game,
+      questions,
+      submittedAnswers: answers,
+      timeTakenSec: Number(timeTakenSec) || 0
+    });
+
+    const nextAttemptNum = attemptCount + 1;
+    const { data: savedAttempt, error: insErr } = await serverSupabase
+      .from('course_game_attempts')
+      .insert({
+        game_id: ga.game_id,
+        game_assignment_id: gameAssignmentId,
+        classroom_id: ga.classroom_id,
+        student_id: auth.user.id,
+        attempt_number: nextAttemptNum,
+        team_name: teamName || null,
+        answers: graded.answers,
+        score: graded.score,
+        max_score: graded.max_score,
+        correct_count: graded.correct_count,
+        incorrect_count: graded.incorrect_count,
+        accuracy_pct: graded.accuracy_pct,
+        time_taken_sec: Math.max(0, Math.round(Number(timeTakenSec) || 0)),
+        badges_earned: graded.badges_earned,
+        status: 'completed'
+      })
+      .select()
+      .single();
+
+    if (insErr) throw insErr;
+
+    // Award points to Classroom Leaderboard idempotently (award delta if student improved best score)
+    const prevBest = (prevAttempts || []).reduce((m, a) => Math.max(m, Number(a.score) || 0), 0);
+    const pointsDelta = Math.max(0, graded.score - prevBest);
+    if (pointsDelta > 0) {
+      await serverSupabase.from('classroom_points').insert({
+        classroom_id: ga.classroom_id,
+        student_id: auth.user.id,
+        points: pointsDelta,
+        reason: `Course Studio ${ga.game.mode === 'competition' ? 'Competition' : 'Game'}: ${ga.game.title}`,
+        source_type: 'assignment',
+        source_id: ga.assignment_id || gameAssignmentId,
+        awarded_by: ga.assigned_by
+      });
+    }
+
+    // Sync assignment_submissions if linked to a classroom assignment
+    if (ga.assignment_id) {
+      const bestOverall = Math.max(prevBest, graded.score);
+      const { data: existingSub } = await serverSupabase
+        .from('assignment_submissions')
+        .select('id, points_awarded')
+        .eq('assignment_id', ga.assignment_id)
+        .eq('student_id', auth.user.id)
+        .maybeSingle();
+
+      if (existingSub) {
+        if (bestOverall > (existingSub.points_awarded || 0)) {
+          await serverSupabase
+            .from('assignment_submissions')
+            .update({
+              points_awarded: bestOverall,
+              status: 'graded',
+              graded_at: new Date().toISOString()
+            })
+            .eq('id', existingSub.id);
+        }
+      } else {
+        await serverSupabase.from('assignment_submissions').insert({
+          assignment_id: ga.assignment_id,
+          student_id: auth.user.id,
+          status: 'graded',
+          points_awarded: bestOverall,
+          text_response: `Completed ${ga.game.title} (${graded.accuracy_pct}% accuracy)`,
+          graded_at: new Date().toISOString()
+        });
+      }
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        attempt: savedAttempt,
+        recommendations: graded.recommendations,
+        points_awarded_delta: pointsDelta
+      }
+    });
+  } catch (err) {
+    console.error('[POST /api/course-games/submit/:id] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to submit game' });
+  }
+});
+
+app.post('/api/course-games/extract-material-text', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const { materials = [] } = req.body || {};
+    const result = await extractMaterialsContext({
+      serverSupabase,
+      userId: auth.user.id,
+      isAdmin: auth.profile?.role === 'admin',
+      materials
+    });
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('[POST /api/course-games/extract-material-text] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to extract material text' });
+  }
+});
+
+app.post('/api/course-games/generate-questions', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth) return res.status(401).json({ success: false, error: 'Authentication required' });
+
+    const {
+      materials = [],
+      count = 10,
+      difficulty = 'medium',
+      questionTypes = ['multiple_choice', 'true_false'],
+      targetLevel = 'All Grades',
+      topic = '',
+      learningObjective = '',
+      pointsPerQuestion = 10
+    } = req.body || {};
+
+    const { combinedContext, attributedMaterials } = await extractMaterialsContext({
+      serverSupabase,
+      userId: auth.user.id,
+      isAdmin: auth.profile?.role === 'admin',
+      materials
+    });
+
+    if (!combinedContext) {
+      return res.status(400).json({
+        success: false,
+        error: 'No readable content found in the selected materials. Please select a lesson, library resource, or upload text/HTML material.'
+      });
+    }
+
+    const questions = await generateGroundedGameQuestions({
+      aiRouter,
+      materialContext: combinedContext,
+      count,
+      difficulty,
+      questionTypes,
+      targetLevel,
+      topic,
+      learningObjective,
+      pointsPerQuestion
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        questions,
+        attributedMaterials
+      }
+    });
+  } catch (err) {
+    console.error('[POST /api/course-games/generate-questions] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'AI question generation failed' });
+  }
+});
+
+app.get('/api/course-games/:id', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth) return res.status(401).json({ success: false, error: 'Authentication required' });
+    if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database unavailable' });
+
+    const { id } = req.params;
+    const { data: game, error } = await serverSupabase
+      .from('course_games')
+      .select(`
+        *,
+        course:courses (id, title, subject),
+        assignments:course_game_assignments (*, classroom:classrooms (id, name))
+      `)
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error || !game) return res.status(404).json({ success: false, error: 'Course game not found' });
+    if (game.teacher_id !== auth.user.id && auth.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
+    const { data: questions } = await serverSupabase
+      .from('course_game_questions')
+      .select('*')
+      .eq('game_id', id)
+      .order('order_index', { ascending: true });
+
+    return res.json({ success: true, data: { ...game, questions: questions || [] } });
+  } catch (err) {
+    console.error('[GET /api/course-games/:id] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to load game' });
+  }
+});
+
+app.post('/api/course-games', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth) return res.status(401).json({ success: false, error: 'Authentication required' });
+    if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database unavailable' });
+
+    const body = req.body || {};
+    const questions = Array.isArray(body.questions) ? body.questions : [];
+    const totalPoints = questions.reduce((sum, q) => sum + (Number(q.points) || 10), 0) + (Number(body.scoring_config?.bonus_points) || 0);
+
+    const { data: created, error } = await serverSupabase
+      .from('course_games')
+      .insert({
+        course_id: body.course_id || null,
+        teacher_id: auth.user.id,
+        title: String(body.title || 'Untitled Course Game').trim(),
+        description: String(body.description || '').trim(),
+        mode: body.mode === 'competition' ? 'competition' : 'learning_game',
+        competition_format: ['individual', 'team', 'live_quiz'].includes(body.competition_format) ? body.competition_format : 'individual',
+        difficulty: ['easy', 'medium', 'hard'].includes(body.difficulty) ? body.difficulty : 'medium',
+        topic: String(body.topic || '').trim(),
+        target_level: String(body.target_level || 'All Grades').trim(),
+        source_materials: Array.isArray(body.source_materials) ? body.source_materials : [],
+        scoring_config: { ...(body.scoring_config || {}), total_points: totalPoints },
+        settings: body.settings || {},
+        status: ['draft', 'published', 'archived'].includes(body.status) ? body.status : 'draft',
+        total_questions: questions.length,
+        total_points: totalPoints
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    if (questions.length > 0) {
+      const rows = questions.map((q, idx) => ({
+        game_id: created.id,
+        order_index: idx,
+        question_type: q.question_type || 'multiple_choice',
+        question_text: String(q.question_text || '').trim(),
+        options: q.options ?? [],
+        correct_answer: q.correct_answer ?? '',
+        explanation: String(q.explanation || ''),
+        points: Number(q.points) > 0 ? Number(q.points) : 10,
+        difficulty: ['easy', 'medium', 'hard'].includes(q.difficulty) ? q.difficulty : created.difficulty,
+        image_url: q.image_url || null,
+        source_ref: q.source_ref || null
+      }));
+      const { error: qErr } = await serverSupabase.from('course_game_questions').insert(rows);
+      if (qErr) throw qErr;
+    }
+
+    return res.json({ success: true, data: created });
+  } catch (err) {
+    console.error('[POST /api/course-games] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to create course game' });
+  }
+});
+
+app.put('/api/course-games/:id', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth) return res.status(401).json({ success: false, error: 'Authentication required' });
+    if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database unavailable' });
+
+    const { id } = req.params;
+    const { data: existing } = await serverSupabase.from('course_games').select('id, teacher_id').eq('id', id).maybeSingle();
+    if (!existing) return res.status(404).json({ success: false, error: 'Game not found' });
+    if (existing.teacher_id !== auth.user.id && auth.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
+    const body = req.body || {};
+    const questions = Array.isArray(body.questions) ? body.questions : null;
+    const totalPoints = questions
+      ? questions.reduce((sum, q) => sum + (Number(q.points) || 10), 0) + (Number(body.scoring_config?.bonus_points) || 0)
+      : undefined;
+
+    const updatePayload = {
+      updated_at: new Date().toISOString()
+    };
+    if (body.title !== undefined) updatePayload.title = String(body.title).trim();
+    if (body.description !== undefined) updatePayload.description = String(body.description).trim();
+    if (body.course_id !== undefined) updatePayload.course_id = body.course_id || null;
+    if (body.mode !== undefined) updatePayload.mode = body.mode;
+    if (body.competition_format !== undefined) updatePayload.competition_format = body.competition_format;
+    if (body.difficulty !== undefined) updatePayload.difficulty = body.difficulty;
+    if (body.topic !== undefined) updatePayload.topic = body.topic;
+    if (body.target_level !== undefined) updatePayload.target_level = body.target_level;
+    if (body.source_materials !== undefined) updatePayload.source_materials = body.source_materials;
+    if (body.scoring_config !== undefined) {
+      updatePayload.scoring_config = totalPoints !== undefined ? { ...body.scoring_config, total_points: totalPoints } : body.scoring_config;
+    }
+    if (body.settings !== undefined) updatePayload.settings = body.settings;
+    if (body.status !== undefined) updatePayload.status = body.status;
+    if (questions) {
+      updatePayload.total_questions = questions.length;
+      updatePayload.total_points = totalPoints;
+    }
+
+    const { data: updated, error } = await serverSupabase
+      .from('course_games')
+      .update(updatePayload)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    if (questions) {
+      await serverSupabase.from('course_game_questions').delete().eq('game_id', id);
+      if (questions.length > 0) {
+        const rows = questions.map((q, idx) => ({
+          game_id: id,
+          order_index: idx,
+          question_type: q.question_type || 'multiple_choice',
+          question_text: String(q.question_text || '').trim(),
+          options: q.options ?? [],
+          correct_answer: q.correct_answer ?? '',
+          explanation: String(q.explanation || ''),
+          points: Number(q.points) > 0 ? Number(q.points) : 10,
+          difficulty: ['easy', 'medium', 'hard'].includes(q.difficulty) ? q.difficulty : updated.difficulty,
+          image_url: q.image_url || null,
+          source_ref: q.source_ref || null
+        }));
+        const { error: qErr } = await serverSupabase.from('course_game_questions').insert(rows);
+        if (qErr) throw qErr;
+      }
+    }
+
+    return res.json({ success: true, data: updated });
+  } catch (err) {
+    console.error('[PUT /api/course-games/:id] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to update course game' });
+  }
+});
+
+app.delete('/api/course-games/:id', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth) return res.status(401).json({ success: false, error: 'Authentication required' });
+    if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database unavailable' });
+
+    const { id } = req.params;
+    const { data: existing } = await serverSupabase.from('course_games').select('id, teacher_id').eq('id', id).maybeSingle();
+    if (!existing) return res.status(404).json({ success: false, error: 'Game not found' });
+    if (existing.teacher_id !== auth.user.id && auth.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
+    const { error } = await serverSupabase.from('course_games').delete().eq('id', id);
+    if (error) throw error;
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[DELETE /api/course-games/:id] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to delete game' });
+  }
+});
+
+app.post('/api/course-games/:id/assign', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth) return res.status(401).json({ success: false, error: 'Authentication required' });
+    if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database unavailable' });
+
+    const { id } = req.params;
+    const {
+      classroomIds = [],
+      participantIds = [],
+      startDate = null,
+      endDate = null,
+      timeLimitSec = 0,
+      maxAttempts = 3,
+      visibility = 'classroom',
+      publicLeaderboard = true,
+      createLiveQuiz = false
+    } = req.body || {};
+
+    if (!Array.isArray(classroomIds) || classroomIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'Please select at least one classroom.' });
+    }
+
+    const { data: game } = await serverSupabase
+      .from('course_games')
+      .select('*, course:courses(id, title)')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (!game) return res.status(404).json({ success: false, error: 'Course game not found' });
+    if (game.teacher_id !== auth.user.id && auth.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
+    const { data: questions } = await serverSupabase
+      .from('course_game_questions')
+      .select('*')
+      .eq('game_id', id)
+      .order('order_index', { ascending: true });
+
+    if (!questions || questions.length === 0) {
+      return res.status(400).json({ success: false, error: 'Cannot assign a game with 0 questions.' });
+    }
+
+    // Ensure game is published
+    if (game.status !== 'published') {
+      await serverSupabase.from('course_games').update({ status: 'published', updated_at: new Date().toISOString() }).eq('id', id);
+    }
+
+    // Optionally create a Live Quiz template from MCQ/True-False questions so teachers can host live competitions
+    let liveQuizId = null;
+    if (createLiveQuiz || game.competition_format === 'live_quiz') {
+      const mcqCompatible = questions.filter((q) => q.question_type === 'multiple_choice' || q.question_type === 'true_false');
+      if (mcqCompatible.length > 0) {
+        const { data: lq } = await serverSupabase
+          .from('live_quizzes')
+          .insert({
+            title: game.title,
+            description: game.description || `Live competition from Course Studio: ${game.title}`,
+            created_by: auth.user.id,
+            visibility: 'private',
+            timer_enabled: true,
+            timer_seconds: 20,
+            track_quiz: true
+          })
+          .select('id')
+          .single();
+
+        if (lq?.id) {
+          liveQuizId = lq.id;
+          const lqQuestions = mcqCompatible.map((q, idx) => {
+            const opts = Array.isArray(q.options) ? q.options.slice(0, 4) : ['True', 'False'];
+            const correctIdx = Math.max(0, opts.findIndex((o) => String(o).toLowerCase() === String(q.correct_answer).toLowerCase()));
+            return {
+              quiz_id: lq.id,
+              question_index: idx,
+              question_text: q.question_text,
+              options: opts,
+              correct_index: correctIdx,
+              duration_sec: 20,
+              explanation: q.explanation || ''
+            };
+          });
+          await serverSupabase.from('live_quiz_questions').insert(lqQuestions);
+        }
+      }
+    }
+
+    const createdAssignments = [];
+    for (const classroomId of classroomIds) {
+      // 1. Create bridge row in classroom assignments so it appears in Student Classroom Feed
+      const { data: clsAssign } = await serverSupabase
+        .from('assignments')
+        .insert({
+          classroom_id: classroomId,
+          teacher_id: auth.user.id,
+          title: game.title,
+          instructions: game.description || `Complete this ${game.mode === 'competition' ? 'classroom competition' : 'learning game'} (${questions.length} questions).`,
+          assignment_type: game.mode === 'competition' ? 'competition' : 'quiz',
+          points: game.total_points || 100,
+          due_date: endDate || null,
+          settings: {
+            is_course_game: true,
+            course_game_id: game.id,
+            course_id: game.course_id,
+            course_title: game.course?.title || 'Course Studio',
+            teacher_name: auth.profile?.full_name || 'Teacher',
+            mode: game.mode,
+            competition_format: game.competition_format,
+            difficulty: game.difficulty,
+            total_questions: questions.length,
+            time_limit_sec: Number(timeLimitSec) || 0,
+            is_published: true
+          }
+        })
+        .select('id')
+        .single();
+
+      // 2. Create course_game_assignments record
+      const { data: gaRow, error: gaErr } = await serverSupabase
+        .from('course_game_assignments')
+        .insert({
+          game_id: game.id,
+          classroom_id: classroomId,
+          assignment_id: clsAssign?.id || null,
+          assigned_by: auth.user.id,
+          participant_ids: Array.isArray(participantIds) ? participantIds : [],
+          start_date: startDate || null,
+          end_date: endDate || null,
+          time_limit_sec: Number(timeLimitSec) || 0,
+          max_attempts: Number(maxAttempts) || 3,
+          visibility,
+          public_leaderboard: Boolean(publicLeaderboard),
+          live_quiz_id: liveQuizId,
+          is_published: true
+        })
+        .select()
+        .single();
+
+      if (gaErr) throw gaErr;
+
+      // Back-link game_assignment_id onto assignments.settings for direct launch
+      if (clsAssign?.id && gaRow?.id) {
+        await serverSupabase
+          .from('assignments')
+          .update({
+            settings: {
+              is_course_game: true,
+              course_game_id: game.id,
+              game_assignment_id: gaRow.id,
+              course_id: game.course_id,
+              course_title: game.course?.title || 'Course Studio',
+              teacher_name: auth.profile?.full_name || 'Teacher',
+              mode: game.mode,
+              competition_format: game.competition_format,
+              difficulty: game.difficulty,
+              total_questions: questions.length,
+              time_limit_sec: Number(timeLimitSec) || 0,
+              live_quiz_id: liveQuizId,
+              is_published: true
+            }
+          })
+          .eq('id', clsAssign.id);
+      }
+
+      createdAssignments.push(gaRow);
+    }
+
+    return res.json({ success: true, data: createdAssignments, live_quiz_id: liveQuizId });
+  } catch (err) {
+    console.error('[POST /api/course-games/:id/assign] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to assign game' });
+  }
+});
+
+app.get('/api/course-games/:id/analytics', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth) return res.status(401).json({ success: false, error: 'Authentication required' });
+    if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database unavailable' });
+
+    const { id } = req.params;
+    const { data: game } = await serverSupabase.from('course_games').select('*').eq('id', id).maybeSingle();
+    if (!game) return res.status(404).json({ success: false, error: 'Game not found' });
+    if (game.teacher_id !== auth.user.id && auth.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
+    const [{ data: questions }, { data: assignments }, { data: attempts }] = await Promise.all([
+      serverSupabase.from('course_game_questions').select('*').eq('game_id', id).order('order_index', { ascending: true }),
+      serverSupabase.from('course_game_assignments').select('classroom_id').eq('game_id', id),
+      serverSupabase
+        .from('course_game_attempts')
+        .select('*, student:profiles!student_id(id, full_name, email)')
+        .eq('game_id', id)
+        .eq('status', 'completed')
+    ]);
+
+    const classroomIds = Array.from(new Set((assignments || []).map((a) => a.classroom_id)));
+    let totalAssignedStudents = 0;
+    if (classroomIds.length > 0) {
+      const { count } = await serverSupabase
+        .from('classroom_members')
+        .select('id', { count: 'exact', head: true })
+        .in('classroom_id', classroomIds)
+        .eq('role', 'student');
+      totalAssignedStudents = count || 0;
+    }
+
+    const studentMap = new Map();
+    for (const att of attempts || []) {
+      const prev = studentMap.get(att.student_id);
+      if (!prev) {
+        studentMap.set(att.student_id, {
+          student_id: att.student_id,
+          full_name: att.student?.full_name || 'Student',
+          team_name: att.team_name || null,
+          best_score: att.score,
+          max_score: att.max_score || game.total_points || 100,
+          accuracy_pct: Number(att.accuracy_pct) || 0,
+          time_taken_sec: att.time_taken_sec || 0,
+          attempts_count: 1
+        });
+      } else {
+        prev.attempts_count += 1;
+        if (att.score > prev.best_score) {
+          prev.best_score = att.score;
+          prev.accuracy_pct = Number(att.accuracy_pct) || 0;
+          prev.time_taken_sec = att.time_taken_sec || 0;
+        }
+      }
+    }
+
+    const participants = Array.from(studentMap.values());
+    const totalParticipants = participants.length;
+    const completionRate = totalAssignedStudents > 0 ? Math.min(100, Math.round((totalParticipants / totalAssignedStudents) * 100)) : (totalParticipants > 0 ? 100 : 0);
+    const scores = participants.map((p) => p.best_score);
+    const averageScore = scores.length > 0 ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10 : 0;
+    const highestScore = scores.length > 0 ? Math.max(...scores) : 0;
+    const lowestScore = scores.length > 0 ? Math.min(...scores) : 0;
+
+    // Question-level performance
+    const qStats = new Map();
+    for (const q of questions || []) {
+      qStats.set(q.id, {
+        question_id: q.id,
+        order_index: q.order_index,
+        question_text: q.question_text,
+        question_type: q.question_type,
+        total_attempts: 0,
+        correct_count: 0,
+        incorrect_count: 0,
+        accuracy_pct: 0
+      });
+    }
+
+    for (const att of attempts || []) {
+      for (const ans of att.answers || []) {
+        const st = qStats.get(ans.question_id);
+        if (!st) continue;
+        st.total_attempts += 1;
+        if (ans.is_correct) st.correct_count += 1;
+        else st.incorrect_count += 1;
+      }
+    }
+
+    const questionPerformance = Array.from(qStats.values()).map((st) => ({
+      ...st,
+      accuracy_pct: st.total_attempts > 0 ? Math.round((st.correct_count / st.total_attempts) * 100) : 0
+    }));
+
+    const mostIncorrect = [...questionPerformance]
+      .filter((q) => q.incorrect_count > 0)
+      .sort((a, b) => b.incorrect_count - a.incorrect_count || a.accuracy_pct - b.accuracy_pct)
+      .slice(0, 5);
+
+    const studentsNeedingSupport = participants
+      .filter((p) => p.accuracy_pct < 60)
+      .sort((a, b) => a.accuracy_pct - b.accuracy_pct);
+
+    const leaderboard = [...participants].sort((a, b) => b.best_score - a.best_score || a.time_taken_sec - b.time_taken_sec);
+
+    return res.json({
+      success: true,
+      data: {
+        game_id: game.id,
+        game_title: game.title,
+        total_assigned_students: totalAssignedStudents,
+        total_participants: totalParticipants,
+        completion_rate: completionRate,
+        average_score: averageScore,
+        highest_score: highestScore,
+        lowest_score: lowestScore,
+        max_possible_score: game.total_points || 100,
+        question_performance: questionPerformance,
+        most_incorrect_questions: mostIncorrect,
+        students_needing_support: studentsNeedingSupport,
+        leaderboard
+      }
+    });
+  } catch (err) {
+    console.error('[GET /api/course-games/:id/analytics] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to compute analytics' });
+  }
+});
 
 // Global API 404 Handler - Guarantee valid JSON response for unmatched API routes
 app.use('/api', (req, res) => {

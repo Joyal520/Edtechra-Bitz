@@ -34,6 +34,7 @@ import { CoursePublishModal } from '@/components/course-studio/CoursePublishModa
 import { CourseCoverModal } from '@/components/course-studio/CourseCoverModal';
 import { AICourseDesignerModal } from '@/components/course-studio/AICourseDesignerModal';
 import { CourseStudioWorkspaceBackground } from '@/components/course-studio/CourseStudioWorkspaceBackground';
+import { CourseGamesSection } from '@/components/course-studio/games/CourseGamesSection';
 import { LiquidButton, LiquidTab } from '@/components/course-studio/liquid';
 import { CourseCoverImage, getCourseSubjectIdentity } from '@/utils/courseCover';
 import { AMAZING_BRAIN_COURSE_META, AMAZING_BRAIN_LESSONS } from '@/utils/amazingBrainCourseData';
@@ -48,7 +49,7 @@ export const CourseStudioDashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [filterTab, setFilterTab] = useState<'all' | 'published' | 'draft' | 'unassigned'>('all');
+  const [filterTab, setFilterTab] = useState<'all' | 'published' | 'draft' | 'unassigned' | 'games'>('all');
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [publishTargetCourse, setPublishTargetCourse] = useState<Course | null>(null);
@@ -343,6 +344,12 @@ export const CourseStudioDashboardPage: React.FC = () => {
                   onClick={() => setFilterTab('unassigned')}
                 />
               )}
+
+              <LiquidTab
+                label="Games & Competitions"
+                isActive={filterTab === 'games'}
+                onClick={() => setFilterTab('games')}
+              />
             </div>
 
             {/* Search Input */}
@@ -361,7 +368,9 @@ export const CourseStudioDashboardPage: React.FC = () => {
           {/* ===================================================================== */}
           {/* PREMIUM COURSE CARDS GRID                                             */}
           {/* ===================================================================== */}
-          {loading ? (
+          {filterTab === 'games' ? (
+            <CourseGamesSection />
+          ) : loading ? (
             <div className="rounded-[26px] border border-sky-500/20 bg-gradient-to-br from-[#07182e] via-[#091f3b] to-[#061326] p-10 sm:p-14 flex flex-col items-center justify-center text-center min-h-[260px] shadow-md">
               <div className="w-11 h-11 rounded-2xl bg-sky-500/15 border border-sky-400/25 flex items-center justify-center mb-3.5">
                 <RefreshCw className="w-5 h-5 text-sky-400 animate-spin" />
