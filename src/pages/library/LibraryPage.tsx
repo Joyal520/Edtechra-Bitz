@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   BookOpen,
   FileText,
@@ -11,7 +11,10 @@ import {
   Sparkles,
   Loader2,
   RefreshCw,
-  Plus
+  Plus,
+  Star,
+  CheckCircle2,
+  X
 } from 'lucide-react';
 import {
   LibraryResource,
@@ -31,11 +34,22 @@ import { PdfViewerModal } from '@/components/library/PdfViewerModal';
 import { WebBlogViewerModal } from '@/components/library/WebBlogViewerModal';
 import { TrainingViewerModal } from '@/components/library/TrainingViewerModal';
 import { UploadResourceModal } from '@/components/library/UploadResourceModal';
+import { PriorityAppConfirmModal } from '@/components/library/PriorityAppConfirmModal';
 import { useAuth } from '@/context/AuthContext';
+import { usePriorityApp } from '@/context/PriorityAppContext';
+import { isPriorityAppCompatible } from '@/utils/priorityApp';
 
 export const LibraryPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, isAuthenticated, openAuthModal } = useAuth();
+  const {
+    preference: priorityPref,
+    isUpdating: priorityUpdating,
+    setPriorityApp,
+    removePriorityApp
+  } = usePriorityApp();
+  const isSelectingPriority = searchParams.get('selectPriority') === '1';
 
   const [resources, setResources] = useState<LibraryResource[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -55,6 +69,50 @@ export const LibraryPage: React.FC = () => {
   const [activePdfResource, setActivePdfResource] = useState<LibraryResource | null>(null);
   const [activeWebBlogResource, setActiveWebBlogResource] = useState<LibraryResource | null>(null);
   const [activeTrainingResource, setActiveTrainingResource] = useState<LibraryResource | null>(null);
+
+  // Priority App states
+  const [priorityConfirmTarget, setPriorityConfirmTarget] = useState<LibraryResource | null>(null);
+  const [priorityError, setPriorityError] = useState<string | null>(null);
+  const [priorityToast, setPriorityToast] = useState<string | null>(null);
+
+  const showPriorityToast = (msg: string) => {
+    setPriorityToast(msg);
+    setTimeout(() => setPriorityToast(null), 4000);
+  };
+
+  const handleRequestSetPriority = (res: LibraryResource) => {
+    if (!isAuthenticated) {
+      openAuthModal('login', { type: 'navigate', path: '/library?selectPriority=1' });
+      return;
+    }
+    setPriorityError(null);
+    setPriorityConfirmTarget(res);
+  };
+
+  const handleConfirmSetPriority = async () => {
+    if (!priorityConfirmTarget) return;
+    setPriorityError(null);
+    try {
+      await setPriorityApp(priorityConfirmTarget.id, true);
+      setPriorityConfirmTarget(null);
+      if (isSelectingPriority) {
+        searchParams.delete('selectPriority');
+        setSearchParams(searchParams, { replace: true });
+      }
+      showPriorityToast('Your Priority App has been set successfully.');
+    } catch (err: any) {
+      setPriorityError(err?.message || 'Failed to set Priority App.');
+    }
+  };
+
+  const handleRemovePriority = async () => {
+    try {
+      await removePriorityApp();
+      showPriorityToast('Priority App removed.');
+    } catch (err: any) {
+      showPriorityToast(err?.message || 'Unable to remove Priority App.');
+    }
+  };
 
   const handleOpenUploadModal = () => {
     if (!isAuthenticated) {
@@ -249,6 +307,29 @@ export const LibraryPage: React.FC = () => {
       {/* ========================================================================= */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 pt-6 space-y-6">
         
+        {/* Select Priority App Guidance Banner */}
+        {isSelectingPriority && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 text-xs sm:text-sm font-bold text-amber-950">
+              <Star className="w-4 h-4 fill-amber-400 text-amber-500 shrink-0" />
+              <span>
+                Select any compatible application below and click <strong>Set as Priority</strong> to launch it automatically when you open EdTechra.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                searchParams.delete('selectPriority');
+                setSearchParams(searchParams, { replace: true });
+              }}
+              className="p-1.5 rounded-xl text-amber-700 hover:bg-amber-100 cursor-pointer shrink-0"
+              aria-label="Dismiss selection banner"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Filters & Search Component */}
         <LibraryFilters
           filters={filters}
@@ -390,12 +471,21 @@ export const LibraryPage: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
             {resources.map((res) => {
+              const isPriority = priorityPref?.priority_app_id === res.id;
+              const isPriorityEnabled = priorityPref?.enabled ?? true;
+              const canSetPriority = isPriorityAppCompatible(res);
+
               if (res.file_type === 'game') {
                 return (
                   <GameCard
                     key={res.id}
                     resource={res}
                     onPlay={handleOpenResource}
+                    isPriorityApp={isPriority}
+                    isPriorityEnabled={isPriorityEnabled}
+                    canSetPriority={canSetPriority}
+                    onSetPriority={handleRequestSetPriority}
+                    onRemovePriority={handleRemovePriority}
                   />
                 );
               }
@@ -405,6 +495,11 @@ export const LibraryPage: React.FC = () => {
                     key={res.id}
                     resource={res}
                     onStart={handleOpenResource}
+                    isPriorityApp={isPriority}
+                    isPriorityEnabled={isPriorityEnabled}
+                    canSetPriority={canSetPriority}
+                    onSetPriority={handleRequestSetPriority}
+                    onRemovePriority={handleRemovePriority}
                   />
                 );
               }
@@ -414,6 +509,11 @@ export const LibraryPage: React.FC = () => {
                   resource={res}
                   onOpen={handleOpenResource}
                   onPresent={handlePresent}
+                  isPriorityApp={isPriority}
+                  isPriorityEnabled={isPriorityEnabled}
+                  canSetPriority={canSetPriority}
+                  onSetPriority={handleRequestSetPriority}
+                  onRemovePriority={handleRemovePriority}
                 />
               );
             })}
@@ -449,6 +549,31 @@ export const LibraryPage: React.FC = () => {
         onClose={() => setIsUploadModalOpen(false)}
         onSuccess={handleUploadSuccess}
       />
+
+      {/* Priority App Confirmation Modal */}
+      <PriorityAppConfirmModal
+        isOpen={Boolean(priorityConfirmTarget)}
+        resource={priorityConfirmTarget}
+        currentPriorityTitle={priorityPref?.app?.title || null}
+        isSaving={priorityUpdating}
+        error={priorityError}
+        onCancel={() => {
+          setPriorityConfirmTarget(null);
+          setPriorityError(null);
+        }}
+        onConfirm={handleConfirmSetPriority}
+      />
+
+      {/* Priority App Feedback Toast */}
+      {priorityToast && (
+        <div
+          role="status"
+          className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 py-3 bg-slate-900 text-white rounded-2xl shadow-2xl border border-amber-400/40 text-xs font-bold animate-in fade-in slide-in-from-bottom-3 duration-200"
+        >
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{priorityToast}</span>
+        </div>
+      )}
 
     </div>
   );

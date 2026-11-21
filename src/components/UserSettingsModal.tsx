@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   X,
   User as UserIcon,
@@ -14,9 +15,13 @@ import {
   Check,
   Type,
   Sun,
-  Moon
+  Moon,
+  Star,
+  ExternalLink
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { usePriorityApp } from '@/context/PriorityAppContext';
+import { getPriorityAppLaunchPath, setPriorityBypass } from '@/utils/priorityApp';
 import { authenticatedFetch } from '@/lib/apiAuth';
 import { useBitzTheme, BitzTextSize } from '@/context/BitzThemeContext';
 import { DEFAULT_AVATARS, AvatarPreset, AVATAR_CATEGORY_TABS, AvatarCategory } from '@/utils/avatarConstants';
@@ -32,7 +37,14 @@ interface UserSettingsModalProps {
 }
 
 export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, onClose }) => {
+  const navigate = useNavigate();
   const { user, profile, isAdmin, updateUserProfile } = useAuth();
+  const {
+    preference: priorityPref,
+    isUpdating: priorityUpdating,
+    toggleAutoLaunch,
+    removePriorityApp
+  } = usePriorityApp();
   const { isDark, setTheme, readingSettings, setTextSize } = useBitzTheme();
 
   const [displayName, setDisplayName] = useState<string>('');
@@ -559,6 +571,135 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
                     <span className="text-xs">Light</span>
                   </button>
                 </div>
+              </div>
+
+              {/* 3b. MY PRIORITY APP */}
+              <div className="space-y-3.5 pt-4 border-t border-stone-100">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
+                    <label className="text-xs font-black uppercase tracking-wider text-slate-700">
+                      My Priority App
+                    </label>
+                  </div>
+                  <p className="text-[11px] font-semibold text-slate-500">
+                    Automatically launch your chosen Library application when you open EdTechra.
+                  </p>
+                </div>
+
+                {priorityPref?.priority_app_id && priorityPref?.app ? (
+                  <div className="p-3.5 rounded-2xl bg-amber-50/50 border border-amber-200/80 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-12 h-9 rounded-xl bg-slate-900 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
+                          {priorityPref.app.cover_image_url ? (
+                            <img
+                              src={priorityPref.app.cover_image_url}
+                              alt={priorityPref.app.title}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-black text-slate-900 truncate">
+                            {priorityPref.app.title}
+                          </div>
+                          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                            {priorityPref.app.file_type === 'web_blog' ? 'Web / Blog' : priorityPref.app.file_type} •{' '}
+                            {priorityPref.enabled ? 'Auto-Launch Enabled' : 'Auto-Launch Paused'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const target = getPriorityAppLaunchPath(priorityPref.app!, priorityPref.launchType);
+                          onClose();
+                          navigate(target);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-[11px] font-black text-[#026fc3] shrink-0 cursor-pointer"
+                        title="Open Priority App"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        <span>Open</span>
+                      </button>
+                    </div>
+
+                    {/* Enable / Disable Auto-Launch Toggle */}
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-amber-200/60">
+                      <div className="text-[11px] font-bold text-slate-700">
+                        Automatic Launch on Startup
+                      </div>
+                      <button
+                        type="button"
+                        disabled={priorityUpdating}
+                        onClick={() => {
+                          toggleAutoLaunch(!priorityPref.enabled).catch((err: any) => {
+                            setErrorMessage(err?.message || 'Failed to update Priority App setting.');
+                          });
+                        }}
+                        aria-pressed={priorityPref.enabled}
+                        className={`px-3 py-1 rounded-xl text-[11px] font-black transition-colors cursor-pointer disabled:opacity-50 ${
+                          priorityPref.enabled
+                            ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                            : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                        }`}
+                      >
+                        {priorityPref.enabled ? 'Enabled' : 'Disabled'}
+                      </button>
+                    </div>
+
+                    {/* Change / Remove Actions */}
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        disabled={priorityUpdating}
+                        onClick={() => {
+                          setPriorityBypass();
+                          onClose();
+                          navigate('/library?selectPriority=1');
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-[11px] font-black text-slate-800 cursor-pointer disabled:opacity-50"
+                      >
+                        Change Priority App
+                      </button>
+                      <button
+                        type="button"
+                        disabled={priorityUpdating}
+                        onClick={() => {
+                          removePriorityApp().catch((err: any) => {
+                            setErrorMessage(err?.message || 'Failed to remove Priority App.');
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-[11px] font-black text-rose-700 cursor-pointer disabled:opacity-50"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Remove Priority App</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 flex items-center justify-between gap-3">
+                    <div className="text-[11px] font-semibold text-slate-600">
+                      No Priority App selected yet.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPriorityBypass();
+                        onClose();
+                        navigate('/library?selectPriority=1');
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#026fc3] hover:bg-[#025ea6] text-white text-[11px] font-black cursor-pointer shrink-0"
+                    >
+                      <Star className="w-3 h-3 fill-amber-300 text-amber-300" />
+                      <span>Choose from Library</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* 4. ACCOUNT INFORMATION */}

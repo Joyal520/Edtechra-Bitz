@@ -12,13 +12,27 @@ import {
 } from 'lucide-react';
 import { LibraryResource, getNormalizedTrainingFormat } from '@/types/library';
 import { getDefaultCoverDataUri } from '@/utils/libraryCovers';
+import { PriorityAppCardControl } from '@/components/library/PriorityAppCardControl';
 
 interface TrainingCardProps {
   resource: LibraryResource;
   onStart: (resource: LibraryResource) => void;
+  isPriorityApp?: boolean;
+  isPriorityEnabled?: boolean;
+  canSetPriority?: boolean;
+  onSetPriority?: (resource: LibraryResource) => void;
+  onRemovePriority?: (resource: LibraryResource) => void;
 }
 
-export const TrainingCard: React.FC<TrainingCardProps> = ({ resource, onStart }) => {
+export const TrainingCard: React.FC<TrainingCardProps> = ({
+  resource,
+  onStart,
+  isPriorityApp = false,
+  isPriorityEnabled = true,
+  canSetPriority = false,
+  onSetPriority,
+  onRemovePriority
+}) => {
   const defaultFallbackCover = getDefaultCoverDataUri('training', resource.title);
   const [coverUrl, setCoverUrl] = useState<string>(resource.cover_image_url || defaultFallbackCover);
   const [imageError, setImageError] = useState(false);
@@ -51,7 +65,11 @@ export const TrainingCard: React.FC<TrainingCardProps> = ({ resource, onStart })
   return (
     <div
       onClick={() => onStart(resource)}
-      className="group bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 hover:border-teal-500/60 shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-pointer relative"
+      className={`group bg-white rounded-2xl sm:rounded-3xl border shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-pointer relative ${
+        isPriorityApp
+          ? 'border-amber-400/90 ring-1 ring-amber-300/60'
+          : 'border-slate-200/90 hover:border-teal-500/60'
+      }`}
     >
       {/* Training Thumbnail */}
       <div className="relative w-full aspect-[16/10] overflow-hidden bg-gradient-to-br from-sky-950 via-teal-900 to-slate-900 shrink-0">
@@ -149,6 +167,14 @@ export const TrainingCard: React.FC<TrainingCardProps> = ({ resource, onStart })
             </span>
           </div>
         </div>
+
+        <PriorityAppCardControl
+          isPriorityApp={isPriorityApp}
+          isPriorityEnabled={isPriorityEnabled}
+          canSetPriority={canSetPriority}
+          onSetPriority={onSetPriority ? () => onSetPriority(resource) : undefined}
+          onRemovePriority={onRemovePriority ? () => onRemovePriority(resource) : undefined}
+        />
 
         {/* Footer */}
         <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-auto">

@@ -23,6 +23,7 @@ import { UserSettingsModal } from '@/components/UserSettingsModal';
 import { AccountSwitcherModal } from '@/components/AccountSwitcherModal';
 import { useAuth } from '@/context/AuthContext';
 import { getFirstName } from '@/utils/greeting';
+import { setPriorityBypass } from '@/utils/priorityApp';
 
 export const AppLayout: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -40,6 +41,7 @@ export const AppLayout: React.FC = () => {
   const isLiveQuizRoute = location.pathname.includes('/live-quiz/');
   const isLiveQuizLobby = location.pathname.includes('/live-quiz/lobby/');
   const isPresentationViewer = location.pathname.includes('/library/present');
+  const isPriorityAppViewer = location.pathname.startsWith('/library/app/');
   const isCourseStudioWorkspace =
     /^\/course-studio\/[^/]+(\/preview)?$/.test(location.pathname) ||
     location.pathname.includes('/courses/');
@@ -48,6 +50,7 @@ export const AppLayout: React.FC = () => {
     location.pathname.includes('/preview') ||
     location.pathname.includes('/assessments/builder') ||
     isPresentationViewer ||
+    isPriorityAppViewer ||
     location.pathname.includes('/library/controller') ||
     isLiveQuizRoute;
 
@@ -127,7 +130,7 @@ export const AppLayout: React.FC = () => {
   const initials = (displayName || 'U').slice(0, 2).toUpperCase();
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans selection:bg-[#026fc3] selection:text-white ${isPresentationViewer ? 'h-[100dvh] max-h-[100dvh] overflow-hidden bg-slate-950' : isCourseStudioWorkspace ? 'h-[100dvh] max-h-[100dvh] overflow-hidden' : isHomePage ? 'h-[100dvh] overflow-hidden bg-[#020813]' : isLiveQuizLobby ? 'min-h-[100dvh] bg-[#F5FBFF] text-[#10245A]' : isLiveQuizRoute ? 'min-h-[100dvh] bg-[#F5FBFF] text-[#10245A]' : isClassesPage ? 'bg-[#f9f7f1] text-slate-900' : 'bg-[#fbfbf7] text-slate-900'}`}>
+    <div className={`min-h-screen flex flex-col font-sans selection:bg-[#026fc3] selection:text-white ${isPresentationViewer || isPriorityAppViewer ? 'h-[100dvh] max-h-[100dvh] overflow-hidden bg-slate-950' : isCourseStudioWorkspace ? 'h-[100dvh] max-h-[100dvh] overflow-hidden' : isHomePage ? 'h-[100dvh] overflow-hidden bg-[#020813]' : isLiveQuizLobby ? 'min-h-[100dvh] bg-[#F5FBFF] text-[#10245A]' : isLiveQuizRoute ? 'min-h-[100dvh] bg-[#F5FBFF] text-[#10245A]' : isClassesPage ? 'bg-[#f9f7f1] text-slate-900' : 'bg-[#fbfbf7] text-slate-900'}`}>
       
       {/* ========================================================================= */}
       {/* FLOATING NAVIGATION HEADER                                                */}
@@ -156,6 +159,7 @@ export const AppLayout: React.FC = () => {
           {/* Official Logo Section */}
           <Link
             to="/"
+            onClick={() => setPriorityBypass()}
             className="flex items-center gap-2 md:gap-2.5 group transition-transform active:scale-95"
           >
             <img
@@ -179,6 +183,7 @@ export const AppLayout: React.FC = () => {
           <nav className="hidden md:flex items-center gap-6 lg:gap-8">
             <NavLink
               to="/"
+              onClick={() => setPriorityBypass()}
               className={({ isActive }) =>
                 isHomePage
                   ? 'flex items-center gap-1.5 text-xs sm:text-sm font-bold px-4 sm:px-5 py-1.5 rounded-full bg-blue-600/30 border border-sky-400 text-white shadow-[0_0_15px_rgba(56,189,248,0.45)] transition-all'
@@ -564,7 +569,10 @@ export const AppLayout: React.FC = () => {
 
               <NavLink
                 to="/"
-                onClick={() => setMobileMenuOpen(false)}
+                onClick={() => {
+                  setPriorityBypass();
+                  setMobileMenuOpen(false);
+                }}
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
                     isActive ? 'bg-brand-50 text-[#026fc3]' : 'text-slate-700 hover:bg-slate-50'

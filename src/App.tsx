@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { AppRoutes } from '@/routes';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { PriorityAppProvider } from '@/context/PriorityAppContext';
 import { BitzThemeProvider } from '@/context/BitzThemeContext';
 import { SplashScreen } from '@/components/SplashScreen';
+import { PriorityAppStartupGate } from '@/components/library/PriorityAppStartupGate';
 
 const AppContent: React.FC = () => {
   const { isLoading } = useAuth();
@@ -60,6 +62,7 @@ const AppContent: React.FC = () => {
           onDismiss={() => setShowSplash(false)}
         />
       )}
+      <PriorityAppStartupGate />
       <AppRoutes />
     </>
   );
@@ -69,9 +72,11 @@ export const App: React.FC = () => {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <BitzThemeProvider>
-          <AppContent />
-        </BitzThemeProvider>
+        <PriorityAppProvider>
+          <BitzThemeProvider>
+            <AppContent />
+          </BitzThemeProvider>
+        </PriorityAppProvider>
       </AuthProvider>
     </BrowserRouter>
   );

@@ -29,6 +29,7 @@ const StudentCoursePlayerPage = lazy(() => import('@/pages/classes/courses/Stude
 const AssessmentBuilderPage = lazy(() => import('@/pages/classes/AssessmentBuilderPage').then(m => ({ default: m.AssessmentBuilderPage })));
 const StudentExamPage = lazy(() => import('@/pages/classes/StudentExamPage').then(m => ({ default: m.StudentExamPage })));
 const LibraryPage = lazy(() => import('@/pages/library/LibraryPage').then(m => ({ default: m.LibraryPage })));
+const PriorityAppViewerPage = lazy(() => import('@/pages/library/PriorityAppViewerPage').then(m => ({ default: m.PriorityAppViewerPage })));
 const PresentationViewerPage = lazy(() => import('@/pages/library/PresentationViewerPage').then(m => ({ default: m.PresentationViewerPage })));
 const MobileControllerPage = lazy(() => import('@/pages/library/MobileControllerPage').then(m => ({ default: m.MobileControllerPage })));
 const AdminLibraryPage = lazy(() => import('@/pages/admin/AdminLibraryPage').then(m => ({ default: m.AdminLibraryPage })));
@@ -52,6 +53,7 @@ export const AppRoutes: React.FC = () => {
 
           {/* EdTechra Library & Realtime Presentation Routes */}
           <Route path="library" element={<LibraryPage />} />
+          <Route path="library/app/:id" element={<PriorityAppViewerPage />} />
           <Route path="library/present/:id" element={<PresentationViewerPage />} />
           <Route path="library/controller" element={<MobileControllerPage />} />
           <Route path="library/controller/:code" element={<MobileControllerPage />} />

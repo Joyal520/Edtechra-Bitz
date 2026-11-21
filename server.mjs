@@ -117,6 +117,12 @@ import {
   gradeCourseGameSubmission
 } from './server/courseGamesService.mjs';
 import {
+  getPriorityAppPreference,
+  savePriorityAppPreference,
+  removePriorityAppPreference,
+  resolvePriorityAppById
+} from './server/priorityAppService.mjs';
+import {
   generateExam,
   validateGenerationPayload,
   gradeExamAttempt,
@@ -26327,6 +26333,136 @@ app.get('/api/course-games/:id/analytics', async (req, res) => {
   } catch (err) {
     console.error('[GET /api/course-games/:id/analytics] error:', err);
     return res.status(500).json({ success: false, error: err.message || 'Failed to compute analytics' });
+  }
+});
+
+// ============================================================================
+// EDTECHRA LIBRARY: PRIORITY APP USER PREFERENCE & VALIDATION ROUTES
+// ============================================================================
+
+app.get('/api/priority-app', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth) return res.status(401).json({ success: false, error: 'Authentication required' });
+    if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database unavailable' });
+
+    const isAdmin =
+      auth.profile?.role === 'admin' ||
+      auth.user?.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com';
+
+    const data = await getPriorityAppPreference({
+      serverSupabase,
+      userId: auth.user.id,
+      isAdmin
+    });
+
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error('[GET /api/priority-app] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to load Priority App preference' });
+  }
+});
+
+app.put('/api/priority-app', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth) return res.status(401).json({ success: false, error: 'Authentication required' });
+    if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database unavailable' });
+
+    const body = req.body || {};
+    if (body.user_id && String(body.user_id) !== auth.user.id) {
+      return res.status(403).json({
+        success: false,
+        error: 'Unauthorized: you can only modify your own Priority App preference.'
+      });
+    }
+
+    const isAdmin =
+      auth.profile?.role === 'admin' ||
+      auth.user?.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com';
+
+    const data = await savePriorityAppPreference({
+      serverSupabase,
+      userId: auth.user.id,
+      isAdmin,
+      priorityAppId: body.priority_app_id,
+      enabled: body.enabled
+    });
+
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error('[PUT /api/priority-app] error:', err);
+    return res.status(err.statusCode || 500).json({
+      success: false,
+      error: err.message || 'Failed to save Priority App preference'
+    });
+  }
+});
+
+app.delete('/api/priority-app', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth) return res.status(401).json({ success: false, error: 'Authentication required' });
+    if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database unavailable' });
+
+    await removePriorityAppPreference({
+      serverSupabase,
+      userId: auth.user.id
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        priority_app_id: null,
+        enabled: false,
+        app: null,
+        valid: false,
+        launchType: null,
+        auto_disabled: false,
+        notice: null,
+        updated_at: null
+      }
+    });
+  } catch (err) {
+    console.error('[DELETE /api/priority-app] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to remove Priority App preference' });
+  }
+});
+
+app.get('/api/priority-app/resolve/:appId', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth) return res.status(401).json({ success: false, error: 'Authentication required' });
+    if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database unavailable' });
+
+    const isAdmin =
+      auth.profile?.role === 'admin' ||
+      auth.user?.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com';
+
+    const result = await resolvePriorityAppById({
+      serverSupabase,
+      userId: auth.user.id,
+      isAdmin,
+      appId: req.params.appId
+    });
+
+    if (!result.valid) {
+      return res.status(result.status || 404).json({
+        success: false,
+        error: result.message || 'Application is not available.'
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        app: result.app,
+        launchType: result.launchType
+      }
+    });
+  } catch (err) {
+    console.error('[GET /api/priority-app/resolve/:appId] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to resolve Priority App' });
   }
 });
 

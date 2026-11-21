@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import {
   Presentation,
   ChevronLeft,
@@ -20,10 +20,13 @@ import {
 import { libraryService } from '@/services/libraryService';
 import { LibraryResource, ParsedPptxDeck, PresentationSession } from '@/types/library';
 import { parsePptx } from '@/utils/pptxParser';
+import { setPriorityBypass } from '@/utils/priorityApp';
 
 export const PresentationViewerPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isFromPriority = searchParams.get('from') === 'priority';
 
   const [resource, setResource] = useState<LibraryResource | null>(null);
   const [deck, setDeck] = useState<ParsedPptxDeck | null>(null);
@@ -383,14 +386,29 @@ export const PresentationViewerPage: React.FC = () => {
           
           {/* Left: Back & Title */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <button
-              type="button"
-              onClick={() => navigate('/library')}
-              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-              title="Back to Library"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
+            {isFromPriority ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setPriorityBypass();
+                  navigate('/');
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-black transition-colors cursor-pointer shrink-0"
+                title="Explore EdTechra Home"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Explore EdTechra</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => navigate('/library')}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Back to Library"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            )}
 
             <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
               <Presentation className="w-5 h-5" />

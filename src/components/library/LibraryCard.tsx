@@ -11,19 +11,30 @@ import {
 import { LibraryResource } from '@/types/library';
 import { extractPptxCoverFromUrl } from '@/utils/pptxParser';
 import { getDefaultCoverDataUri } from '@/utils/libraryCovers';
+import { PriorityAppCardControl } from '@/components/library/PriorityAppCardControl';
 
 interface LibraryCardProps {
   resource: LibraryResource;
   onOpen: (resource: LibraryResource) => void;
   onDownload?: (resource: LibraryResource) => void;
   onPresent?: (resource: LibraryResource) => void;
+  isPriorityApp?: boolean;
+  isPriorityEnabled?: boolean;
+  canSetPriority?: boolean;
+  onSetPriority?: (resource: LibraryResource) => void;
+  onRemovePriority?: (resource: LibraryResource) => void;
 }
 
 export const LibraryCard: React.FC<LibraryCardProps> = ({
   resource,
   onOpen,
   onDownload,
-  onPresent
+  onPresent,
+  isPriorityApp = false,
+  isPriorityEnabled = true,
+  canSetPriority = false,
+  onSetPriority,
+  onRemovePriority
 }) => {
   const isPptx = resource.file_type === 'pptx';
   const isWebBlog =
@@ -88,7 +99,11 @@ export const LibraryCard: React.FC<LibraryCardProps> = ({
   return (
     <div
       onClick={() => onOpen(resource)}
-      className="group bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 hover:border-[#026fc3]/50 shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-pointer relative"
+      className={`group bg-white rounded-2xl sm:rounded-3xl border shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-pointer relative ${
+        isPriorityApp
+          ? 'border-amber-400/90 ring-1 ring-amber-300/60'
+          : 'border-slate-200/90 hover:border-[#026fc3]/50'
+      }`}
     >
       {/* Cover / Preview Image Banner */}
       <div className="relative w-full aspect-[16/10] overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 shrink-0">
@@ -196,6 +211,14 @@ export const LibraryCard: React.FC<LibraryCardProps> = ({
             {resource.description || `Educational ${resource.file_type.toUpperCase()} resource available for study and presentation.`}
           </p>
         </div>
+
+        <PriorityAppCardControl
+          isPriorityApp={isPriorityApp}
+          isPriorityEnabled={isPriorityEnabled}
+          canSetPriority={canSetPriority}
+          onSetPriority={onSetPriority ? () => onSetPriority(resource) : undefined}
+          onRemovePriority={onRemovePriority ? () => onRemovePriority(resource) : undefined}
+        />
 
         {/* Card Footer: Author + Actions */}
         <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-auto">
