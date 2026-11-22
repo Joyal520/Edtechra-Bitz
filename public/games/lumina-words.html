@@ -40,6 +40,7 @@
             width: 100%;
             min-height: 100dvh;
             overflow-x: hidden;
+            overscroll-behavior: contain;
             font-family: "Nunito", "Segoe UI", system-ui, -apple-system, sans-serif;
             background: radial-gradient(circle at 50% 30%, var(--bg-crimson-top) 0%, var(--bg-crimson-mid) 56%, var(--bg-crimson-deep) 100%);
             color: #fff8eb;
@@ -466,15 +467,18 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 8px 16px;
-            min-height: 228px;
+            padding: 6px 12px;
+            min-height: 248px;
+            touch-action: none;
             z-index: 4;
         }
 
         #wheel-wrapper {
             position: relative;
-            width: clamp(224px, 64vw, 276px);
-            height: clamp(224px, 64vw, 276px);
+            width: clamp(248px, min(80vw, 41vh), 336px);
+            height: clamp(248px, min(80vw, 41vh), 336px);
+            width: clamp(248px, min(80vw, 41dvh), 336px);
+            height: clamp(248px, min(80vw, 41dvh), 336px);
             border-radius: 999px;
             touch-action: none;
             user-select: none;
@@ -486,12 +490,18 @@
             contain: layout style;
         }
 
+        #wheel-tiles-layer {
+            position: absolute;
+            inset: 0;
+            touch-action: none;
+        }
+
         /* Subtle translucent circular ring hint behind the wooden tiles */
         .wheel-ring-backdrop {
             position: absolute;
-            inset: 14px;
+            inset: 16px;
             border-radius: 999px;
-            border: 2px solid rgba(255, 214, 130, 0.13);
+            border: 2px solid rgba(255, 214, 130, 0.14);
             background: radial-gradient(circle, rgba(255, 200, 110, 0.07) 0%, rgba(0, 0, 0, 0) 70%);
             pointer-events: none;
         }
@@ -527,18 +537,70 @@
             touch-action: none;
             z-index: 10;
             will-change: transform;
-            transition: transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
+            transition: transform 0.08s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* Pre-composited highlight layer: avoids box-shadow repaint lag on mobile drag */
+        .wheel-tile::after {
+            content: "";
+            position: absolute;
+            inset: -3px;
+            border-radius: 19px;
+            border: 2.5px solid #ffffff;
+            background: linear-gradient(180deg, rgba(255, 248, 210, 0.42) 0%, rgba(255, 224, 118, 0.22) 60%, rgba(255, 180, 50, 0.14) 100%);
+            box-shadow: 0 0 16px rgba(255, 238, 168, 0.85);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.08s ease;
         }
 
         .wheel-tile.selected {
             transform: translate3d(-50%, -50%, 0) scale(1.1);
-            background: linear-gradient(180deg, #fff6c9 0%, #ffd457 60%, #ee981c 100%);
-            border-color: #ffffff;
-            box-shadow:
-                0 0 18px rgba(255, 238, 168, 0.9),
-                0 5px 0 #9f4f09,
-                0 12px 22px rgba(0, 0, 0, 0.48);
             z-index: 14;
+        }
+
+        .wheel-tile.selected::after {
+            opacity: 1;
+        }
+
+        /* Compact vertical rhythm on short mobile screens (e.g. 320x568, 375x667) so wheel & shelf never clip */
+        @media (max-height: 680px) {
+            .game-shell {
+                padding-top: max(4px, env(safe-area-inset-top));
+            }
+            .top-bar {
+                padding: 2px 10px 4px;
+            }
+            .wooden-board {
+                padding: 10px 10px 10px;
+            }
+            .active-slots-row {
+                margin-bottom: 6px;
+                min-height: 36px;
+            }
+            .stars-row {
+                margin-bottom: 6px;
+            }
+            .wheel-stage {
+                min-height: 204px;
+                padding: 4px 10px;
+            }
+            #wheel-wrapper {
+                width: clamp(204px, min(76vw, 37vh), 300px);
+                height: clamp(204px, min(76vw, 37vh), 300px);
+                width: clamp(204px, min(76vw, 37dvh), 300px);
+                height: clamp(204px, min(76vw, 37dvh), 300px);
+            }
+            .bottom-shelf {
+                padding: 6px 14px max(8px, env(safe-area-inset-bottom));
+            }
+            .control-orb {
+                width: 44px;
+                height: 44px;
+            }
+            .control-label {
+                font-size: 11px;
+            }
         }
 
         /* ---------- BOTTOM CONTROLS & WOODEN SHELF ---------- */
@@ -1229,14 +1291,15 @@
 
         /* High-frequency swipe tracking refs (no React/DOM allocations per pointermove) */
         const SWIPE_CANVAS_PAD = 24;
-        const SWIPE_HIT_RATIO = 0.88;
-        const SWIPE_SEGMENT_HIT_RATIO = 0.82;
+        const SWIPE_START_HIT_RATIO = 1.12;
+        const SWIPE_HIT_RATIO = 0.92;
+        const SWIPE_SEGMENT_HIT_RATIO = 0.56;
         const swipeRefs = {
             isDragging: false,
             pointerId: null,
             rectLeft: 0,
             rectTop: 0,
-            rectSize: 256,
+            rectSize: 288,
             rectDirty: true,
             pointerX: 0,
             pointerY: 0,
@@ -1249,6 +1312,7 @@
             tileCount: 0,
             tileCentersX: new Float32Array(MAX_WHEEL_LETTERS),
             tileCentersY: new Float32Array(MAX_WHEEL_LETTERS),
+            startHitRadiusSq: new Float32Array(MAX_WHEEL_LETTERS),
             hitRadiusSq: new Float32Array(MAX_WHEEL_LETTERS),
             segHitRadiusSq: new Float32Array(MAX_WHEEL_LETTERS),
             selectedMask: new Uint8Array(MAX_WHEEL_LETTERS),
@@ -1565,14 +1629,16 @@
             syncSwipeCanvasDimensions(size);
             if (n === 0) return;
 
-            // Spacious tile sizing guaranteed never to overlap up to 8 letters
-            const tileSize = n <= 5 ? Math.round(size * 0.245)
-                : n === 6 ? Math.round(size * 0.235)
-                : n === 7 ? Math.round(size * 0.215)
-                : Math.round(size * 0.198);
+            // Spacious tile sizing with generous inter-tile gaps up to 8 letters
+            const tileSize = n <= 4 ? Math.round(size * 0.215)
+                : n === 5 ? Math.round(size * 0.205)
+                : n === 6 ? Math.round(size * 0.192)
+                : n === 7 ? Math.round(size * 0.180)
+                : Math.round(size * 0.168);
 
-            const clampedTile = Math.max(46, Math.min(66, tileSize));
-            const ringRadius = size / 2 - clampedTile / 2 - 6;
+            const minTile = size < 260 ? 46 : 48;
+            const clampedTile = Math.max(minTile, Math.min(64, tileSize));
+            const ringRadius = size / 2 - clampedTile / 2 - 3;
             const center = size / 2;
 
             state.wheelItems.forEach((item, idx) => {
@@ -1587,8 +1653,10 @@
 
                 swipeRefs.tileCentersX[idx] = x;
                 swipeRefs.tileCentersY[idx] = y;
+                const startR = r * SWIPE_START_HIT_RATIO;
                 const directR = r * SWIPE_HIT_RATIO;
                 const segR = r * SWIPE_SEGMENT_HIT_RATIO;
+                swipeRefs.startHitRadiusSq[idx] = startR * startR;
                 swipeRefs.hitRadiusSq[idx] = directR * directR;
                 swipeRefs.segHitRadiusSq[idx] = segR * segR;
 
@@ -1607,11 +1675,10 @@
         }
 
         /* ---------- HIGH-FPS CONTINUOUS SWIPE INTERACTION (ZERO-ALLOC POINTER + RAF + CANVAS) ---------- */
-        function findDirectHitTileIndex(px, py) {
+        function findDirectHitTileIndex(px, py, radSq = swipeRefs.hitRadiusSq) {
             const count = swipeRefs.tileCount;
             const xs = swipeRefs.tileCentersX;
             const ys = swipeRefs.tileCentersY;
-            const radSq = swipeRefs.hitRadiusSq;
             let bestIdx = -1;
             let bestDistSq = Infinity;
 
@@ -1825,7 +1892,7 @@
             refreshWheelRect();
             const px = e.clientX - swipeRefs.rectLeft;
             const py = e.clientY - swipeRefs.rectTop;
-            const hit = findDirectHitTileIndex(px, py);
+            const hit = findDirectHitTileIndex(px, py, swipeRefs.startHitRadiusSq);
             if (hit === -1) return;
 
             if (e.cancelable) e.preventDefault();
@@ -1852,14 +1919,8 @@
             flushSwipeFrame();
         }
 
-        function handleWheelPointerMove(e) {
-            if (!swipeRefs.isDragging || (swipeRefs.pointerId !== null && e.pointerId !== swipeRefs.pointerId)) return;
-
-            if (swipeRefs.rectDirty) refreshWheelRect();
-            const px = e.clientX - swipeRefs.rectLeft;
-            const py = e.clientY - swipeRefs.rectTop;
-
-            const directHit = findDirectHitTileIndex(px, py);
+        function processSwipeSample(px, py) {
+            const directHit = findDirectHitTileIndex(px, py, swipeRefs.hitRadiusSq);
             let skippedBacktrackTile = -1;
             let selectionChanged = false;
 
@@ -1890,6 +1951,25 @@
             swipeRefs.pointerY = py;
 
             if (selectionChanged) swipeRefs.selectionDirty = true;
+        }
+
+        function handleWheelPointerMove(e) {
+            if (!swipeRefs.isDragging || (swipeRefs.pointerId !== null && e.pointerId !== swipeRefs.pointerId)) return;
+
+            if (swipeRefs.rectDirty) refreshWheelRect();
+            const left = swipeRefs.rectLeft;
+            const top = swipeRefs.rectTop;
+
+            const coalesced = typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : null;
+            if (coalesced && coalesced.length > 0) {
+                for (let i = 0; i < coalesced.length; i++) {
+                    const pt = coalesced[i];
+                    processSwipeSample(pt.clientX - left, pt.clientY - top);
+                }
+            } else {
+                processSwipeSample(e.clientX - left, e.clientY - top);
+            }
+
             swipeRefs.lineDirty = true;
             scheduleSwipeFrame();
         }
@@ -2157,6 +2237,19 @@
             if (currentPuzzle()) renderWheel();
             else swipeRefs.rectDirty = true;
         }, { passive: true });
+
+        if (typeof ResizeObserver === "function") {
+            const wheelResizeObserver = new ResizeObserver((entries) => {
+                const entry = entries[0];
+                if (!entry) return;
+                const newWidth = Math.round(entry.contentRect.width);
+                if (newWidth > 0 && Math.abs(newWidth - swipeRefs.rectSize) >= 2) {
+                    if (currentPuzzle()) renderWheel();
+                    else swipeRefs.rectDirty = true;
+                }
+            });
+            wheelResizeObserver.observe(dom.wheelWrapper);
+        }
 
         window.addEventListener("scroll", () => {
             swipeRefs.rectDirty = true;
