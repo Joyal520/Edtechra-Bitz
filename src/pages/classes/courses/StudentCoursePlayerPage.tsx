@@ -1010,6 +1010,8 @@ export const StudentCoursePlayerPage: React.FC = () => {
                 ? 'w-full max-w-full px-0 mx-0 pb-8 box-border min-w-0'
                 : useCinematicHeaderCourse
                 ? 'container-fluid course-reader px-0 pb-8'
+                : isBornForTheSkyCustomLesson
+                ? 'w-full max-w-[980px] mx-auto space-y-6 sm:space-y-8 pb-8 box-border min-w-0'
                 : 'w-full max-w-[760px] mx-auto space-y-6 sm:space-y-8 pb-8 box-border min-w-0'
             }
           >

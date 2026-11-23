@@ -1546,8 +1546,8 @@ export const CoursePreviewPage: React.FC = () => {
         {/* Course Studio Workspace Background Visual */}
         <CourseStudioWorkspaceBackground isDark={activeTheme.isDark} hideWatermarks={useCinematicHeaderCourse} />
 
-        {/* DESKTOP COURSE OUTLINE SIDEBAR (lg:flex in Edit mode or non-Creepy/non-Cinematic student mode) */}
-        {(isEditMode || (!isCreepyLegendsOrVideoCourse && !useCinematicHeaderCourse) || viewMode === 'roadmap') && (
+        {/* DESKTOP COURSE OUTLINE SIDEBAR (lg:flex in Edit mode or non-Creepy/non-Cinematic/non-BornForTheSky student mode) */}
+        {(isEditMode || (!isCreepyLegendsOrVideoCourse && !useCinematicHeaderCourse && !isBornForTheSkyCourse) || viewMode === 'roadmap') && (
           <aside className="hidden lg:flex flex-col w-72 xl:w-80 shrink-0 border-r border-[var(--theme-border-subtle)] bg-[var(--theme-surface-subtle)]/30 h-full overflow-hidden relative z-1">
             {renderCourseOutline(false)}
           </aside>
@@ -1634,7 +1634,7 @@ export const CoursePreviewPage: React.FC = () => {
                   ? 'w-full max-w-full px-0 mx-0 box-border min-w-0'
                   : !isEditMode && useCinematicHeaderCourse
                   ? 'container-fluid course-reader px-0'
-                  : `w-full ${useCinematicHeaderCourse ? 'max-w-[1280px]' : 'max-w-[760px]'} mx-auto space-y-6 sm:space-y-8 box-border min-w-0`
+                  : `w-full ${useCinematicHeaderCourse ? 'max-w-[1280px]' : isBornForTheSkyCustomLesson ? 'max-w-[980px]' : 'max-w-[760px]'} mx-auto space-y-6 sm:space-y-8 box-border min-w-0`
               }
             >
               <div

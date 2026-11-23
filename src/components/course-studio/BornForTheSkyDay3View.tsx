@@ -260,9 +260,12 @@ export const BornForTheSkyDay3View: React.FC<BornForTheSkyDay3ViewProps> = ({
                     <Lock className="w-4 h-4" />
                   )}
                 </span>
-                <div className="min-w-0">
-                  <div className="text-[10px] font-black uppercase tracking-wider">
-                    Step {step.num} • {step.points} XP
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-1 text-[10px] font-black uppercase tracking-wider">
+                    <span>Step {step.num} • {step.points} XP</span>
+                    <span>
+                      {step.completed ? '🟢 Completed' : step.unlocked ? '🔵 Available' : '🔒 Locked'}
+                    </span>
                   </div>
                   <div className="text-xs font-extrabold truncate">{step.label}</div>
                 </div>
@@ -276,7 +279,7 @@ export const BornForTheSkyDay3View: React.FC<BornForTheSkyDay3ViewProps> = ({
       {jigsawQuestion && (
         <InteractiveJigsawPuzzle
           imageUrl={(jigsawQuestion.options as any)?.image_url || day3ImageUrl}
-          gridSize={(jigsawQuestion.options as any)?.grid_rows || 3}
+          gridSize={(jigsawQuestion.options as any)?.grid_rows || 2}
           points={jigsawQuestion.points || 20}
           isCompleted={isPuzzleCompleted}
           onComplete={() => {
