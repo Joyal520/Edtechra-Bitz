@@ -165,7 +165,7 @@ export const ClozePassageQuestion: React.FC<Props> = ({
     const splitParts = workingText.split(/(__CLOZE_TOKEN_\d+__)/g);
 
     return (
-      <div className="text-[14px] leading-[1.8] font-normal text-[#0f172a] break-words">
+      <div className="text-[15px] sm:text-[16px] leading-[2.25] font-normal text-[#0f172a] break-words">
         {splitParts.map((part, pIdx) => {
           const match = part.match(/__CLOZE_TOKEN_(\d+)__/);
           if (match) {
@@ -189,17 +189,17 @@ export const ClozePassageQuestion: React.FC<Props> = ({
                   value={selected}
                   disabled={isEvaluated || isLocked || isSubmitting}
                   onChange={e => handleSelectChange(blank.id, e.target.value)}
-                  className={`inline-block rounded-lg border px-2.5 py-0.5 text-[14px] leading-[1.4] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-sky-400/40 cursor-pointer disabled:cursor-default ${
+                  className={`inline-block rounded-xl border px-3 py-1 text-[15px] leading-[1.4] font-bold transition-all focus:outline-none focus:ring-2 focus:ring-[#026fc3]/35 cursor-pointer disabled:cursor-default shadow-2xs ${
                     isEvaluated
                       ? status.isCorrect
                         ? 'bg-emerald-50 border-emerald-400 text-emerald-900'
                         : 'bg-rose-50 border-rose-400 text-rose-900'
                       : selected
-                      ? 'bg-sky-50 border-sky-400 text-[#0f172a]'
-                      : 'bg-sky-50/80 border-sky-300 text-slate-700 hover:border-sky-500'
+                      ? 'bg-[#e0f2fe] border-[#026fc3] text-[#0f172a]'
+                      : 'bg-[#eff6ff] border-[#93c5fd] text-[#0f172a] hover:border-[#026fc3] hover:bg-[#e0f2fe]'
                   }`}
                 >
-                  <option value="">Choose...</option>
+                  <option value="">Select word...</option>
                   {shuffledOpts.map((option, optIdx) => (
                     <option key={optIdx} value={option}>
                       {option}
@@ -222,15 +222,15 @@ export const ClozePassageQuestion: React.FC<Props> = ({
   };
 
   return (
-    <div className="w-full space-y-3" data-testid="cloze-passage-container">
+    <div className="w-full space-y-4" data-testid="cloze-passage-container">
       {/* Compact, Content-Sized Passage Container */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs">
+      <div className="p-4 sm:p-6 rounded-2xl bg-white border border-slate-200/90 shadow-2xs">
         {renderPassageWithBlanks()}
       </div>
 
       {/* Completion Counter + Check Answers Button */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-        <span className="text-xs sm:text-sm font-bold text-slate-700">
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+        <span className="text-sm font-bold text-[#0f172a]">
           Completed {answeredCount} of {totalBlanks} blanks
         </span>
 
@@ -239,7 +239,7 @@ export const ClozePassageQuestion: React.FC<Props> = ({
             type="button"
             disabled={!allAnswered || isSubmitting}
             onClick={handleCheckAnswer}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-600 text-white text-xs sm:text-sm font-black shadow-sm transition-all cursor-pointer disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-[#026fc3] to-[#0284c7] hover:from-[#03589e] hover:to-[#026fc3] disabled:from-slate-300 disabled:to-slate-300 disabled:text-slate-600 text-white text-sm font-extrabold shadow-md transition-all cursor-pointer disabled:cursor-not-allowed active:scale-[0.98]"
           >
             <Send className="w-4 h-4" />
             <span>Check Answers</span>

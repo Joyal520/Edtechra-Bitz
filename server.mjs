@@ -6933,6 +6933,10 @@ app.get('/api/course-studio/courses/:id', async (req, res) => {
         extra = {
           wh_type: q.options.wh_type,
           passage: q.options.passage,
+          blanks: q.options.blanks,
+          activity_type: q.options.activity_type,
+          grid_rows: q.options.grid_rows,
+          grid_cols: q.options.grid_cols,
           expected_answer: q.options.expected_answer,
           acceptable_answers: q.options.acceptable_answers,
           matching_pairs: q.options.matching_pairs,
@@ -6941,13 +6945,14 @@ app.get('/api/course-studio/courses/:id', async (req, res) => {
           image_url: q.options.image_url,
           illustration_key: q.options.illustration_key,
           question_type: q.options._question_type || q.question_type,
-          options: q.options.options || []
+          options: q.options.blanks || q.options.activity_type ? q.options : (q.options.options || [])
         };
       }
       const enrichedQ = {
         ...q,
         ...extra,
         passage: q.passage || extra.passage || undefined,
+        blanks: q.blanks || extra.blanks || undefined,
         wh_type: q.wh_type || extra.wh_type || undefined,
         expected_answer: q.expected_answer || extra.expected_answer || undefined,
         acceptable_answers: q.acceptable_answers || extra.acceptable_answers || undefined,
@@ -7613,6 +7618,8 @@ app.post('/api/course-studio/courses/:id/questions', async (req, res) => {
           q.question_type === 'wh_question' ||
           q.question_type === 'sentence_reordering' ||
           q.question_type === 'word_ordering' ||
+          q.question_type === 'cloze_passage' ||
+          Array.isArray(q.blanks) ||
           q.wh_type ||
           q.passage ||
           q.matching_pairs ||
@@ -7631,6 +7638,10 @@ app.post('/api/course-studio/courses/:id/questions', async (req, res) => {
             expected_answer: q.expected_answer || q.correct_answer || (typeof q.options === 'object' && q.options?.expected_answer) || '',
             wh_type: q.wh_type || (typeof q.options === 'object' && q.options?.wh_type) || undefined,
             passage: q.passage || (typeof q.options === 'object' && q.options?.passage) || undefined,
+            blanks: Array.isArray(q.blanks) ? q.blanks : (typeof q.options === 'object' && Array.isArray(q.options?.blanks) ? q.options.blanks : undefined),
+            activity_type: q.activity_type || (typeof q.options === 'object' && q.options?.activity_type) || undefined,
+            grid_rows: q.grid_rows || (typeof q.options === 'object' && q.options?.grid_rows) || undefined,
+            grid_cols: q.grid_cols || (typeof q.options === 'object' && q.options?.grid_cols) || undefined,
             matching_pairs: q.matching_pairs || (typeof q.options === 'object' && q.options?.matching_pairs) || undefined,
             image_url: q.image_url || (typeof q.options === 'object' && q.options?.image_url) || undefined,
             illustration_key: q.illustration_key || (typeof q.options === 'object' && q.options?.illustration_key) || undefined,
@@ -7661,19 +7672,24 @@ app.post('/api/course-studio/courses/:id/questions', async (req, res) => {
           extra = {
             wh_type: q.options.wh_type,
             passage: q.options.passage,
+            blanks: q.options.blanks,
+            activity_type: q.options.activity_type,
+            grid_rows: q.options.grid_rows,
+            grid_cols: q.options.grid_cols,
             expected_answer: q.options.expected_answer,
             acceptable_answers: q.options.acceptable_answers,
             matching_pairs: q.options.matching_pairs,
             image_url: q.options.image_url,
             illustration_key: q.options.illustration_key,
             question_type: q.options._question_type || q.question_type,
-            options: q.options.options || []
+            options: q.options.blanks || q.options.activity_type ? q.options : (q.options.options || [])
           };
         }
         return {
           ...q,
           ...extra,
           passage: q.passage || extra.passage,
+          blanks: q.blanks || extra.blanks,
           wh_type: q.wh_type || extra.wh_type,
           expected_answer: q.expected_answer || extra.expected_answer,
           acceptable_answers: q.acceptable_answers || extra.acceptable_answers,
