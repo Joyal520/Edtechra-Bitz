@@ -2001,7 +2001,9 @@ export const CoursePreviewPage: React.FC = () => {
       <LessonCompletionModal
         isOpen={celebrationOpen}
         onClose={() => setCelebrationOpen(false)}
-        studentName="TEACHER (PREVIEW)"
+        studentName="Teacher"
+        isPreviewMode={true}
+        courseTitle={course.title}
         lessonTitle={lastCompletedTitle}
         lessonPosition={lastCompletedPos}
         pointsEarned={lastCompletedPoints}

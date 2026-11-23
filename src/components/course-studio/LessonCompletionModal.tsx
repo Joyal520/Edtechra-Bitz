@@ -1,17 +1,12 @@
 // ============================================================================
-// EDTECHRA DIGITAL CLASSROOM: LESSON COMPLETION CELEBRATION MODAL
-// Premium, encouraging completion pop-up shown once per completed lesson.
-// Differentiates messaging between Daily Release ON vs OFF, personalizes
-// student greeting, awards points, and provides clean roadmap transition.
+// EDTECHRA DIGITAL CLASSROOM: PREMIUM LESSON COMPLETION CELEBRATION MODAL
+// High-craft celebratory modal with custom 3D WebP illustrations, soft sky
+// header glow, encouraging completion card, dual reward/progress pills,
+// and prominent blue gradient Continue CTA.
 // ============================================================================
 
 import React, { useEffect } from 'react';
-import {
-  CheckCircle2,
-  Award,
-  ArrowRight,
-  X
-} from 'lucide-react';
+import { Check, Eye, X, Award } from 'lucide-react';
 import { triggerConfettiBurst } from '@/utils/courseConfetti';
 import { playCompleteSound } from '@/utils/courseAudio';
 
@@ -35,21 +30,37 @@ interface Props {
   courseTitle?: string;
   courseCompleted?: boolean;
   completionBonusPoints?: number;
+  isPreviewMode?: boolean;
   onContinue: () => void;
 }
 
 const DAILY_RELEASE_MESSAGES = [
-  'Excellent work! You’ve completed today’s lesson. Your next lesson will be ready tomorrow.',
-  'Great job! Today’s learning is complete. Come back tomorrow for the next step.',
-  'Another lesson completed! You’re building your progress one day at a time.',
-  'Well done! You’ve finished today’s lesson. Keep going — your learning journey continues tomorrow.'
+  "Another lesson completed! You're building your progress one day at a time.",
+  "Excellent work! Come back tomorrow for the next step in your journey.",
+  "Great job! Today's learning is complete. Your next lesson will unlock tomorrow.",
+  "Well done! Keep going — your learning journey continues tomorrow."
 ];
 
 const NORMAL_RELEASE_MESSAGES = [
-  'Great work! You’ve completed this lesson. Keep going!',
-  'Excellent progress! One more lesson completed.',
-  'Well done! You’re moving forward. Continue when you’re ready.'
+  "Another lesson completed! You're building your progress one step at a time.",
+  "Great work! You've completed this lesson. Keep going!",
+  "Excellent progress! You're ready for the next lesson."
 ];
+
+function formatDisplayName(raw?: string): { displayName: string | null; detectedPreview: boolean } {
+  if (!raw || !raw.trim() || raw.includes('@')) {
+    return { displayName: null, detectedPreview: false };
+  }
+  const detectedPreview = /preview/i.test(raw);
+  const cleaned = raw.replace(/\(\s*preview\s*\)/gi, '').trim();
+  if (!cleaned) return { displayName: null, detectedPreview };
+  const titleCased = cleaned
+    .toLowerCase()
+    .split(/\s+/)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+  return { displayName: titleCased, detectedPreview };
+}
 
 export const LessonCompletionModal: React.FC<Props> = ({
   isOpen,
@@ -68,141 +79,243 @@ export const LessonCompletionModal: React.FC<Props> = ({
   courseTitle,
   courseCompleted = false,
   completionBonusPoints = 0,
+  isPreviewMode,
   onContinue
 }) => {
   useEffect(() => {
-    if (isOpen) {
-      playCompleteSound();
+    if (!isOpen) return;
+    playCompleteSound();
+    const prefersReduced =
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!prefersReduced) {
       const target = document.getElementById('celebration-modal-card');
       if (target) {
-        setTimeout(() => triggerConfettiBurst(target), 150);
+        const timer = setTimeout(() => triggerConfettiBurst(target), 160);
+        return () => clearTimeout(timer);
       }
     }
   }, [isOpen]);
 
+  // Prevent background scrolling while modal is open
+  useEffect(() => {
+    if (!isOpen || typeof document === 'undefined') return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
-  // Clean student greeting
-  const cleanName = studentName && studentName.trim() && !studentName.includes('@')
-    ? studentName.trim().toUpperCase()
-    : null;
+  const { displayName, detectedPreview } = formatDisplayName(studentName);
+  const showPreviewBadge = Boolean(isPreviewMode ?? detectedPreview);
 
-  const greeting = cleanName ? `CONGRATULATIONS, ${cleanName}!` : 'CONGRATULATIONS!';
+  const headingText = courseCompleted
+    ? 'Course Completed!'
+    : displayName
+    ? `Congratulations, ${displayName}!`
+    : 'Congratulations!';
 
-  // Pick deterministic encouraging message based on lesson position
   const messagesList = dailyReleaseEnabled ? DAILY_RELEASE_MESSAGES : NORMAL_RELEASE_MESSAGES;
-  const encouragingMessage = messagesList[(lessonPosition - 1) % messagesList.length];
+  const encouragingMessage = courseCompleted
+    ? `You have successfully completed ${courseTitle || 'this course'}!`
+    : messagesList[(Math.max(1, lessonPosition) - 1) % messagesList.length];
+
+  // Dynamic reward value (Leaderboard Pts or Lesson Score)
+  const displayedPoints =
+    pointsEarned > 0
+      ? pointsEarned
+      : typeof earnedScore === 'number' && earnedScore > 0
+      ? earnedScore
+      : showPreviewBadge
+      ? 100
+      : 0;
+
+  const rewardLabel =
+    pointsEarned > 0 || showPreviewBadge
+      ? 'Leaderboard Pts'
+      : typeof earnedScore === 'number' && typeof maxScore === 'number' && maxScore > 0
+      ? `of ${maxScore} Score`
+      : 'Leaderboard Pts';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
-      {/* Modal Card - Mobile First */}
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="lesson-completion-heading"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/65 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
+    >
+      {/* Modal Container */}
       <div
         id="celebration-modal-card"
-        className="surface-elevated rounded-[28px] max-w-md w-full border border-[var(--theme-border-primary)] shadow-2xl overflow-hidden flex flex-col p-6 sm:p-8 text-center space-y-5 transition-all animate-in fade-in zoom-in-95 duration-200 box-border text-theme-primary"
+        className="relative w-full max-w-[460px] my-auto bg-white rounded-[32px] shadow-[0_24px_60px_rgba(15,23,42,0.35)] overflow-hidden text-center animate-in zoom-in-95 fade-in duration-250 motion-reduce:animate-none"
       >
-        {/* Top Close Button (Min 44x44px target) */}
-        <div className="flex justify-end -mt-2 -mr-2">
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close dialog"
-            className="w-11 h-11 rounded-full text-theme-muted hover:text-theme-primary flex items-center justify-center transition-all cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        {/* Top-Right Close Button */}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close dialog"
+          className="absolute top-4 right-4 z-20 w-10 h-10 rounded-full bg-white/90 hover:bg-white text-slate-600 hover:text-slate-900 border border-slate-200/80 shadow-sm flex items-center justify-center transition-all cursor-pointer active:scale-95"
+        >
+          <X className="w-5 h-5" />
+        </button>
 
-        {/* Large Celebration Icon */}
-        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 text-white flex items-center justify-center mx-auto shadow-lg ring-8 ring-emerald-100 dark:ring-emerald-950/60 animate-bounce duration-1000">
-          <CheckCircle2 className="w-10 h-10 sm:w-12 sm:h-12" />
-        </div>
+        {/* 1. CELEBRATION HEADER WITH SOFT SKY GRADIENT & TROPHY ILLUSTRATION */}
+        <div className="relative pt-6 pb-3 px-6 bg-gradient-to-b from-[#d8e7ff] via-[#eef5ff] to-white overflow-hidden">
+          {/* Subtle decorative cloud shapes */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -left-10 top-14 w-36 h-20 rounded-full bg-white/70 blur-[2px]"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-10 top-12 w-36 h-20 rounded-full bg-white/70 blur-[2px]"
+          />
 
-        {/* Header Greeting & Lesson Title */}
-        <div className="space-y-1.5">
-          <h2 className="text-lg sm:text-xl font-black text-theme-primary tracking-tight break-words reader-title">
-            {courseCompleted ? '🎉 COURSE COMPLETED!' : greeting}
-          </h2>
-          {courseCompleted && courseTitle ? (
-            <p className="text-sm sm:text-base font-black text-amber-600 dark:text-amber-400 break-words">
-              {courseTitle}
-            </p>
-          ) : null}
-          <p className="text-xs sm:text-sm font-bold text-theme-accent truncate reader-meta">
-            {lessonTitle} • Lesson {lessonPosition}
-          </p>
-        </div>
+          {/* Generated 3D Trophy Illustration */}
+          <div className="relative z-10 flex justify-center">
+            <img
+              src="/assets/completion/celebration-trophy.webp"
+              alt="Celebration Trophy"
+              width={240}
+              height={143}
+              className="w-52 sm:w-60 h-auto object-contain drop-shadow-[0_8px_16px_rgba(217,119,6,0.18)]"
+            />
+          </div>
 
-        {/* Course Completion Bonus Achievement Banner */}
-        {courseCompleted && (
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-50 via-yellow-50 to-sky-50 dark:from-amber-950/50 dark:via-yellow-950/30 dark:to-sky-950/40 border-2 border-amber-300/80 dark:border-amber-700/60 space-y-2 shadow-sm">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500 text-white text-[11px] font-black uppercase tracking-wider shadow-xs">
-              <Award className="w-3.5 h-3.5" />
-              <span>Course Completion Achievement Unlocked!</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 pt-1 text-left">
-              <div className="p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/60 border border-amber-200/70 dark:border-amber-800/50">
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Lesson Points</span>
-                <span className="text-sm font-black text-slate-900 dark:text-white">{earnedScore ?? pointsEarned} XP</span>
+          {/* Heading, Preview Pill & Lesson Subtitle */}
+          <div className="relative z-10 mt-1 space-y-2">
+            <h2
+              id="lesson-completion-heading"
+              className="text-2xl sm:text-[28px] font-black text-[#0f1742] tracking-tight leading-tight break-words"
+            >
+              {headingText}
+            </h2>
+
+            {showPreviewBadge && (
+              <div className="flex justify-center">
+                <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#ede9fe] text-[#5b21b6] text-xs font-extrabold tracking-tight shadow-2xs">
+                  <Eye className="w-3.5 h-3.5 text-[#7c3aed]" />
+                  <span>Preview Complete!</span>
+                </span>
               </div>
-              <div className="p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/60 border border-amber-200/70 dark:border-amber-800/50">
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">Course Bonus</span>
-                <span className="text-sm font-black text-amber-600 dark:text-amber-400">+{completionBonusPoints > 0 ? completionBonusPoints : 100} XP</span>
+            )}
+
+            {courseCompleted && courseTitle && (
+              <p className="text-sm font-black text-amber-600">{courseTitle}</p>
+            )}
+
+            <p className="text-xs sm:text-sm font-extrabold text-[#1d4ed8] truncate">
+              {lessonTitle} · Lesson {lessonPosition}
+            </p>
+          </div>
+        </div>
+
+        {/* 2. MODAL BODY CONTENT */}
+        <div className="px-5 sm:px-7 pb-7 pt-2 space-y-4">
+          {/* Soft Blue Completion Card */}
+          <div className="relative rounded-2xl bg-gradient-to-br from-[#eaf3ff] via-[#f4f8ff] to-[#deecff] border border-[#cfe1ff] p-4 sm:p-5 text-left overflow-hidden shadow-2xs">
+            {/* Soft decorative cloud accent */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -bottom-6 -right-6 w-28 h-20 rounded-full bg-white/60"
+            />
+            <div className="relative z-10 flex items-center gap-4">
+              <img
+                src="/assets/completion/success-badge.webp"
+                alt="Lesson Completed Badge"
+                width={76}
+                height={76}
+                className="w-16 h-16 sm:w-[74px] sm:h-[74px] shrink-0 object-contain animate-in zoom-in-75 duration-300 motion-reduce:animate-none"
+              />
+              <div className="min-w-0 space-y-1">
+                <h3 className="text-base sm:text-lg font-black text-[#0f1742] leading-snug">
+                  {courseCompleted
+                    ? 'You completed the entire course!'
+                    : dailyReleaseEnabled
+                    ? "You've completed today's lesson!"
+                    : "You've completed this lesson!"}
+                </h3>
+                <p className="text-xs sm:text-[13.5px] font-medium text-[#334155] leading-relaxed">
+                  {encouragingMessage}
+                </p>
               </div>
             </div>
           </div>
-        )}
 
-        {/* Specific Daily vs Normal Release Messaging */}
-        <div className="p-4 rounded-2xl bg-[var(--theme-surface-subtle)] border border-[var(--theme-border-subtle)] space-y-1.5 text-xs sm:text-sm">
-          <p className="font-extrabold text-theme-primary reader-h3">
-            {courseCompleted
-              ? `You have successfully completed ${courseTitle || 'this course'}!`
-              : dailyReleaseEnabled
-              ? 'You’ve completed today’s lesson!'
-              : 'You’ve completed this lesson!'}
-          </p>
-          <p className="text-theme-secondary font-medium leading-relaxed reader-body">
-            {encouragingMessage}
-          </p>
-        </div>
-
-        {/* Points & Progress Pill */}
-        <div className="flex flex-wrap items-center justify-center gap-2.5">
-          {typeof earnedScore === 'number' && typeof maxScore === 'number' && maxScore > 0 && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-sky-50 dark:bg-sky-950/60 text-sky-900 dark:text-sky-300 text-xs font-black border border-sky-200 dark:border-sky-800 reader-badge">
-              <CheckCircle2 className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-              <span>SCORE {earnedScore} / {maxScore}</span>
-            </div>
-          )}
-
-          {pointsEarned > 0 && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 text-xs font-black border border-amber-200 dark:border-amber-800 reader-badge">
-              <Award className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <span>
-                +{pointsEarned} LEADERBOARD PTS
-                {typeof totalLeaderboardPoints === 'number' && totalLeaderboardPoints > 0
-                  ? ` • ${totalLeaderboardPoints.toLocaleString()} TOTAL PTS`
-                  : ''}
+          {/* Optional Course Completion Bonus Achievement Strip */}
+          {courseCompleted && (
+            <div className="rounded-2xl bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 border border-amber-300/80 px-4 py-3 flex items-center justify-between gap-3 text-left">
+              <div className="flex items-center gap-2 text-amber-900 text-xs font-black">
+                <Award className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Course Completion Bonus</span>
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-xs font-black">
+                +{completionBonusPoints > 0 ? completionBonusPoints : 100} XP
               </span>
             </div>
           )}
 
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-300 text-xs font-black border border-emerald-200 dark:border-emerald-800 reader-badge">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <span>{completedLessonsCount} / {totalLessonsCount} Completed ({progressPercent}%)</span>
-          </div>
-        </div>
+          {/* 3. REWARD & PROGRESS CARDS (2 COLUMNS ON SM+) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Gold Reward Card */}
+            <div className="rounded-2xl bg-gradient-to-r from-[#fff8e1] to-[#fef3c7] border border-[#fde68a] px-4 py-3 flex items-center gap-3 text-left shadow-2xs">
+              <img
+                src="/assets/completion/reward-trophy.webp"
+                alt="Reward Trophy"
+                width={42}
+                height={42}
+                className="w-10 h-10 shrink-0 object-contain"
+              />
+              <div className="min-w-0">
+                <div className="text-base font-black text-[#78350f] leading-tight">
+                  {displayedPoints > 0 ? `+${displayedPoints}` : '0'}
+                </div>
+                <div className="text-xs font-bold text-[#92400e] truncate">
+                  {rewardLabel}
+                </div>
+                {typeof totalLeaderboardPoints === 'number' && totalLeaderboardPoints > 0 && (
+                  <div className="text-[10px] font-bold text-[#b45309]">
+                    {totalLeaderboardPoints.toLocaleString()} Total Pts
+                  </div>
+                )}
+              </div>
+            </div>
 
-        {/* Primary Action Button (Min 44px height) */}
-        <div className="pt-2">
-          <button
-            type="button"
-            onClick={onContinue}
-            className="w-full min-h-[48px] px-6 py-3.5 rounded-2xl btn-theme-primary text-sm font-black transition-all cursor-pointer shadow-md flex items-center justify-center gap-2 active:scale-98 reader-button"
-          >
-            <span>{dailyReleaseEnabled ? 'Continue to Roadmap' : 'Continue Learning'}</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
+            {/* Green Progress Card */}
+            <div className="rounded-2xl bg-gradient-to-r from-[#e8fbf2] to-[#dcfce7] border border-[#bbf7d0] px-4 py-3 flex items-center gap-3 text-left shadow-2xs">
+              <img
+                src="/assets/completion/progress-target.webp"
+                alt="Progress Target"
+                width={42}
+                height={42}
+                className="w-10 h-10 shrink-0 object-contain"
+              />
+              <div className="min-w-0">
+                <div className="text-sm font-black text-[#065f46] leading-tight">
+                  {completedLessonsCount} / {totalLessonsCount} Completed
+                </div>
+                <div className="text-xs font-extrabold text-[#047857]">
+                  ({progressPercent}%)
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 4. PROMINENT BLUE GRADIENT CONTINUE CTA */}
+          <div className="pt-2 flex justify-center">
+            <button
+              type="button"
+              onClick={onContinue}
+              className="w-full max-w-[300px] min-h-[52px] px-8 py-3.5 rounded-full bg-gradient-to-r from-[#026fc3] via-[#1565d8] to-[#0057d9] hover:from-[#03589e] hover:to-[#0047b3] text-white text-base font-extrabold shadow-[0_10px_24px_rgba(2,111,195,0.38)] hover:shadow-[0_14px_28px_rgba(2,111,195,0.45)] transition-all active:scale-[0.98] flex items-center justify-center gap-2.5 cursor-pointer"
+            >
+              <Check className="w-5 h-5 stroke-[3]" />
+              <span>Continue</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

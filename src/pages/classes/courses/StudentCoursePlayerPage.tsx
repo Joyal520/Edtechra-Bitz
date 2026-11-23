@@ -1472,6 +1472,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
         courseTitle={course.title}
         courseCompleted={lastCourseCompleted}
         completionBonusPoints={lastCompletionBonus}
+        isPreviewMode={isTeacherPreview}
         onContinue={handleAfterCelebrationContinue}
       />
 
