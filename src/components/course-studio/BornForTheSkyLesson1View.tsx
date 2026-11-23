@@ -134,53 +134,53 @@ export const BornForTheSkyLesson1View: React.FC<BornForTheSkyLesson1ViewProps> =
 
   return (
     <div className="space-y-6 sm:space-y-8 text-slate-900">
-      {/* 1. ILLUSTRATED STORY PARTS (4 INTEGRATED CHAPTERS) */}
-      <section className="space-y-5 sm:space-y-6" aria-label="Story Parts">
+      {/* 1. ILLUSTRATED STORY PARTS (4 INTEGRATED CHAPTERS — IMAGES FIRST ON MOBILE) */}
+      <section className="space-y-4 sm:space-y-6" aria-label="Story Parts">
         {STORY_PARTS.map((part, idx) => {
           const isImageLeft = idx % 2 === 1;
           return (
             <article
               key={part.id}
               data-testid={`story-${part.id}`}
-              className={`rounded-3xl border p-5 sm:p-7 shadow-sm transition-all ${part.accentBg}`}
+              className={`rounded-2xl sm:rounded-3xl border p-3.5 sm:p-7 shadow-sm transition-all ${part.accentBg}`}
             >
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-7 items-center">
-                {/* Story Text */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-7 items-center">
+                {/* Story Part Illustration — ALWAYS FIRST ON MOBILE */}
                 <div
-                  className={`md:col-span-7 space-y-3 ${
-                    isImageLeft ? 'md:order-2' : 'md:order-1'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span
-                      className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${part.badgeColor}`}
-                    >
-                      {part.partLabel}
-                    </span>
-                  </div>
-                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                    {part.title}
-                  </h2>
-                  <div className="space-y-3 text-base sm:text-[18px] leading-[1.8] text-slate-800 font-medium">
-                    {part.paragraphs.map((paragraph, pIdx) => (
-                      <p key={pIdx}>{paragraph}</p>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Story Part Illustration */}
-                <div
-                  className={`md:col-span-5 ${
+                  className={`order-1 md:col-span-5 ${
                     isImageLeft ? 'md:order-1' : 'md:order-2'
                   }`}
                 >
-                  <div className="rounded-2xl overflow-hidden bg-white p-2 border border-white shadow-sm">
+                  <div className="rounded-xl sm:rounded-2xl overflow-hidden bg-white p-1.5 sm:p-2 border border-white shadow-sm">
                     <img
                       src={part.imageUrl}
                       alt={part.imageAlt}
                       loading={idx === 0 ? 'eager' : 'lazy'}
-                      className="w-full aspect-[4/3] object-cover rounded-xl"
+                      className="w-full aspect-[4/3] object-cover rounded-lg sm:rounded-xl"
                     />
+                  </div>
+                </div>
+
+                {/* Story Text — 14px READABLE MOBILE & DESKTOP */}
+                <div
+                  className={`order-2 md:col-span-7 space-y-2.5 sm:space-y-3 ${
+                    isImageLeft ? 'md:order-2' : 'md:order-1'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${part.badgeColor}`}
+                    >
+                      {part.partLabel}
+                    </span>
+                  </div>
+                  <h2 className="text-lg sm:text-2xl font-black text-slate-900 tracking-tight">
+                    {part.title}
+                  </h2>
+                  <div className="space-y-2.5 text-[14px] leading-[1.7] text-[#0f172a] font-normal">
+                    {part.paragraphs.map((paragraph, pIdx) => (
+                      <p key={pIdx}>{paragraph}</p>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -189,55 +189,51 @@ export const BornForTheSkyLesson1View: React.FC<BornForTheSkyLesson1ViewProps> =
         })}
       </section>
 
-      {/* 2. EXISTING LESSON 1 COMPREHENSION CHECK */}
+      {/* 2. EXISTING LESSON 1 COMPREHENSION CHECK (NO REDUNDANT NESTED CARD PADDING ON MOBILE) */}
       {validQuestions.length > 0 && (
-        <section className="rounded-3xl bg-white border border-sky-200/90 p-5 sm:p-7 shadow-sm space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+        <section className="rounded-2xl sm:rounded-3xl bg-white border border-sky-200/90 p-2.5 sm:p-7 shadow-sm space-y-4 sm:space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-100 pb-3 px-1">
             <div className="flex items-center gap-2.5">
-              <span className="w-9 h-9 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center">
-                <HelpCircle className="w-5 h-5" />
+              <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+                <HelpCircle className="w-4 h-4 sm:w-5 sm:h-5" />
               </span>
               <div>
-                <span className="text-[11px] font-black uppercase tracking-widest text-sky-700 block">
+                <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-widest text-sky-700 block">
                   Comprehension Check
                 </span>
-                <h3 className="text-lg sm:text-xl font-black text-slate-900">
+                <h3 className="text-base sm:text-xl font-black text-slate-900">
                   Answer the Story Questions
                 </h3>
               </div>
             </div>
-            <span className="px-3 py-1 rounded-full bg-sky-50 border border-sky-200 text-sky-800 text-xs font-black">
+            <span className="px-2.5 py-1 rounded-full bg-sky-50 border border-sky-200 text-sky-800 text-xs font-black">
               {answeredCount} / {validQuestions.length} Answered
             </span>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3.5 sm:space-y-4">
             {validQuestions.map((q, idx) => (
-              <div
+              <ComprehensiveQuestionRenderer
                 key={q.id}
-                className="rounded-2xl bg-slate-50/70 border border-slate-200/80 p-3 sm:p-4"
-              >
-                <ComprehensiveQuestionRenderer
-                  question={q}
-                  index={idx}
-                  mode="student"
-                  response={responses[q.id]}
-                  allowRetryIncorrect={allowQuestionRetries && !isLessonCompleted}
-                  onAnswerSubmit={result => {
-                    setResponses(prev => ({ ...prev, [q.id]: result }));
-                    if (onQuestionAnswer) {
-                      onQuestionAnswer(
-                        q.id,
-                        String(result.answer || ''),
-                        result.status === 'correct',
-                        result.score || 0,
-                        q,
-                        result
-                      );
-                    }
-                  }}
-                />
-              </div>
+                question={q}
+                index={idx}
+                mode="student"
+                response={responses[q.id]}
+                allowRetryIncorrect={allowQuestionRetries && !isLessonCompleted}
+                onAnswerSubmit={result => {
+                  setResponses(prev => ({ ...prev, [q.id]: result }));
+                  if (onQuestionAnswer) {
+                    onQuestionAnswer(
+                      q.id,
+                      String(result.answer || ''),
+                      result.status === 'correct',
+                      result.score || 0,
+                      q,
+                      result
+                    );
+                  }
+                }}
+              />
             ))}
           </div>
         </section>

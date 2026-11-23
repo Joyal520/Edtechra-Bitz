@@ -961,7 +961,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
             ? 'px-0 pt-0 pb-16 sm:py-6'
             : viewMode === 'lesson' && useCinematicHeaderCourse
             ? 'px-0 pt-4 pb-24 sm:py-7 md:py-9 [--reader-gutter:1.125rem] sm:[--reader-gutter:2rem]'
-            : 'px-4 sm:px-6 md:px-8 pt-6 pb-24 sm:py-10 [--reader-gutter:1rem] sm:[--reader-gutter:1.5rem]'
+            : 'px-2.5 sm:px-6 md:px-8 pt-4 sm:pt-6 pb-24 sm:py-10 [--reader-gutter:0.625rem] sm:[--reader-gutter:1.5rem]'
         }`}
       >
         {viewMode === 'roadmap' ? (

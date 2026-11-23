@@ -499,7 +499,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
           ? 'rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-[var(--theme-border-primary)] shadow-xs'
           : qType === 'short_answer'
           ? 'rounded-xl p-3 sm:p-4 border border-[var(--theme-border-subtle)] bg-[var(--theme-surface-subtle)]/30 space-y-2'
-          : 'rounded-xl sm:rounded-2xl p-3.5 sm:p-5 border border-[var(--theme-border-subtle)] shadow-2xs space-y-3.5 sm:space-y-4'
+          : 'rounded-xl sm:rounded-2xl p-2.5 sm:p-5 border border-[var(--theme-border-subtle)] shadow-2xs space-y-3 sm:space-y-4 min-w-0'
       } surface-card transition-all ${
         isAnswered
           ? isCorrect

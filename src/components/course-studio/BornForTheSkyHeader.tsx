@@ -67,7 +67,7 @@ export const BornForTheSkyHeader: React.FC<BornForTheSkyHeaderProps> = ({
         data-testid="born-for-the-sky-hero-header"
         className="relative w-full rounded-2xl sm:rounded-3xl overflow-hidden border-2 border-sky-200/90 shadow-xl bg-gradient-to-br from-sky-900 via-sky-800 to-amber-900"
       >
-        <div className="relative w-full min-h-[215px] sm:min-h-[260px] md:min-h-[295px] flex flex-col justify-between p-4 sm:p-7 md:p-8">
+        <div className="relative w-full min-h-[168px] sm:min-h-[260px] md:min-h-[295px] flex flex-col justify-between p-3.5 sm:p-7 md:p-8">
           <img
             src={coverImageUrl}
             alt={course.title}
@@ -163,17 +163,17 @@ export const BornForTheSkyHeader: React.FC<BornForTheSkyHeaderProps> = ({
       <nav
         aria-label="Course Day Navigation"
         data-testid="born-for-the-sky-day-navigation"
-        className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-white/95 border border-sky-200/80 rounded-2xl p-2 shadow-sm"
+        className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-white/95 border border-sky-200/80 rounded-2xl p-1.5 sm:p-2 shadow-sm"
       >
         {allEpisodes.map(item => {
           const isActive = item.episode.id === selectedEpisode.id;
           const label =
             item.dayNumber === 1
-              ? 'Story & Reading'
+              ? 'Story'
               : item.dayNumber === 2
-              ? 'Song & Video'
+              ? 'Song'
               : item.dayNumber === 3
-              ? 'Puzzle & Quiz'
+              ? 'Puzzle'
               : item.cleanTitle;
 
           return (
@@ -181,7 +181,7 @@ export const BornForTheSkyHeader: React.FC<BornForTheSkyHeaderProps> = ({
               key={item.episode.id}
               type="button"
               onClick={() => onSelectEpisode(item.episode, item.isLocked, item.unlockMessage)}
-              className={`flex-1 min-w-[140px] flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+              className={`min-w-0 flex items-center gap-2 px-2 sm:px-3.5 py-2 sm:py-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                 isActive
                   ? 'bg-gradient-to-r from-sky-600 to-sky-500 border-sky-600 text-white shadow-md'
                   : item.isCompleted

@@ -165,7 +165,7 @@ export const ClozePassageQuestion: React.FC<Props> = ({
     const splitParts = workingText.split(/(__CLOZE_TOKEN_\d+__)/g);
 
     return (
-      <div className="text-[15px] sm:text-[16px] leading-[2.25] font-normal text-[#0f172a] break-words">
+      <div className="text-[14px] leading-[1.75] font-normal text-[#0f172a]">
         {splitParts.map((part, pIdx) => {
           const match = part.match(/__CLOZE_TOKEN_(\d+)__/);
           if (match) {
@@ -183,13 +183,13 @@ export const ClozePassageQuestion: React.FC<Props> = ({
             );
 
             return (
-              <span key={`blank_${blank.id}_${pIdx}`} className="inline-flex items-center gap-1 align-baseline mx-1 my-0.5">
+              <span key={`blank_${blank.id}_${pIdx}`} className="inline-flex items-center gap-1 align-baseline mx-1 my-0.5 max-w-full">
                 <select
                   aria-label={`Blank ${blankIdx + 1}`}
                   value={selected}
                   disabled={isEvaluated || isLocked || isSubmitting}
                   onChange={e => handleSelectChange(blank.id, e.target.value)}
-                  className={`inline-block rounded-xl border px-3 py-1 text-[15px] leading-[1.4] font-bold transition-all focus:outline-none focus:ring-2 focus:ring-[#026fc3]/35 cursor-pointer disabled:cursor-default shadow-2xs ${
+                  className={`inline-block max-w-full rounded-xl border px-2.5 py-0.5 text-[14px] leading-[1.4] font-bold transition-all focus:outline-none focus:ring-2 focus:ring-[#026fc3]/35 cursor-pointer disabled:cursor-default shadow-2xs ${
                     isEvaluated
                       ? status.isCorrect
                         ? 'bg-emerald-50 border-emerald-400 text-emerald-900'
@@ -224,7 +224,7 @@ export const ClozePassageQuestion: React.FC<Props> = ({
   return (
     <div className="w-full space-y-4" data-testid="cloze-passage-container">
       {/* Compact, Content-Sized Passage Container */}
-      <div className="p-4 sm:p-6 rounded-2xl bg-white border border-slate-200/90 shadow-2xs">
+      <div className="p-3 sm:p-6 rounded-2xl bg-white border border-slate-200/90 shadow-2xs">
         {renderPassageWithBlanks()}
       </div>
 

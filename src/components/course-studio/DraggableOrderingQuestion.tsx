@@ -218,7 +218,7 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
                   ? `Selected #${sequenceNumber}: ${item.text}`
                   : `Tap to select: ${item.text}`
               }
-              className={`w-full min-h-[60px] p-4 sm:p-[18px] rounded-[18px] border-2 text-left transition-all duration-150 flex items-center gap-3.5 sm:gap-4 box-border ${
+              className={`w-full min-h-[54px] p-3 sm:p-[18px] rounded-2xl sm:rounded-[18px] border-2 text-left transition-all duration-150 flex items-center gap-2.5 sm:gap-4 box-border min-w-0 ${
                 isLocked
                   ? 'cursor-default'
                   : 'cursor-pointer active:scale-[0.99]'
@@ -226,7 +226,7 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
             >
               {/* Sequential Number Badge on the Left */}
               <span
-                className={`w-10 h-10 rounded-full flex items-center justify-center text-sm sm:text-base font-black shrink-0 transition-all duration-150 ${badgeStyle}`}
+                className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-base font-black shrink-0 transition-all duration-150 ${badgeStyle}`}
               >
                 {isLocked ? (
                   feedback?.isCorrect ? (
@@ -240,7 +240,7 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
               </span>
 
               {/* Sentence Text */}
-              <span className={`flex-1 text-[15px] sm:text-base font-semibold break-words leading-relaxed text-left ${textStyle}`}>
+              <span className={`flex-1 min-w-0 text-[14px] sm:text-base font-semibold leading-relaxed text-left ${textStyle}`}>
                 {item.text}
               </span>
             </button>

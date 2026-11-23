@@ -300,9 +300,9 @@ export const BornForTheSkyDay3View: React.FC<BornForTheSkyDay3ViewProps> = ({
       {/* 3. STEP 2 — THREE MCQ QUESTIONS (30 XP) */}
       <section
         data-testid="day3-mcq-section"
-        className={`rounded-3xl border-2 p-5 sm:p-6 transition-all ${
+        className={`rounded-2xl sm:rounded-3xl border-2 p-2.5 sm:p-6 transition-all ${
           isMcqUnlocked
-            ? 'bg-white border-sky-200 shadow-md space-y-5'
+            ? 'bg-white border-sky-200 shadow-md space-y-4 sm:space-y-5'
             : 'bg-slate-50 border-slate-200 opacity-85'
         }`}
       >
@@ -351,21 +351,17 @@ export const BornForTheSkyDay3View: React.FC<BornForTheSkyDay3ViewProps> = ({
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3.5 sm:space-y-4">
             {mcqQuestions.map((q, idx) => (
-              <div
+              <ComprehensiveQuestionRenderer
                 key={q.id}
-                className="rounded-2xl bg-slate-50/80 border border-slate-200 p-3 sm:p-4"
-              >
-                <ComprehensiveQuestionRenderer
-                  question={q}
-                  index={idx}
-                  mode="student"
-                  response={responses[q.id]}
-                  allowRetryIncorrect={false}
-                  onAnswerSubmit={result => handleCommitResponse(q, result)}
-                />
-              </div>
+                question={q}
+                index={idx}
+                mode="student"
+                response={responses[q.id]}
+                allowRetryIncorrect={false}
+                onAnswerSubmit={result => handleCommitResponse(q, result)}
+              />
             ))}
           </div>
         )}
@@ -374,9 +370,9 @@ export const BornForTheSkyDay3View: React.FC<BornForTheSkyDay3ViewProps> = ({
       {/* 4. STEP 3 — TWO TRUE/FALSE QUESTIONS (20 XP) */}
       <section
         data-testid="day3-tf-section"
-        className={`rounded-3xl border-2 p-5 sm:p-6 transition-all ${
+        className={`rounded-2xl sm:rounded-3xl border-2 p-2.5 sm:p-6 transition-all ${
           isTfUnlocked
-            ? 'bg-white border-amber-200 shadow-md space-y-5'
+            ? 'bg-white border-amber-200 shadow-md space-y-4 sm:space-y-5'
             : 'bg-slate-50 border-slate-200 opacity-85'
         }`}
       >
@@ -425,21 +421,17 @@ export const BornForTheSkyDay3View: React.FC<BornForTheSkyDay3ViewProps> = ({
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3.5 sm:space-y-4">
             {tfQuestions.map((q, idx) => (
-              <div
+              <ComprehensiveQuestionRenderer
                 key={q.id}
-                className="rounded-2xl bg-amber-50/40 border border-amber-200/80 p-3 sm:p-4"
-              >
-                <ComprehensiveQuestionRenderer
-                  question={q}
-                  index={idx}
-                  mode="student"
-                  response={responses[q.id]}
-                  allowRetryIncorrect={false}
-                  onAnswerSubmit={result => handleCommitResponse(q, result)}
-                />
-              </div>
+                question={q}
+                index={idx}
+                mode="student"
+                response={responses[q.id]}
+                allowRetryIncorrect={false}
+                onAnswerSubmit={result => handleCommitResponse(q, result)}
+              />
             ))}
           </div>
         )}
@@ -449,9 +441,9 @@ export const BornForTheSkyDay3View: React.FC<BornForTheSkyDay3ViewProps> = ({
       {clozeQuestion && (
         <section
           data-testid="day3-cloze-section"
-          className={`rounded-3xl border-2 p-5 sm:p-6 transition-all ${
+          className={`rounded-2xl sm:rounded-3xl border-2 p-2.5 sm:p-6 transition-all ${
             isClozeUnlocked
-              ? 'bg-white border-emerald-200 shadow-md space-y-5'
+              ? 'bg-white border-emerald-200 shadow-md space-y-4 sm:space-y-5'
               : 'bg-slate-50 border-slate-200 opacity-85'
           }`}
         >
@@ -500,16 +492,14 @@ export const BornForTheSkyDay3View: React.FC<BornForTheSkyDay3ViewProps> = ({
               </p>
             </div>
           ) : (
-            <div className="rounded-2xl bg-emerald-50/40 border border-emerald-200/80 p-3 sm:p-4">
-              <ComprehensiveQuestionRenderer
-                question={clozeQuestion}
-                index={0}
-                mode="student"
-                response={responses[clozeQuestion.id]}
-                allowRetryIncorrect={false}
-                onAnswerSubmit={result => handleCommitResponse(clozeQuestion, result)}
-              />
-            </div>
+            <ComprehensiveQuestionRenderer
+              question={clozeQuestion}
+              index={0}
+              mode="student"
+              response={responses[clozeQuestion.id]}
+              allowRetryIncorrect={false}
+              onAnswerSubmit={result => handleCommitResponse(clozeQuestion, result)}
+            />
           )}
         </section>
       )}

@@ -1564,7 +1564,7 @@ export const CoursePreviewPage: React.FC = () => {
               ? 'px-0 pt-0 pb-16 sm:py-6'
               : !isEditMode && viewMode === 'lesson' && useCinematicHeaderCourse && selectedEpisode
               ? 'px-0 pt-4 pb-24 sm:py-7 md:py-9 [--reader-gutter:1.125rem] sm:[--reader-gutter:2rem]'
-              : 'px-3 sm:px-6 md:px-8 pt-5 pb-24 sm:py-8 md:py-10 [--reader-gutter:0.75rem] sm:[--reader-gutter:1.5rem]'
+              : 'px-2.5 sm:px-6 md:px-8 pt-4 sm:pt-5 pb-24 sm:py-8 md:py-10 [--reader-gutter:0.625rem] sm:[--reader-gutter:1.5rem]'
           }`}
         >
           {viewMode === 'games' ? (
