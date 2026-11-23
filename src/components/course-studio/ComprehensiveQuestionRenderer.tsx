@@ -1619,7 +1619,31 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
           selectedAnswer={typeof response?.answer === 'string' ? response.answer : undefined}
           feedback={response ? { isCorrect, showExplanation: isAnswered } : null}
           onEvaluateAnswer={(q, ans) => {
-            commitAnswer(ans, true, q.explanation || 'Cloze passage completed!');
+            const blanks =
+              q.blanks ||
+              (typeof q.options === 'object' && !Array.isArray(q.options) ? (q.options as any).blanks : []) ||
+              [];
+            if (Array.isArray(blanks) && blanks.length > 0 && typeof ans === 'string') {
+              const parts = ans.split(';').map(s => s.trim());
+              let correctCount = 0;
+              blanks.forEach((b: any, idx: number) => {
+                const prefix = `${b.id}:`;
+                const matched = parts.find(p => p.startsWith(prefix)) || parts[idx] || '';
+                const val = matched.includes(':') ? matched.split(':').slice(1).join(':').trim() : matched.trim();
+                if (val.toLowerCase() === String(b.answer || '').trim().toLowerCase()) {
+                  correctCount += 1;
+                }
+              });
+              const ratio = correctCount / blanks.length;
+              commitAnswer(
+                ans,
+                correctCount > 0,
+                `You got ${correctCount} of ${blanks.length} blanks correct! ${q.explanation || ''}`.trim(),
+                ratio
+              );
+            } else {
+              commitAnswer(ans, true, q.explanation || 'Cloze passage completed!');
+            }
           }}
         />
       )}

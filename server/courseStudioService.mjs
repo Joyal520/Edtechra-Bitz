@@ -1997,6 +1997,61 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
         }
       : null;
 
+    // 6b. Course Completion Bonus (+100 XP): Awarded once when student reaches 100% course completion.
+    //     Uses source_type='activity', source_id=cleanCourseId with the unique index
+    //     (classroom_id, student_id, source_type, source_id) so it can never be duplicated.
+    let completionBonusPoints = 0;
+    let totalCourseCompletionBonus = 0;
+    const isCourseNowCompleted = progressPercent >= 100;
+
+    if (isCourseNowCompleted && !isClassroomOwner && !isTeacherOrAdmin) {
+      const { data: existingBonusRows } = await supabaseClient
+        .from('classroom_points')
+        .select('id, points')
+        .eq('classroom_id', cleanClassroomId)
+        .eq('student_id', cleanStudentId)
+        .eq('source_type', 'activity')
+        .eq('source_id', cleanCourseId);
+
+      if (Array.isArray(existingBonusRows) && existingBonusRows.length > 0) {
+        totalCourseCompletionBonus = Number(existingBonusRows[0].points || 0);
+      } else {
+        const COURSE_COMPLETION_BONUS_XP = 100;
+        const { data: bonusInserted, error: bonusErr } = await supabaseClient
+          .from('classroom_points')
+          .insert({
+            classroom_id: cleanClassroomId,
+            student_id: cleanStudentId,
+            points: COURSE_COMPLETION_BONUS_XP,
+            reason: `Course Completion Bonus: ${courseRow?.title || 'Course'} (+${COURSE_COMPLETION_BONUS_XP} XP)`,
+            source_type: 'activity',
+            source_id: cleanCourseId,
+            awarded_by: cleanStudentId,
+            created_at: nowIso
+          })
+          .select('id, points')
+          .maybeSingle();
+
+        if (!bonusErr && bonusInserted) {
+          completionBonusPoints = COURSE_COMPLETION_BONUS_XP;
+          totalCourseCompletionBonus = COURSE_COMPLETION_BONUS_XP;
+          await supabaseClient.from('course_learning_events').insert({
+            student_id: cleanStudentId,
+            course_id: cleanCourseId,
+            classroom_id: cleanClassroomId,
+            episode_id: cleanEpisodeId,
+            event_type: 'course_completion_bonus',
+            metadata: {
+              course_id: cleanCourseId,
+              course_title: courseRow?.title || 'Course',
+              bonus_points: COURSE_COMPLETION_BONUS_XP,
+              reward_key: `course_completion:${cleanStudentId}:${cleanCourseId}`
+            }
+          });
+        }
+      }
+    }
+
     if (pointsAwarded > 0) {
       // Record authoritative reward transaction event (audit trail of each credited change)
       await supabaseClient.from('course_learning_events').insert({
@@ -2010,7 +2065,7 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
           score: numScore,
           max_score: numMaxScore,
           percentage,
-          completion_bonus_points: 0,
+          completion_bonus_points: completionBonusPoints,
           progress_percent: progressPercent
         }
       });
@@ -2065,11 +2120,13 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
       credited_lesson_points: creditedLessonPoints,
       previous_credited_points: previouslyCreditedPoints,
       lesson_reward_points: creditedLessonPoints,
-      completion_bonus_points: 0,
+      completion_bonus_points: completionBonusPoints,
+      total_course_completion_bonus: totalCourseCompletionBonus,
+      course_completed: isCourseNowCompleted,
       scoring_policy: 'score_only_highest_attempt',
       credit_action: creditAction,
       already_completed: wasAlreadyCompleted,
-      already_awarded: pointsAwarded === 0 && (wasAlreadyCompleted || hasExistingPointRow),
+      already_awarded: pointsAwarded === 0 && completionBonusPoints === 0 && (wasAlreadyCompleted || hasExistingPointRow),
       previous_points: previousPoints,
       total_classroom_points: totalClassroomPoints,
       reward_key: uniqueRewardKey,

@@ -32,6 +32,9 @@ interface Props {
   completedLessonsCount?: number;
   totalLessonsCount?: number;
   dailyReleaseEnabled?: boolean;
+  courseTitle?: string;
+  courseCompleted?: boolean;
+  completionBonusPoints?: number;
   onContinue: () => void;
 }
 
@@ -62,6 +65,9 @@ export const LessonCompletionModal: React.FC<Props> = ({
   completedLessonsCount = 1,
   totalLessonsCount = 1,
   dailyReleaseEnabled = false,
+  courseTitle,
+  courseCompleted = false,
+  completionBonusPoints = 0,
   onContinue
 }) => {
   useEffect(() => {
@@ -114,17 +120,46 @@ export const LessonCompletionModal: React.FC<Props> = ({
         {/* Header Greeting & Lesson Title */}
         <div className="space-y-1.5">
           <h2 className="text-lg sm:text-xl font-black text-theme-primary tracking-tight break-words reader-title">
-            {greeting}
+            {courseCompleted ? '🎉 COURSE COMPLETED!' : greeting}
           </h2>
+          {courseCompleted && courseTitle ? (
+            <p className="text-sm sm:text-base font-black text-amber-600 dark:text-amber-400 break-words">
+              {courseTitle}
+            </p>
+          ) : null}
           <p className="text-xs sm:text-sm font-bold text-theme-accent truncate reader-meta">
             {lessonTitle} • Lesson {lessonPosition}
           </p>
         </div>
 
+        {/* Course Completion Bonus Achievement Banner */}
+        {courseCompleted && (
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-50 via-yellow-50 to-sky-50 dark:from-amber-950/50 dark:via-yellow-950/30 dark:to-sky-950/40 border-2 border-amber-300/80 dark:border-amber-700/60 space-y-2 shadow-sm">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500 text-white text-[11px] font-black uppercase tracking-wider shadow-xs">
+              <Award className="w-3.5 h-3.5" />
+              <span>Course Completion Achievement Unlocked!</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-1 text-left">
+              <div className="p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/60 border border-amber-200/70 dark:border-amber-800/50">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Lesson Points</span>
+                <span className="text-sm font-black text-slate-900 dark:text-white">{earnedScore ?? pointsEarned} XP</span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/60 border border-amber-200/70 dark:border-amber-800/50">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">Course Bonus</span>
+                <span className="text-sm font-black text-amber-600 dark:text-amber-400">+{completionBonusPoints > 0 ? completionBonusPoints : 100} XP</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Specific Daily vs Normal Release Messaging */}
         <div className="p-4 rounded-2xl bg-[var(--theme-surface-subtle)] border border-[var(--theme-border-subtle)] space-y-1.5 text-xs sm:text-sm">
           <p className="font-extrabold text-theme-primary reader-h3">
-            {dailyReleaseEnabled ? "You’ve completed today’s lesson!" : "You’ve completed this lesson!"}
+            {courseCompleted
+              ? `You have successfully completed ${courseTitle || 'this course'}!`
+              : dailyReleaseEnabled
+              ? 'You’ve completed today’s lesson!'
+              : 'You’ve completed this lesson!'}
           </p>
           <p className="text-theme-secondary font-medium leading-relaxed reader-body">
             {encouragingMessage}

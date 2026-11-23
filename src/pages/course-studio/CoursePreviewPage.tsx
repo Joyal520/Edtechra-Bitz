@@ -64,6 +64,9 @@ import {
   CreepyLegendsStudentView,
   EpisodeNavItem
 } from '@/components/course-studio/CreepyLegendsStudentView';
+import { BornForTheSkyHeader } from '@/components/course-studio/BornForTheSkyHeader';
+import { BornForTheSkyLesson1View } from '@/components/course-studio/BornForTheSkyLesson1View';
+import { BornForTheSkyDay3View } from '@/components/course-studio/BornForTheSkyDay3View';
 import { CoursePlayerSkeleton } from '@/components/course-studio/CoursePlayerSkeleton';
 import { TextScale } from '@/utils/courseTextFormatting';
 import { getThemePreset, DEFAULT_THEME_ID } from '@/utils/courseThemes';
@@ -832,11 +835,19 @@ export const CoursePreviewPage: React.FC = () => {
       course.title?.toLowerCase().includes('annabelle')
   );
 
+  const isBornForTheSkyCourse = Boolean(
+    course.id === '774af599-7c7e-46b9-9ad9-832a6f45d105' ||
+      course.title?.toLowerCase().includes('born for the sky')
+  );
+  const currentEpisodeDay = selectedEpisode?.position || (currentInfo?.epIndex ?? 1);
+  const isBornForTheSkyCustomLesson = !isEditMode && isBornForTheSkyCourse && currentEpisodeDay !== 2;
+
   // NOTE: Plain computation (not a hook) — this runs after the early returns above,
   // so calling useMemo here would change the hook count between renders (React #310).
   const annabelleDay = selectedEpisode?.position || 1;
-  const effectiveThemeId =
-    isAnnabelleCourse && selectedEpisode
+  const effectiveThemeId = isBornForTheSkyCustomLesson
+    ? 'morning-mist'
+    : isAnnabelleCourse && selectedEpisode
       ? // Days 1, 3, 5: Light educational workbook layout with dark, readable text
         // Course cover, Days 2, 4, 6, 7: Premium dark creepy horror
         annabelleDay === 1 || annabelleDay === 3 || annabelleDay === 5
@@ -1659,6 +1670,24 @@ export const CoursePreviewPage: React.FC = () => {
                     }}
                     onOpenCoverModal={() => setCoverModalOpen(true)}
                   />
+                ) : isBornForTheSkyCustomLesson && selectedEpisode ? (
+                  <BornForTheSkyHeader
+                    course={course}
+                    selectedEpisode={selectedEpisode}
+                    allEpisodes={episodeNavItems}
+                    completedCount={roadmapData?.completedLessons || completedEpisodeIds.size}
+                    totalCount={roadmapData?.totalLessons || allEpisodes.length || 3}
+                    progressPercent={roadmapData?.progressPercent || 0}
+                    onSelectEpisode={(ep, locked, unlockMsg) => {
+                      if (locked) {
+                        showToast(unlockMsg || 'This lesson is locked.');
+                        return;
+                      }
+                      setSelectedEpisode(ep);
+                      mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    onOpenCoverModal={() => setCoverModalOpen(true)}
+                  />
                 ) : (
                   <CourseHeroBanner
                     course={course}
@@ -1772,7 +1801,25 @@ export const CoursePreviewPage: React.FC = () => {
               </header>
               )}
 
-              {/* UNIFIED CONTENT ENGINE (ONE ENGINE FOR BOTH EDIT & STUDENT MODES) */}
+              {isBornForTheSkyCustomLesson && currentEpisodeDay === 1 ? (
+                <BornForTheSkyLesson1View
+                  key={selectedEpisode.id}
+                  blocks={currentBlocks}
+                  questions={currentQuestions}
+                  isLessonCompleted={isEpisodeCompleted}
+                  allowQuestionRetries={(course as any)?.allow_retries !== false}
+                  onProgressChange={handleProgressChange}
+                />
+              ) : isBornForTheSkyCustomLesson && currentEpisodeDay === 3 ? (
+                <BornForTheSkyDay3View
+                  key={selectedEpisode.id}
+                  blocks={currentBlocks}
+                  questions={currentQuestions}
+                  isLessonCompleted={isEpisodeCompleted}
+                  onProgressChange={handleProgressChange}
+                />
+              ) : (
+              /* UNIFIED CONTENT ENGINE (ONE ENGINE FOR BOTH EDIT & STUDENT MODES) */
               <CourseContentRenderer
                 key={selectedEpisode.id}
                 blocks={currentBlocks}
@@ -1822,6 +1869,7 @@ export const CoursePreviewPage: React.FC = () => {
                 themeId={effectiveThemeId}
                 isCourseReader={!isEditMode && useCinematicHeaderCourse}
               />
+              )}
 
               {/* ============================================================== */}
               {/* FINAL LESSON COMPLETION & NAVIGATION ACTION AREA               */}

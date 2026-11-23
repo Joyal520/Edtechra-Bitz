@@ -40,6 +40,9 @@ import {
   CreepyLegendsStudentView,
   EpisodeNavItem
 } from '@/components/course-studio/CreepyLegendsStudentView';
+import { BornForTheSkyHeader } from '@/components/course-studio/BornForTheSkyHeader';
+import { BornForTheSkyLesson1View } from '@/components/course-studio/BornForTheSkyLesson1View';
+import { BornForTheSkyDay3View } from '@/components/course-studio/BornForTheSkyDay3View';
 import { CoursePlayerSkeleton } from '@/components/course-studio/CoursePlayerSkeleton';
 import { CourseCoverModal } from '@/components/course-studio/CourseCoverModal';
 import { useAuth } from '@/context/AuthContext';
@@ -91,6 +94,8 @@ export const StudentCoursePlayerPage: React.FC = () => {
   const [lastCompletedPos, setLastCompletedPos] = useState(1);
   const [lastCompletedPoints, setLastCompletedPoints] = useState(0);
   const [lastCompletedScore, setLastCompletedScore] = useState<{ earned: number; max: number } | null>(null);
+  const [lastCompletionBonus, setLastCompletionBonus] = useState(0);
+  const [lastCourseCompleted, setLastCourseCompleted] = useState(false);
   const [totalClassroomPoints, setTotalClassroomPoints] = useState<number | undefined>(undefined);
   const [celebratedIds, setCelebratedIds] = useState<Set<string>>(new Set());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -580,18 +585,22 @@ export const StudentCoursePlayerPage: React.FC = () => {
       const alreadyAwarded = Boolean(res?.already_awarded);
       // Only show what the backend actually confirmed - never a client-side guess.
       const awardedByBackend = typeof res?.points_awarded === 'number' ? res.points_awarded : 0;
+      const bonusByBackend = typeof res?.completion_bonus_points === 'number' ? res.completion_bonus_points : 0;
+      const isCourseDone = Boolean(res?.course_completed);
       const confirmedScore = typeof res?.earned_score === 'number' && typeof res?.max_score === 'number'
         ? { earned: res.earned_score, max: res.max_score }
         : null;
 
       // Only trigger celebration modal ONCE when backend confirms new lesson completion & reward
       if (!hasShortBlock) {
-        if (!alreadyAwarded && !celebratedIds.has(epId)) {
+        if ((!alreadyAwarded || bonusByBackend > 0) && !celebratedIds.has(epId)) {
           setCelebratedIds(prev => new Set([...prev, epId]));
           setLastCompletedTitle(selectedEpisode.title);
           setLastCompletedPos(selectedEpisode.position || (currentIndex + 1));
           setLastCompletedPoints(awardedByBackend);
           setLastCompletedScore(confirmedScore);
+          setLastCompletionBonus(bonusByBackend);
+          setLastCourseCompleted(isCourseDone);
           setCelebrationOpen(true);
         } else {
           setCelebratedIds(prev => new Set([...prev, epId]));
@@ -686,10 +695,19 @@ export const StudentCoursePlayerPage: React.FC = () => {
       course.title?.toLowerCase().includes('annabelle')
   );
 
+  const isBornForTheSkyCourse = Boolean(
+    course.id === '774af599-7c7e-46b9-9ad9-832a6f45d105' ||
+      course.title?.toLowerCase().includes('born for the sky')
+  );
+  const currentEpisodeDay = selectedEpisode.position || (currentInfo?.epIndex ?? 1);
+  const isBornForTheSkyCustomLesson = isBornForTheSkyCourse && currentEpisodeDay !== 2;
+
   // NOTE: Plain computation (not a hook) — this runs after the early returns above,
   // so calling useMemo here would change the hook count between renders (React #310).
   const annabelleDay = selectedEpisode.position || 1;
-  const effectiveThemeId = isAnnabelleCourse
+  const effectiveThemeId = isBornForTheSkyCustomLesson
+    ? 'morning-mist'
+    : isAnnabelleCourse
     ? // Days 1, 3, 5: Light educational workbook layout with dark, readable text
       // Course cover, Days 2, 4, 6, 7: Premium dark creepy horror
       annabelleDay === 1 || annabelleDay === 3 || annabelleDay === 5
@@ -1025,6 +1043,25 @@ export const StudentCoursePlayerPage: React.FC = () => {
                   }}
                   onOpenCoverModal={isTeacherPreview ? () => setCoverModalOpen(true) : undefined}
                 />
+              ) : isBornForTheSkyCustomLesson ? (
+                <BornForTheSkyHeader
+                  course={course}
+                  selectedEpisode={selectedEpisode}
+                  allEpisodes={episodeNavItems}
+                  completedCount={roadmapData?.completedLessons || completedEpisodeIds.size}
+                  totalCount={roadmapData?.totalLessons || allEpisodes.length || 3}
+                  progressPercent={roadmapData?.progressPercent || 0}
+                  onSelectEpisode={(ep, locked, unlockMsg) => {
+                    if (locked && !isTeacherPreview) {
+                      setToastMessage(unlockMsg || 'This lesson is currently locked.');
+                      setTimeout(() => setToastMessage(null), 3500);
+                      return;
+                    }
+                    setSelectedEpisode(ep);
+                    mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  onOpenCoverModal={isTeacherPreview ? () => setCoverModalOpen(true) : undefined}
+                />
               ) : (
                 <CourseHeroBanner
                   course={course}
@@ -1141,55 +1178,80 @@ export const StudentCoursePlayerPage: React.FC = () => {
               </div>
             ) : (
               <>
-                {/* SHARED EDITORIAL CONTENT RENDERER */}
-                <CourseContentRenderer
-                  key={selectedEpisode.id}
-                  blocks={selectedEpisode.blocks || []}
-                  questions={selectedEpisode.questions || []}
-                  isStudentView={true}
-                  textScale={textScale}
-                  themeId={effectiveThemeId}
-                  courseId={course.id}
-                  classroomId={classroomId}
-                  episodeId={selectedEpisode.id}
-                  userId={user?.id}
-                  courseTitle={course.title}
-                  courseCoverUrl={course.cover_image_url || (course.title?.toLowerCase().includes('extraordinary mysteries') ? '/images/extraordinary-mysteries-cover.jpg' : isBitzShortsCourse ? '/images/creepy-legends-cover.jpg' : undefined)}
-                  lessonTitle={selectedEpisode.title}
-                  userAnswers={userAnswers}
-                  feedbackState={feedbackState}
-                  onQuestionAnswer={handleQuestionAnswer}
-                  onCompleteLesson={handleCompleteEpisode}
-                  onNextLesson={
-                    nextItem
-                      ? () => {
-                          if (course.daily_release_enabled && nextRoadItem?.is_locked && !isTeacherPreview) {
-                            setToastMessage(nextRoadItem.unlock_message || 'Your next lesson will unlock tomorrow.');
-                            setTimeout(() => setToastMessage(null), 3500);
-                            setViewMode('roadmap');
-                            return;
+                {isBornForTheSkyCustomLesson && currentEpisodeDay === 1 ? (
+                  <BornForTheSkyLesson1View
+                    key={selectedEpisode.id}
+                    blocks={selectedEpisode.blocks || []}
+                    questions={selectedEpisode.questions || []}
+                    userAnswers={userAnswers}
+                    feedbackState={feedbackState}
+                    isLessonCompleted={isEpisodeCompleted}
+                    allowQuestionRetries={allowQuestionRetries}
+                    onQuestionAnswer={handleQuestionAnswer}
+                    onProgressChange={handleProgressChange}
+                  />
+                ) : isBornForTheSkyCustomLesson && currentEpisodeDay === 3 ? (
+                  <BornForTheSkyDay3View
+                    key={selectedEpisode.id}
+                    blocks={selectedEpisode.blocks || []}
+                    questions={selectedEpisode.questions || []}
+                    userAnswers={userAnswers}
+                    feedbackState={feedbackState}
+                    isLessonCompleted={isEpisodeCompleted}
+                    onQuestionAnswer={handleQuestionAnswer}
+                    onProgressChange={handleProgressChange}
+                  />
+                ) : (
+                  /* SHARED EDITORIAL CONTENT RENDERER */
+                  <CourseContentRenderer
+                    key={selectedEpisode.id}
+                    blocks={selectedEpisode.blocks || []}
+                    questions={selectedEpisode.questions || []}
+                    isStudentView={true}
+                    textScale={textScale}
+                    themeId={effectiveThemeId}
+                    courseId={course.id}
+                    classroomId={classroomId}
+                    episodeId={selectedEpisode.id}
+                    userId={user?.id}
+                    courseTitle={course.title}
+                    courseCoverUrl={course.cover_image_url || (course.title?.toLowerCase().includes('extraordinary mysteries') ? '/images/extraordinary-mysteries-cover.jpg' : isBitzShortsCourse ? '/images/creepy-legends-cover.jpg' : undefined)}
+                    lessonTitle={selectedEpisode.title}
+                    userAnswers={userAnswers}
+                    feedbackState={feedbackState}
+                    onQuestionAnswer={handleQuestionAnswer}
+                    onCompleteLesson={handleCompleteEpisode}
+                    onNextLesson={
+                      nextItem
+                        ? () => {
+                            if (course.daily_release_enabled && nextRoadItem?.is_locked && !isTeacherPreview) {
+                              setToastMessage(nextRoadItem.unlock_message || 'Your next lesson will unlock tomorrow.');
+                              setTimeout(() => setToastMessage(null), 3500);
+                              setViewMode('roadmap');
+                              return;
+                            }
+                            setSelectedEpisode(nextItem.episode);
+                            setViewMode('lesson');
+                            mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
                           }
-                          setSelectedEpisode(nextItem.episode);
-                          setViewMode('lesson');
-                          mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-                        }
-                      : undefined
-                  }
-                  onReturnToCourse={() => setViewMode('roadmap')}
-                  onQuitLesson={() => setViewMode('roadmap')}
-                  hasNextLesson={Boolean(nextItem)}
-                  isLessonCompleted={isEpisodeCompleted}
-                  allowQuestionRetries={allowQuestionRetries}
-                  dailyReleaseEnabled={Boolean(course.daily_release_enabled)}
-                  courseStartDate={course.course_start_date || null}
-                  dailyReleaseIntervalDays={course.daily_release_interval_days || 1}
-                  nextUnlockDateLabel={nextLessonUnlockDateLabel}
-                  nextUnlockCountdown={nextLessonUnlockCountdown}
-                  onShortsStageChange={handleShortsStageChange}
-                  onProgressChange={handleProgressChange}
-                  onVideoCompletionChange={setVideoCompletionStatus}
-                  isCourseReader={useCinematicHeaderCourse}
-                />
+                        : undefined
+                    }
+                    onReturnToCourse={() => setViewMode('roadmap')}
+                    onQuitLesson={() => setViewMode('roadmap')}
+                    hasNextLesson={Boolean(nextItem)}
+                    isLessonCompleted={isEpisodeCompleted}
+                    allowQuestionRetries={allowQuestionRetries}
+                    dailyReleaseEnabled={Boolean(course.daily_release_enabled)}
+                    courseStartDate={course.course_start_date || null}
+                    dailyReleaseIntervalDays={course.daily_release_interval_days || 1}
+                    nextUnlockDateLabel={nextLessonUnlockDateLabel}
+                    nextUnlockCountdown={nextLessonUnlockCountdown}
+                    onShortsStageChange={handleShortsStageChange}
+                    onProgressChange={handleProgressChange}
+                    onVideoCompletionChange={setVideoCompletionStatus}
+                    isCourseReader={useCinematicHeaderCourse}
+                  />
+                )}
 
             {/* ============================================================== */}
             {/* FINAL LESSON COMPLETION & NAVIGATION ACTION AREA               */}
@@ -1405,6 +1467,9 @@ export const StudentCoursePlayerPage: React.FC = () => {
         completedLessonsCount={roadmapData?.completedLessons || 1}
         totalLessonsCount={roadmapData?.totalLessons || 1}
         dailyReleaseEnabled={Boolean(course.daily_release_enabled)}
+        courseTitle={course.title}
+        courseCompleted={lastCourseCompleted}
+        completionBonusPoints={lastCompletionBonus}
         onContinue={handleAfterCelebrationContinue}
       />
 
