@@ -175,31 +175,35 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
       )}
 
       {/* TAP-TO-NUMBER SENTENCE CARDS */}
-      <div className="w-full space-y-2.5">
+      <div className="w-full space-y-3">
         {items.map(item => {
           const seqIndex = selectedIds.indexOf(item.id);
           const isSelected = seqIndex !== -1;
           const sequenceNumber = isSelected ? seqIndex + 1 : null;
 
           let cardStyle =
-            'bg-white/95 dark:bg-slate-900/70 border-slate-200 dark:border-slate-700/80 hover:border-sky-400 text-theme-primary shadow-2xs';
+            '!bg-white border-slate-200 hover:border-[#026fc3]/60 !text-[#0f172a] shadow-xs';
           let badgeStyle =
-            'border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/60 text-transparent';
+            'border-2 border-slate-300 bg-slate-50 text-transparent';
+          let textStyle = '!text-[#0f172a]';
 
           if (isLocked) {
             if (feedback?.isCorrect) {
               cardStyle =
-                'surface-answer-selected-correct border-emerald-400 bg-emerald-50/90 dark:bg-emerald-950/40';
+                '!bg-emerald-50 !border-emerald-400 !text-emerald-950 shadow-xs';
               badgeStyle = 'bg-emerald-600 text-white border-0 shadow-xs';
+              textStyle = '!text-emerald-950';
             } else {
               cardStyle =
-                'surface-answer-selected-incorrect border-rose-400 bg-rose-50/90 dark:bg-rose-950/40';
+                '!bg-rose-50 !border-rose-400 !text-rose-950 shadow-xs';
               badgeStyle = 'bg-rose-600 text-white border-0 shadow-xs';
+              textStyle = '!text-rose-950';
             }
           } else if (isSelected) {
             cardStyle =
-              'bg-sky-50/95 dark:bg-sky-950/50 border-sky-500 ring-2 ring-sky-400/25 shadow-sm text-theme-primary';
-            badgeStyle = 'bg-sky-600 text-white border-0 shadow-sm scale-105';
+              '!bg-[#eff6ff] !border-[#026fc3] ring-2 ring-[#026fc3]/20 shadow-sm !text-[#0f172a]';
+            badgeStyle = 'bg-[#026fc3] text-white border-0 shadow-sm scale-105';
+            textStyle = '!text-[#0f172a]';
           }
 
           return (
@@ -214,7 +218,7 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
                   ? `Selected #${sequenceNumber}: ${item.text}`
                   : `Tap to select: ${item.text}`
               }
-              className={`w-full min-h-[58px] p-3.5 sm:p-4 rounded-2xl border-2 text-left transition-all duration-150 flex items-center gap-3.5 box-border ${
+              className={`w-full min-h-[60px] p-4 sm:p-[18px] rounded-[18px] border-2 text-left transition-all duration-150 flex items-center gap-3.5 sm:gap-4 box-border ${
                 isLocked
                   ? 'cursor-default'
                   : 'cursor-pointer active:scale-[0.99]'
@@ -222,7 +226,7 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
             >
               {/* Sequential Number Badge on the Left */}
               <span
-                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-sm sm:text-base font-black shrink-0 transition-all duration-150 ${badgeStyle}`}
+                className={`w-10 h-10 rounded-full flex items-center justify-center text-sm sm:text-base font-black shrink-0 transition-all duration-150 ${badgeStyle}`}
               >
                 {isLocked ? (
                   feedback?.isCorrect ? (
@@ -236,7 +240,7 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
               </span>
 
               {/* Sentence Text */}
-              <span className="flex-1 text-sm sm:text-base font-semibold break-words leading-relaxed text-left text-theme-primary">
+              <span className={`flex-1 text-[15px] sm:text-base font-semibold break-words leading-relaxed text-left ${textStyle}`}>
                 {item.text}
               </span>
             </button>
@@ -248,9 +252,9 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
       {incompleteWarning && !isLocked && (
         <div
           role="alert"
-          className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-xs sm:text-sm font-bold flex items-center gap-2 animate-in fade-in duration-150"
+          className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-xs sm:text-sm font-bold flex items-center gap-2 animate-in fade-in duration-150"
         >
-          <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
           <span>Please select all the sentences before checking.</span>
         </div>
       )}
@@ -262,7 +266,7 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
             type="button"
             disabled={isSubmitting || selectedIds.length === 0}
             onClick={handleClearAll}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-[#0f172a] text-xs sm:text-sm font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs"
           >
             <RotateCcw className="w-4 h-4" />
             <span>Clear All</span>
