@@ -1,20 +1,19 @@
 // ============================================================================
-// EDTECHRA DIGITAL CLASSROOM: DRAGGABLE ORDERING QUESTION ENGINE
-// Premium touch & pointer-based drag-and-drop chronological story arranger.
-// Mobile-first, stable shuffling, visual drop indicators, immediate evaluation,
-// one-attempt locking, and comprehensive side-by-side educational feedback.
+// EDTECHRA DIGITAL CLASSROOM: TAP-TO-NUMBER ORDERING QUESTION ENGINE
+// Mobile-first, thumb-friendly chronological story arranger.
+// Students tap sentences in order to assign sequence numbers (1, 2, 3...),
+// tap again to undo & auto-renumber, or Clear All to start over.
+// Preserves the canonical `options` array and `|||` serialization contract.
 // ============================================================================
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-  GripVertical,
-  CheckCircle2,
   XCircle,
   Check,
   X,
-  Send,
-  ChevronUp,
-  ChevronDown
+  RotateCcw,
+  AlertCircle,
+  Sparkles
 } from 'lucide-react';
 import { CourseQuestion } from '@/types/courseStudio';
 import { courseAudio } from '@/utils/courseAudio';
@@ -35,18 +34,16 @@ interface Props {
   onEvaluateAnswer: (question: CourseQuestion, answer: string, targetElement?: HTMLElement | null) => void;
 }
 
-// Stable shuffle algorithm (ensures shuffled order is different from canonical if possible)
+// Stable shuffle algorithm (ensures shuffled order differs from canonical when > 1 item)
 function shuffleItems(items: OrderItem[]): OrderItem[] {
   if (items.length <= 1) return [...items];
 
   const shuffled = [...items];
-  for (let attempt = 0; attempt < 10; attempt++) {
+  for (let attempt = 0; attempt < 12; attempt++) {
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
-
-    // Check if at least one item moved
     const isIdentical = shuffled.every((item, idx) => item.text === items[idx].text);
     if (!isIdentical) break;
   }
@@ -62,386 +59,257 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
   feedback,
   onEvaluateAnswer
 }) => {
-  // Canonical list of items (The correct sequence)
-  const canonicalItems: string[] = Array.isArray(question.options)
-    ? question.options.map(opt => (typeof opt === 'string' ? opt : (opt as any)?.text || ''))
-    : [];
+  // Canonical list of items (The correct chronological sequence)
+  const canonicalItems: string[] = useMemo(
+    () =>
+      Array.isArray(question.options)
+        ? question.options.map(opt => (typeof opt === 'string' ? opt : (opt as any)?.text || ''))
+        : [],
+    [question.options]
+  );
 
-  // Items with stable identity
-  const [items, setItems] = useState<OrderItem[]>(() => {
+  // Shuffled display cards with stable IDs
+  const [items] = useState<OrderItem[]>(() => {
     const rawItems: OrderItem[] = canonicalItems.map((text, idx) => ({
       id: `ord_${idx}_${text.substring(0, 15).replace(/\s+/g, '_')}`,
       text,
       originalIndex: idx
     }));
-
-    if (selectedAnswer) {
-      // Restore previously submitted arrangement
-      const submittedTexts = selectedAnswer.split('|||');
-      const restored: OrderItem[] = [];
-      submittedTexts.forEach((text, sIdx) => {
-        const matched = rawItems.find(r => r.text.trim() === text.trim());
-        if (matched) {
-          restored.push(matched);
-        } else {
-          restored.push({ id: `sub_${sIdx}`, text, originalIndex: sIdx });
-        }
-      });
-      if (restored.length === rawItems.length) return restored;
-    }
-
     return shuffleItems(rawItems);
   });
 
-  // Dragging State
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const itemRefs = useRef<Array<HTMLDivElement | null>>([]);
-
-  // Touch Drag Tracking Refs
-  const touchStateRef = useRef<{
-    active: boolean;
-    startIndex: number;
-    initialY: number;
-  }>({ active: false, startIndex: -1, initialY: 0 });
-
-  // Sync if selectedAnswer changes from external source
-  useEffect(() => {
-    if (selectedAnswer && isLocked) {
-      const submittedTexts = selectedAnswer.split('|||');
-      const updated: OrderItem[] = submittedTexts.map((text, idx) => ({
-        id: `ord_restored_${idx}`,
-        text,
-        originalIndex: idx
-      }));
-      setItems(updated);
-    }
-  }, [selectedAnswer, isLocked]);
-
-  // --------------------------------------------------------------------------
-  // POINTER & MOUSE DRAG HANDLERS (Desktop & Laptop)
-  // --------------------------------------------------------------------------
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    if (isLocked || isSubmitting) return;
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(index));
-  };
-
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    if (isLocked || isSubmitting || draggedIndex === null) return;
-    if (dropTargetIndex !== index) {
-      setDropTargetIndex(index);
-    }
-  };
-
-  const handleDragEnd = () => {
-    setDraggedIndex(null);
-    setDropTargetIndex(null);
-  };
-
-  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
-    e.preventDefault();
-    if (isLocked || isSubmitting || draggedIndex === null) return;
-
-    if (draggedIndex !== targetIndex) {
-      const nextItems = [...items];
-      const [removed] = nextItems.splice(draggedIndex, 1);
-      nextItems.splice(targetIndex, 0, removed);
-      setItems(nextItems);
-      courseAudio.playSelectSound();
-    }
-
-    setDraggedIndex(null);
-    setDropTargetIndex(null);
-  };
-
-  // --------------------------------------------------------------------------
-  // TOUCH DRAG HANDLERS (Mobile & Tablet)
-  // --------------------------------------------------------------------------
-  const handleTouchStart = (e: React.TouchEvent, index: number) => {
-    if (isLocked || isSubmitting) return;
-    const touch = e.touches[0];
-    touchStateRef.current = {
-      active: true,
-      startIndex: index,
-      initialY: touch.clientY
-    };
-    setDraggedIndex(index);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchStateRef.current.active || isLocked || isSubmitting) return;
-    const touch = e.touches[0];
-    const clientY = touch.clientY;
-
-    // Find which item is currently under the touch point
-    itemRefs.current.forEach((el, idx) => {
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      if (clientY >= rect.top && clientY <= rect.bottom) {
-        if (dropTargetIndex !== idx) {
-          setDropTargetIndex(idx);
-        }
+  // Sequence of selected item IDs in the order the student tapped them
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => {
+    if (!selectedAnswer) return [];
+    const submittedTexts = selectedAnswer.split('|||').map(t => t.trim());
+    const usedIds = new Set<string>();
+    const restored: string[] = [];
+    submittedTexts.forEach(text => {
+      const matched = items.find(i => !usedIds.has(i.id) && i.text.trim() === text);
+      if (matched) {
+        usedIds.add(matched.id);
+        restored.push(matched.id);
       }
+    });
+    return restored;
+  });
+
+  const [incompleteWarning, setIncompleteWarning] = useState(false);
+
+  // Sync if selectedAnswer is cleared (e.g. student clicks Retry) or restored externally
+  useEffect(() => {
+    if (!selectedAnswer && !isLocked) {
+      setSelectedIds([]);
+      setIncompleteWarning(false);
+      return;
+    }
+    if (selectedAnswer && isLocked) {
+      const submittedTexts = selectedAnswer.split('|||').map(t => t.trim());
+      const usedIds = new Set<string>();
+      const restored: string[] = [];
+      submittedTexts.forEach(text => {
+        const matched = items.find(i => !usedIds.has(i.id) && i.text.trim() === text);
+        if (matched) {
+          usedIds.add(matched.id);
+          restored.push(matched.id);
+        }
+      });
+      if (restored.length > 0) {
+        setSelectedIds(restored);
+      }
+    }
+  }, [selectedAnswer, isLocked, items]);
+
+  const handleToggleItem = (itemId: string) => {
+    if (isLocked || isSubmitting) return;
+    setIncompleteWarning(false);
+
+    setSelectedIds(prev => {
+      const existingIndex = prev.indexOf(itemId);
+      if (existingIndex !== -1) {
+        // Undo: remove and automatically renumber remaining items without gaps
+        courseAudio.playClick();
+        return prev.filter(id => id !== itemId);
+      }
+      courseAudio.playSelectSound();
+      return [...prev, itemId];
     });
   };
 
-  const handleTouchEnd = () => {
-    if (touchStateRef.current.active && draggedIndex !== null && dropTargetIndex !== null) {
-      if (draggedIndex !== dropTargetIndex) {
-        const nextItems = [...items];
-        const [removed] = nextItems.splice(draggedIndex, 1);
-        nextItems.splice(dropTargetIndex, 0, removed);
-        setItems(nextItems);
-        courseAudio.playSelectSound();
-      }
-    }
-
-    touchStateRef.current = { active: false, startIndex: -1, initialY: 0 };
-    setDraggedIndex(null);
-    setDropTargetIndex(null);
-  };
-
-  // --------------------------------------------------------------------------
-  // KEYBOARD ACCESSIBILITY HANDLER
-  // --------------------------------------------------------------------------
-  const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
+  const handleClearAll = () => {
     if (isLocked || isSubmitting) return;
-
-    if (e.key === 'ArrowUp' && index > 0) {
-      e.preventDefault();
-      const nextItems = [...items];
-      const temp = nextItems[index];
-      nextItems[index] = nextItems[index - 1];
-      nextItems[index - 1] = temp;
-      setItems(nextItems);
-      courseAudio.playSelectSound();
-    } else if (e.key === 'ArrowDown' && index < items.length - 1) {
-      e.preventDefault();
-      const nextItems = [...items];
-      const temp = nextItems[index];
-      nextItems[index] = nextItems[index + 1];
-      nextItems[index + 1] = temp;
-      setItems(nextItems);
-      courseAudio.playSelectSound();
-    }
+    courseAudio.playClick();
+    setSelectedIds([]);
+    setIncompleteWarning(false);
   };
 
-  // --------------------------------------------------------------------------
-  // SUBMIT ORDER
-  // --------------------------------------------------------------------------
   const handleSubmitOrder = (e: React.MouseEvent<HTMLButtonElement>) => {
     if (isLocked || isSubmitting) return;
-    const serializedOrder = items.map(item => item.text).join('|||');
+    if (selectedIds.length < items.length) {
+      setIncompleteWarning(true);
+      courseAudio.playIncorrectSound();
+      return;
+    }
+    setIncompleteWarning(false);
+    const orderedTexts = selectedIds
+      .map(id => items.find(i => i.id === id)?.text || '')
+      .filter(Boolean);
+    const serializedOrder = orderedTexts.join('|||');
     onEvaluateAnswer(question, serializedOrder, e.currentTarget);
   };
 
-  return (
-    <div
-      ref={containerRef}
-      className="w-full space-y-3 select-none"
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
-    >
-      {/* DRAGGABLE & ACCESSIBLE SENTENCE BLOCKS */}
-      <div className="w-full space-y-2">
-        {items.map((item, index) => {
-          const isBeingDragged = draggedIndex === index;
-          const isDropTarget = dropTargetIndex === index && draggedIndex !== index;
+  const allSelected = items.length > 0 && selectedIds.length === items.length;
 
-          let cardStyle = 'surface-answer-option text-theme-primary shadow-2xs';
-          let numBadgeStyle = 'bg-[var(--theme-surface-subtle)] text-theme-accent border border-[var(--theme-border-subtle)]';
+  return (
+    <div className="w-full space-y-3.5" data-testid="tap-to-number-ordering">
+      {/* Helpful Instruction & Progress Pill */}
+      {!isLocked && (
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+          <p className="text-xs sm:text-sm font-semibold text-theme-secondary">
+            Tap the sentences in the correct order (1 → {items.length}).
+          </p>
+          <span className="px-2.5 py-1 rounded-full bg-[var(--theme-accent-soft)] text-theme-accent text-xs font-black border border-[var(--theme-border-subtle)]">
+            {selectedIds.length} / {items.length} Selected
+          </span>
+        </div>
+      )}
+
+      {/* TAP-TO-NUMBER SENTENCE CARDS */}
+      <div className="w-full space-y-2.5">
+        {items.map(item => {
+          const seqIndex = selectedIds.indexOf(item.id);
+          const isSelected = seqIndex !== -1;
+          const sequenceNumber = isSelected ? seqIndex + 1 : null;
+
+          let cardStyle =
+            'bg-white/95 dark:bg-slate-900/70 border-slate-200 dark:border-slate-700/80 hover:border-sky-400 text-theme-primary shadow-2xs';
+          let badgeStyle =
+            'border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/60 text-transparent';
 
           if (isLocked) {
             if (feedback?.isCorrect) {
-              cardStyle = 'surface-answer-selected-correct';
-              numBadgeStyle = 'bg-emerald-600 text-white border-0';
+              cardStyle =
+                'surface-answer-selected-correct border-emerald-400 bg-emerald-50/90 dark:bg-emerald-950/40';
+              badgeStyle = 'bg-emerald-600 text-white border-0 shadow-xs';
             } else {
-              cardStyle = 'surface-answer-selected-incorrect';
-              numBadgeStyle = 'bg-rose-600 text-white border-0';
+              cardStyle =
+                'surface-answer-selected-incorrect border-rose-400 bg-rose-50/90 dark:bg-rose-950/40';
+              badgeStyle = 'bg-rose-600 text-white border-0 shadow-xs';
             }
-          } else if (isBeingDragged) {
-            cardStyle = 'bg-[var(--theme-accent-soft)] border-2 border-[var(--theme-accent)] shadow-lg scale-[1.01] ring-2 ring-[var(--theme-accent)]/20 text-theme-primary';
-            numBadgeStyle = 'bg-[var(--theme-accent)] text-[var(--theme-accent-contrast)] border-0';
+          } else if (isSelected) {
+            cardStyle =
+              'bg-sky-50/95 dark:bg-sky-950/50 border-sky-500 ring-2 ring-sky-400/25 shadow-sm text-theme-primary';
+            badgeStyle = 'bg-sky-600 text-white border-0 shadow-sm scale-105';
           }
 
           return (
-            <div key={item.id} className="relative transition-all duration-150">
-              
-              {/* Drop Target Indicator Line */}
-              {isDropTarget && (
-                <div className="w-full py-1 flex items-center justify-center gap-2 animate-pulse">
-                  <div className="h-0.5 flex-1 bg-[var(--theme-accent)] rounded-full" />
-                  <span className="text-[10px] font-black uppercase text-theme-accent px-2 py-0.5 bg-[var(--theme-accent-soft)] rounded-full border border-[var(--theme-border-subtle)] shadow-2xs reader-badge">
-                    Drop Here
-                  </span>
-                  <div className="h-0.5 flex-1 bg-[var(--theme-accent)] rounded-full" />
-                </div>
-              )}
-
-              <div
-                ref={el => { itemRefs.current[index] = el; }}
-                draggable={!isLocked && !isSubmitting}
-                onDragStart={e => handleDragStart(e, index)}
-                onDragOver={e => handleDragOver(e, index)}
-                onDragEnd={handleDragEnd}
-                onDrop={e => handleDrop(e, index)}
-                onTouchStart={e => handleTouchStart(e, index)}
-                tabIndex={isLocked ? -1 : 0}
-                onKeyDown={e => handleKeyDown(e, index)}
-                aria-label={`Event ${index + 1}: ${item.text}`}
-                className={`w-full min-h-[52px] p-2.5 sm:p-3.5 rounded-2xl border text-left reader-option leading-relaxed transition-all flex items-center gap-2 sm:gap-3 box-border ${
-                  isLocked ? 'cursor-default' : 'cursor-grab active:cursor-grabbing hover:shadow-xs hover:border-[var(--theme-accent)]'
-                } ${cardStyle}`}
+            <button
+              key={item.id}
+              type="button"
+              disabled={isLocked || isSubmitting}
+              onClick={() => handleToggleItem(item.id)}
+              aria-pressed={isSelected}
+              aria-label={
+                isSelected
+                  ? `Selected #${sequenceNumber}: ${item.text}`
+                  : `Tap to select: ${item.text}`
+              }
+              className={`w-full min-h-[58px] p-3.5 sm:p-4 rounded-2xl border-2 text-left transition-all duration-150 flex items-center gap-3.5 box-border ${
+                isLocked
+                  ? 'cursor-default'
+                  : 'cursor-pointer active:scale-[0.99]'
+              } ${cardStyle}`}
+            >
+              {/* Sequential Number Badge on the Left */}
+              <span
+                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-sm sm:text-base font-black shrink-0 transition-all duration-150 ${badgeStyle}`}
               >
-                {/* Grip Handle Indicator */}
-                {!isLocked && (
-                  <div className="text-theme-muted hover:text-theme-accent shrink-0 touch-none cursor-grab p-0.5" title="Drag to rearrange">
-                    <GripVertical className="w-4 h-4 text-theme-muted" />
-                  </div>
-                )}
-
-                {/* Position Number Badge (01, 02, 03...) */}
-                <span className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center text-[11px] sm:text-xs font-black shrink-0 transition-colors shadow-2xs ${numBadgeStyle}`}>
-                  {isLocked ? (
-                    feedback?.isCorrect ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />
+                {isLocked ? (
+                  feedback?.isCorrect ? (
+                    sequenceNumber ?? <Check className="w-4 h-4" />
                   ) : (
-                    String(index + 1).padStart(2, '0')
-                  )}
-                </span>
-
-                {/* Sentence Block Text - takes majority width */}
-                <span className="flex-1 font-medium break-words leading-relaxed text-left reader-option text-theme-primary px-1">
-                  {item.text}
-                </span>
-
-                {/* Prominent Circular Move Up / Move Down Controls */}
-                {!isLocked && (
-                  <div className="flex flex-col sm:flex-row items-center gap-1 shrink-0 ml-auto">
-                    <button
-                      type="button"
-                      disabled={index === 0}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const nextItems = [...items];
-                        const temp = nextItems[index];
-                        nextItems[index] = nextItems[index - 1];
-                        nextItems[index - 1] = temp;
-                        setItems(nextItems);
-                        courseAudio.playSelectSound();
-                      }}
-                      aria-label="Move item up"
-                      className="ordering-btn-control"
-                      title="Move up"
-                    >
-                      <ChevronUp className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={index === items.length - 1}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const nextItems = [...items];
-                        const temp = nextItems[index];
-                        nextItems[index] = nextItems[index + 1];
-                        nextItems[index + 1] = temp;
-                        setItems(nextItems);
-                        courseAudio.playSelectSound();
-                      }}
-                      aria-label="Move item down"
-                      className="ordering-btn-control"
-                      title="Move down"
-                    >
-                      <ChevronDown className="w-4 h-4" />
-                    </button>
-                  </div>
+                    sequenceNumber ?? <X className="w-4 h-4" />
+                  )
+                ) : (
+                  sequenceNumber ?? ''
                 )}
-              </div>
-            </div>
+              </span>
+
+              {/* Sentence Text */}
+              <span className="flex-1 text-sm sm:text-base font-semibold break-words leading-relaxed text-left text-theme-primary">
+                {item.text}
+              </span>
+            </button>
           );
         })}
       </div>
 
-      {/* CHECK ORDER BUTTON (Available before locking) */}
+      {/* INCOMPLETE SELECTION WARNING */}
+      {incompleteWarning && !isLocked && (
+        <div
+          role="alert"
+          className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-xs sm:text-sm font-bold flex items-center gap-2 animate-in fade-in duration-150"
+        >
+          <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span>Please select all the sentences before checking.</span>
+        </div>
+      )}
+
+      {/* ACTION CONTROLS: CLEAR ALL + CHECK MY ORDER */}
       {!isLocked && (
-        <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-[11px] text-theme-muted font-medium italic text-center sm:text-left reader-meta">
-            Drag cards or use ↑ / ↓ buttons to rearrange before submitting.
-          </p>
+        <div className="pt-1 flex flex-wrap items-center justify-between gap-3">
+          <button
+            type="button"
+            disabled={isSubmitting || selectedIds.length === 0}
+            onClick={handleClearAll}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>Clear All</span>
+          </button>
 
           <LiquidButton
-            variant="primary"
+            variant={allSelected ? 'emerald' : 'primary'}
             size="md"
             disabled={isSubmitting}
             onClick={handleSubmitOrder}
-            icon={<Send className="w-3.5 h-3.5" />}
+            icon={<Check className="w-4 h-4" />}
           >
-            Check Order
+            Check My Order
           </LiquidButton>
         </div>
       )}
 
-      {/* POST-SUBMISSION EDUCATIONAL FEEDBACK */}
+      {/* POST-SUBMISSION FEEDBACK */}
       {isLocked && feedback?.showExplanation && (
-        <div className="space-y-3 pt-2">
-          
-          {/* Main Feedback Banner */}
+        <div className="space-y-3 pt-1 animate-in fade-in zoom-in-95 duration-200">
           <div
-            className={`p-4 sm:p-5 rounded-2xl border text-xs sm:text-sm leading-relaxed transition-all animate-in fade-in duration-200 reader-explanation ${
+            className={`p-4 sm:p-5 rounded-2xl border text-xs sm:text-sm leading-relaxed reader-explanation ${
               feedback.isCorrect
                 ? 'bg-[var(--theme-success-bg)] border-[var(--theme-success-border)] text-[var(--theme-success-text)]'
                 : 'bg-[var(--theme-error-bg)] border-[var(--theme-error-border)] text-[var(--theme-error-text)]'
             }`}
           >
-            <div className="flex items-center gap-2 font-black mb-1">
+            <div className="flex items-center gap-2 font-black text-sm sm:text-base mb-1">
               {feedback.isCorrect ? (
                 <>
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span>✓ Correct! Excellent work. You arranged the events in the right order.</span>
+                  <Sparkles className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>🎉 Excellent! You arranged the story in the correct order.</span>
                 </>
               ) : (
                 <>
                   <XCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
-                  <span>✕ Not quite. Review the correct story timeline below.</span>
+                  <span>Not quite! Try again.</span>
                 </>
               )}
             </div>
 
-            <p className="opacity-90 leading-relaxed font-medium pt-1">
-              {question.explanation || (feedback.isCorrect ? 'The chronological sequence matches the narrative flow.' : 'Compare your sequence with the correct order to see where the story unfolded differently.')}
-            </p>
+            {feedback.isCorrect && question.explanation && (
+              <p className="opacity-90 leading-relaxed font-medium pt-1">
+                {question.explanation}
+              </p>
+            )}
           </div>
-
-          {/* If Incorrect: Show the Canonical Correct Order clearly */}
-          {!feedback.isCorrect && (
-            <div className="p-4 sm:p-5 rounded-2xl bg-[var(--theme-accent-soft)] border-2 border-[var(--theme-accent)] space-y-3">
-              <span className="text-[11px] font-black uppercase tracking-wider text-theme-accent flex items-center gap-1.5 reader-meta">
-                <CheckCircle2 className="w-4 h-4 text-theme-accent" />
-                <span>Correct Chronological Order</span>
-              </span>
-
-              <ol className="space-y-2 text-xs sm:text-sm text-theme-primary">
-                {canonicalItems.map((correctSentence, cIdx) => (
-                  <li
-                    key={cIdx}
-                    className="flex items-start gap-2.5 p-2.5 rounded-xl bg-[var(--theme-surface-interactive)] border border-[var(--theme-border-subtle)] reader-body text-theme-primary"
-                  >
-                    <span className="w-5 h-5 rounded-md bg-[var(--theme-accent)] text-[var(--theme-accent-contrast)] font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
-                      {cIdx + 1}
-                    </span>
-                    <span className="flex-1 font-medium leading-relaxed">
-                      {correctSentence}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
-
         </div>
       )}
     </div>

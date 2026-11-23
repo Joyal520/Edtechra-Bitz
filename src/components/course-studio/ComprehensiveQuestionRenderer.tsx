@@ -37,6 +37,8 @@ import {
   cleanTextForComparison
 } from '@/utils/questionGrading';
 import { shuffleWordsGuaranteed } from '@/utils/questionSchemaValidator';
+import { shouldShuffleQuestionOptions, shuffleOptionsForStudent } from '@/utils/optionRandomizer';
+import { useAuth } from '@/context/AuthContext';
 import { LiquidButton, LiquidChip, LiquidOption } from '@/components/course-studio/liquid';
 import { DraggableOrderingQuestion } from './DraggableOrderingQuestion';
 import { ClozePassageQuestion } from './ClozePassageQuestion';
@@ -153,12 +155,19 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
   const qId = question.id || `q_fallback_${index}`;
   const rawQType = question.question_type || (question as any).type || 'multiple_choice';
   const qType = (rawQType as string) === 'open_ended' ? 'essay' : rawQType;
+  const { user } = useAuth();
 
   // Normalize options array with stable identifiers
   const rawOptionsSource = question.options || (question as any).items || (question as any).correct_order;
   const normalizedOptions = normalizeQuestionOptions(rawOptionsSource);
   const resolvedCorrect = resolveCorrectOption(question);
-  const optionsList: string[] = normalizedOptions.map(opt => opt.text);
+  const studentShuffledOptions = React.useMemo(() => {
+    if (mode === 'edit' || !shouldShuffleQuestionOptions(qType)) {
+      return normalizedOptions;
+    }
+    return shuffleOptionsForStudent(normalizedOptions, user?.id, qId);
+  }, [normalizedOptions, mode, qType, user?.id, qId]);
+  const optionsList: string[] = studentShuffledOptions.map(opt => opt.text);
 
   // Extract passage & WH metadata supporting both direct properties and options JSONB object
   const passageText =
@@ -782,14 +791,15 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
           </div>
         ) : (
           <div className="space-y-2.5 pt-1">
-            {normalizedOptions.map((opt, oIdx) => {
+            {studentShuffledOptions.map((opt, oIdx) => {
               const isSelected = isOptionMatchingStudentAnswer(opt, response?.answer);
               const isThisTheCorrectAnswer = resolvedCorrect ? resolvedCorrect.id === opt.id : false;
+              const displayBadge = String.fromCharCode(65 + oIdx);
 
               return (
                 <LiquidOption
                   key={opt.id || oIdx}
-                  badge={opt.id}
+                  badge={displayBadge}
                   text={opt.text}
                   isSelected={isSelected}
                   isAnswered={isAnswered}
@@ -1619,9 +1629,17 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
           selectedAnswer={typeof response?.answer === 'string' ? response.answer : undefined}
           feedback={response ? { isCorrect, showExplanation: isAnswered } : null}
           onEvaluateAnswer={(q, ans) => {
+            let parsedOpts: any = q.options;
+            if (typeof parsedOpts === 'string') {
+              try {
+                parsedOpts = JSON.parse(parsedOpts);
+              } catch {
+                parsedOpts = null;
+              }
+            }
             const blanks =
-              q.blanks ||
-              (typeof q.options === 'object' && !Array.isArray(q.options) ? (q.options as any).blanks : []) ||
+              (Array.isArray(q.blanks) && q.blanks.length > 0 ? q.blanks : null) ||
+              (parsedOpts && typeof parsedOpts === 'object' && !Array.isArray(parsedOpts) ? parsedOpts.blanks : []) ||
               [];
             if (Array.isArray(blanks) && blanks.length > 0 && typeof ans === 'string') {
               const parts = ans.split(';').map(s => s.trim());

@@ -2010,6 +2010,14 @@ export const CourseContentRenderer: React.FC<Props> = ({
                     question={qWithId}
                     index={qIndex}
                     response={qResponse}
+                    allowRetryIncorrect={allowQuestionRetries && !isLessonCompleted}
+                    onRetryQuestion={() => {
+                      setStudentResponses(prev => {
+                        const next = { ...prev };
+                        delete next[qWithId.id];
+                        return next;
+                      });
+                    }}
                     onAnswerSubmit={(res) => handleStudentResponse(res, qWithId)}
                     isStudentView={!isEditMode}
                     mode={mode}

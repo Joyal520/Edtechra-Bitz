@@ -279,7 +279,7 @@ export const BornForTheSkyDay3View: React.FC<BornForTheSkyDay3ViewProps> = ({
       {jigsawQuestion && (
         <InteractiveJigsawPuzzle
           imageUrl={(jigsawQuestion.options as any)?.image_url || day3ImageUrl}
-          gridSize={(jigsawQuestion.options as any)?.grid_rows || 2}
+          gridSize={(jigsawQuestion.options as any)?.grid_rows || 3}
           points={jigsawQuestion.points || 20}
           isCompleted={isPuzzleCompleted}
           onComplete={() => {
