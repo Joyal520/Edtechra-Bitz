@@ -1,0 +1,1691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Math Sprint — 60s Brain Rush</title>
+  <!-- Google Fonts: Fredoka for playful Play Store game headers & Nunito for crisp numerals -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['Fredoka', 'sans-serif'],
+            num: ['Nunito', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              bgTop: '#0F172A',
+              bgBot: '#1E1B4B',
+              card: '#1E293B',
+              accent: '#38BDF8',
+              gold: '#FBBF24',
+              mint: '#34D399',
+              coral: '#FB7185',
+              violet: '#A78BFA'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 15%, #252262 0%, #111633 55%, #090C1D 100%);
+      font-family: 'Fredoka', sans-serif;
+      color: #F8FAFC;
+    }
+
+    /* Tactile Play Store 3D Squishy Buttons */
+    .btn-3d {
+      position: relative;
+      transition: transform 0.09s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.09s ease, filter 0.15s ease;
+      transform: translateY(0);
+      cursor: pointer;
+    }
+    .btn-3d:active, .btn-3d.is-pressed {
+      transform: translateY(4px) scale(0.97);
+    }
+
+    .btn-key {
+      background: linear-gradient(180deg, #334155 0%, #1E293B 100%);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 5px 0 #0F172A, 0 8px 16px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    }
+    .btn-key:active, .btn-key.is-pressed {
+      box-shadow: 0 1px 0 #0F172A, 0 2px 6px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      background: linear-gradient(180deg, #3B4C63 0%, #243146 100%);
+    }
+
+    .btn-clear {
+      background: linear-gradient(180deg, #F43F5E 0%, #BE123C 100%);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      box-shadow: 0 5px 0 #881337, 0 8px 16px rgba(244, 63, 94, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+    .btn-clear:active, .btn-clear.is-pressed {
+      box-shadow: 0 1px 0 #881337, 0 2px 6px rgba(244, 63, 94, 0.2);
+    }
+
+    .btn-enter {
+      background: linear-gradient(180deg, #10B981 0%, #059669 100%);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      box-shadow: 0 5px 0 #065F46, 0 8px 16px rgba(16, 185, 129, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    }
+    .btn-enter:active, .btn-enter.is-pressed {
+      box-shadow: 0 1px 0 #065F46, 0 2px 6px rgba(16, 185, 129, 0.2);
+    }
+
+    .btn-play {
+      background: linear-gradient(180deg, #38BDF8 0%, #0284C7 100%);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      box-shadow: 0 6px 0 #0369A1, 0 14px 28px rgba(14, 165, 233, 0.4), inset 0 2px 0 rgba(255, 255, 255, 0.45);
+    }
+    .btn-play:active {
+      box-shadow: 0 1px 0 #0369A1, 0 4px 10px rgba(14, 165, 233, 0.3);
+    }
+
+    /* Problem Card & Animations */
+    .problem-card {
+      background: linear-gradient(165deg, rgba(30, 41, 59, 0.92) 0%, rgba(15, 23, 42, 0.96) 100%);
+      backdrop-filter: blur(12px);
+      border: 1.5px solid rgba(255, 255, 255, 0.14);
+      box-shadow: 0 18px 40px -10px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.16);
+    }
+
+    @keyframes popInSpring {
+      0% { transform: scale(0.78) translateY(14px); opacity: 0; }
+      65% { transform: scale(1.04) translateY(-2px); opacity: 1; }
+      100% { transform: scale(1) translateY(0); opacity: 1; }
+    }
+    .animate-problem-in {
+      animation: popInSpring 0.26s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+
+    @keyframes shakeError {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-10px) rotate(-1.2deg); }
+      40% { transform: translateX(10px) rotate(1.2deg); }
+      60% { transform: translateX(-7px) rotate(-0.6deg); }
+      80% { transform: translateX(7px) rotate(0.6deg); }
+    }
+    .animate-shake {
+      animation: shakeError 0.34s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+    }
+
+    @keyframes pulseUrgent {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.09); }
+    }
+    .timer-urgent {
+      animation: pulseUrgent 0.55s ease-in-out infinite;
+    }
+
+    @keyframes floatSlow {
+      0%, 100% { transform: translateY(0px) rotate(0deg); }
+      50% { transform: translateY(-7px) rotate(2deg); }
+    }
+    .animate-float {
+      animation: floatSlow 3.4s ease-in-out infinite;
+    }
+
+    @keyframes starPop {
+      0% { transform: scale(0) rotate(-35deg); opacity: 0; }
+      70% { transform: scale(1.22) rotate(8deg); opacity: 1; }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
+    .star-earned {
+      animation: starPop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+
+    /* Cursor blink inside answer pill */
+    @keyframes caretBlink {
+      0%, 49% { opacity: 1; }
+      50%, 100% { opacity: 0; }
+    }
+    .answer-caret {
+      animation: caretBlink 0.9s infinite;
+    }
+
+    /* Glass Pill Badges */
+    .glass-pill {
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(8px);
+    }
+  </style>
+</head>
+<body class="flex flex-col items-center justify-center relative select-none">
+
+  <!-- Full-Viewport Interactive FX & Ambient Background Canvas -->
+  <canvas id="fx-canvas" class="fixed inset-0 w-full h-full pointer-events-none z-0"></canvas>
+
+  <!-- Subtle Red/Green Screen Edge Flash Overlay -->
+  <div id="screen-flash" class="fixed inset-0 pointer-events-none z-30 opacity-0 transition-opacity duration-200"></div>
+
+  <!-- Main Mobile-First Game Shell (Centered, max-w-md for authentic Play Store portrait feel on desktop & full-bleed on phones) -->
+  <div id="app-shell" class="relative z-10 w-full max-w-md h-full max-h-[860px] flex flex-col justify-between px-4 py-3 sm:py-5">
+
+    <!-- ================= TOP HUD BAR ================= -->
+    <header class="w-full flex items-center justify-between gap-2 z-20">
+      <!-- Left: High Score / Mode Badge -->
+      <div class="flex items-center gap-2">
+        <button id="btn-home" title="Back to Menu" class="hidden btn-3d glass-pill w-10 h-10 rounded-2xl flex items-center justify-center text-slate-300 hover:text-white active:scale-95">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+          </svg>
+        </button>
+
+        <div class="glass-pill px-3 py-1.5 rounded-2xl flex items-center gap-2 shadow-md">
+          <span class="text-amber-400 text-base">👑</span>
+          <div class="leading-tight">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Best</div>
+            <div id="hud-best-score" class="font-num font-black text-sm text-amber-300">0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center: Active Mode Pill -->
+      <div id="hud-mode-badge" class="glass-pill px-3 py-1 rounded-full text-xs font-bold tracking-wide text-sky-300 border-sky-400/25">
+        CLASSIC 60s
+      </div>
+
+      <!-- Right: ASMR Music & Tactile SFX Toggles -->
+      <div class="flex items-center gap-2">
+        <button id="toggle-music" aria-label="Toggle ASMR Ambient Music" class="btn-3d glass-pill px-2.5 h-10 rounded-2xl flex items-center gap-1.5 text-xs font-bold text-emerald-300 border-emerald-400/30 shadow-md">
+          <span id="icon-music" class="text-base">🎵</span>
+          <span class="hidden xs:inline">ASMR</span>
+        </button>
+        <button id="toggle-sfx" aria-label="Toggle Tactile SFX" class="btn-3d glass-pill w-10 h-10 rounded-2xl flex items-center justify-center text-base text-sky-300 border-sky-400/30 shadow-md">
+          <span id="icon-sfx">🔊</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ================= SCREEN 1: PLAY STORE START MENU ================= -->
+    <main id="screen-start" class="flex-1 flex flex-col items-center justify-center text-center px-2 py-2 gap-5 z-20">
+      <!-- App Icon & Title Badge -->
+      <div class="animate-float flex flex-col items-center">
+        <div class="w-24 h-24 sm:w-28 sm:h-28 rounded-[28px] bg-gradient-to-br from-sky-400 via-indigo-500 to-purple-600 p-1 shadow-[0_14px_35px_rgba(99,102,241,0.5)] mb-3">
+          <div class="w-full h-full rounded-[24px] bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center border border-white/25 relative overflow-hidden">
+            <div class="grid grid-cols-2 gap-1 text-2xl sm:text-3xl font-black text-white drop-shadow">
+              <span class="text-sky-300">+</span>
+              <span class="text-amber-300">×</span>
+              <span class="text-rose-300">−</span>
+              <span class="text-emerald-300">÷</span>
+            </div>
+            <div class="mt-1 px-2 py-0.5 rounded-full bg-white/20 text-[10px] font-extrabold tracking-widest uppercase">60s</div>
+          </div>
+        </div>
+
+        <div class="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-400/15 border border-amber-400/30 text-amber-300 text-xs font-bold mb-1">
+          <span>★ 4.9</span>
+          <span class="text-slate-400">•</span>
+          <span>ASMR Brain Arcade</span>
+        </div>
+
+        <h1 class="text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-b from-white via-sky-100 to-sky-300 bg-clip-text text-transparent drop-shadow-sm">
+          Math Sprint
+        </h1>
+        <p class="text-slate-300 text-sm sm:text-base max-w-[290px] mt-1 font-medium">
+          Solve as many equations as you can in <span class="text-amber-300 font-bold">60 seconds</span>. Build streaks for bonus time!
+        </p>
+      </div>
+
+      <!-- Mode Selector Cards -->
+      <div class="w-full bg-slate-900/60 border border-white/10 rounded-3xl p-2 grid grid-cols-3 gap-2 shadow-xl">
+        <button data-mode="kids" class="mode-btn btn-3d py-2.5 px-2 rounded-2xl flex flex-col items-center justify-center transition-all text-slate-300 hover:bg-white/5">
+          <span class="text-lg mb-0.5">🌱</span>
+          <span class="text-xs font-bold">Kids / Easy</span>
+          <span class="text-[10px] text-slate-400">Gentle Pace</span>
+        </button>
+
+        <button data-mode="classic" class="mode-btn btn-3d py-2.5 px-2 rounded-2xl flex flex-col items-center justify-center transition-all bg-gradient-to-b from-sky-500/30 to-indigo-600/30 border border-sky-400/50 text-white shadow-inner">
+          <span class="text-lg mb-0.5">⚡</span>
+          <span class="text-xs font-bold text-sky-300">Classic 60s</span>
+          <span class="text-[10px] text-sky-200/80">Balanced</span>
+        </button>
+
+        <button data-mode="blitz" class="mode-btn btn-3d py-2.5 px-2 rounded-2xl flex flex-col items-center justify-center transition-all text-slate-300 hover:bg-white/5">
+          <span class="text-lg mb-0.5">🔥</span>
+          <span class="text-xs font-bold">Blitz Pro</span>
+          <span class="text-[10px] text-slate-400">Big Numbers</span>
+        </button>
+      </div>
+
+      <!-- Mini Feature Pills -->
+      <div class="flex flex-wrap items-center justify-center gap-2 text-xs text-slate-300">
+        <span class="glass-pill px-3 py-1 rounded-full">🎧 Lo-Fi Kalimba ASMR</span>
+        <span class="glass-pill px-3 py-1 rounded-full">⏱️ +2s Every 5 Streak</span>
+      </div>
+
+      <!-- Primary Play Button -->
+      <button id="btn-start-game" class="btn-3d btn-play w-full py-4 rounded-3xl text-xl sm:text-2xl font-bold tracking-wide text-white flex items-center justify-center gap-3">
+        <span>PLAY SPRINT</span>
+        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+      </button>
+    </main>
+
+    <!-- ================= SCREEN 2: ACTIVE GAMEPLAY ARENA ================= -->
+    <main id="screen-game" class="hidden flex-1 flex flex-col justify-between gap-2 sm:gap-3 z-20 min-h-0">
+
+      <!-- Top Gameplay Telemetry: Score | Circular Timer | Streak -->
+      <div class="grid grid-cols-3 items-center gap-2 pt-1">
+        <!-- Score Box -->
+        <div class="glass-pill rounded-2xl p-2.5 text-center shadow-lg">
+          <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Score</div>
+          <div id="game-score" class="font-num font-black text-2xl sm:text-3xl text-white leading-none mt-0.5">0</div>
+        </div>
+
+        <!-- Circular Progress Countdown Timer -->
+        <div id="timer-wrapper" class="flex flex-col items-center justify-center relative">
+          <div class="relative w-20 h-20 sm:w-22 sm:h-22 flex items-center justify-center">
+            <svg class="w-full h-full -rotate-90 transform" viewBox="0 0 88 88">
+              <circle cx="44" cy="44" r="37" stroke="rgba(255,255,255,0.12)" stroke-width="7" fill="rgba(15,23,42,0.75)" />
+              <circle id="timer-ring" cx="44" cy="44" r="37" stroke="#38BDF8" stroke-width="7" stroke-linecap="round" fill="transparent"
+                stroke-dasharray="232.48" stroke-dashoffset="0" class="transition-colors duration-300" />
+            </svg>
+            <div class="absolute inset-0 flex flex-col items-center justify-center">
+              <span id="game-timer" class="font-num font-black text-2xl sm:text-[26px] text-white leading-none">60</span>
+              <span class="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-0.5">SEC</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Streak & Multiplier Box -->
+        <div id="streak-card" class="glass-pill rounded-2xl p-2.5 text-center shadow-lg transition-all duration-200">
+          <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Streak</div>
+          <div class="flex items-center justify-center gap-1 mt-0.5">
+            <span id="streak-flame" class="text-lg opacity-40 transition-all">🔥</span>
+            <span id="game-streak" class="font-num font-black text-2xl sm:text-3xl text-amber-300 leading-none">0</span>
+          </div>
+          <div id="game-multiplier" class="text-[10px] font-extrabold text-emerald-400 mt-0.5">1x PTS</div>
+        </div>
+      </div>
+
+      <!-- Streak Milestone Progress Bar (Next +2s Bonus in 5 solves) -->
+      <div class="w-full px-1">
+        <div class="flex justify-between items-center text-[11px] font-bold text-slate-400 mb-1">
+          <span>Bonus Time Progress</span>
+          <span id="bonus-progress-label" class="text-emerald-300">0 / 5 for +2s ⏱️</span>
+        </div>
+        <div class="w-full h-2 bg-slate-800/90 rounded-full overflow-hidden border border-white/10">
+          <div id="bonus-progress-bar" class="h-full bg-gradient-to-r from-sky-400 via-emerald-400 to-amber-300 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- Center Problem Display Card -->
+      <div id="problem-container" class="problem-card relative w-full rounded-[30px] px-5 py-5 sm:py-7 flex flex-col items-center justify-center my-auto">
+        <!-- Category Pill -->
+        <div id="problem-op-tag" class="absolute top-3 left-4 px-2.5 py-0.5 rounded-full bg-white/10 text-[10px] font-bold uppercase tracking-wider text-sky-300">
+          MULTIPLY
+        </div>
+        <div id="solved-counter-tag" class="absolute top-3 right-4 text-[11px] font-bold text-slate-400">
+          Solved: <span id="game-solved" class="text-white">0</span>
+        </div>
+
+        <!-- Equation Text -->
+        <div id="equation-box" class="mt-3 mb-3 text-center">
+          <div id="problem-text" class="font-num font-black text-4xl sm:text-5xl tracking-tight text-white drop-shadow">
+            8 × 7 = ?
+          </div>
+        </div>
+
+        <!-- Interactive Answer Input Display Box -->
+        <div id="answer-display-box" class="w-48 sm:w-56 h-14 sm:h-16 rounded-2xl bg-slate-950/80 border-2 border-sky-400/50 flex items-center justify-center px-4 shadow-inner transition-colors duration-150">
+          <span id="user-answer-text" class="font-num font-black text-3xl sm:text-4xl text-sky-300 tracking-wider"></span>
+          <span id="answer-placeholder" class="font-num font-bold text-2xl text-slate-600">?</span>
+          <span class="answer-caret w-0.5 h-7 bg-sky-400 ml-1 rounded-full"></span>
+        </div>
+
+        <div class="mt-2 text-[11px] text-slate-400 font-medium">
+          Auto-submits when digits match • Keyboard supported
+        </div>
+      </div>
+
+      <!-- Tactile Play Store 3x4 Numpad -->
+      <div id="numpad-grid" class="w-full grid grid-cols-3 gap-2 sm:gap-2.5 pb-1">
+        <button data-key="1" class="btn-3d btn-key h-13 sm:h-14 py-3 rounded-2xl font-num font-black text-2xl text-white">1</button>
+        <button data-key="2" class="btn-3d btn-key h-13 sm:h-14 py-3 rounded-2xl font-num font-black text-2xl text-white">2</button>
+        <button data-key="3" class="btn-3d btn-key h-13 sm:h-14 py-3 rounded-2xl font-num font-black text-2xl text-white">3</button>
+
+        <button data-key="4" class="btn-3d btn-key h-13 sm:h-14 py-3 rounded-2xl font-num font-black text-2xl text-white">4</button>
+        <button data-key="5" class="btn-3d btn-key h-13 sm:h-14 py-3 rounded-2xl font-num font-black text-2xl text-white">5</button>
+        <button data-key="6" class="btn-3d btn-key h-13 sm:h-14 py-3 rounded-2xl font-num font-black text-2xl text-white">6</button>
+
+        <button data-key="7" class="btn-3d btn-key h-13 sm:h-14 py-3 rounded-2xl font-num font-black text-2xl text-white">7</button>
+        <button data-key="8" class="btn-3d btn-key h-13 sm:h-14 py-3 rounded-2xl font-num font-black text-2xl text-white">8</button>
+        <button data-key="9" class="btn-3d btn-key h-13 sm:h-14 py-3 rounded-2xl font-num font-black text-2xl text-white">9</button>
+
+        <button data-key="clear" aria-label="Clear or Backspace" class="btn-3d btn-clear h-13 sm:h-14 py-3 rounded-2xl font-bold text-lg text-white flex items-center justify-center gap-1">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.6" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414 6.414a2 2 0 001.414.586H19a2 2 0 002-2V7a2 2 0 00-2-2h-8.172a2 2 0 00-1.414.586L3 12z"/>
+          </svg>
+        </button>
+        <button data-key="0" class="btn-3d btn-key h-13 sm:h-14 py-3 rounded-2xl font-num font-black text-2xl text-white">0</button>
+        <button data-key="enter" aria-label="Submit Answer" class="btn-3d btn-enter h-13 sm:h-14 py-3 rounded-2xl font-bold text-lg text-white flex items-center justify-center">
+          <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+          </svg>
+        </button>
+      </div>
+    </main>
+
+    <!-- ================= SCREEN 3: CELEBRATORY GAME OVER SUMMARY ================= -->
+    <main id="screen-gameover" class="hidden flex-1 flex flex-col items-center justify-center text-center px-2 z-20">
+      <div class="problem-card w-full rounded-[32px] p-6 flex flex-col items-center relative overflow-hidden">
+        <!-- New High Score Ribbon -->
+        <div id="new-record-badge" class="hidden mb-2 px-3.5 py-1 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-extrabold text-xs uppercase tracking-wider shadow-lg animate-bounce">
+          🏆 New High Score!
+        </div>
+
+        <h2 class="text-3xl font-bold text-white tracking-tight">Time's Up!</h2>
+        <p id="gameover-subtitle" class="text-slate-300 text-sm mt-0.5">Awesome mental sprint!</p>
+
+        <!-- 3-Star Play Store Rating Display -->
+        <div class="flex items-center justify-center gap-3 my-4">
+          <div id="star-1" class="text-4xl sm:text-5xl text-slate-700 transition-all">★</div>
+          <div id="star-2" class="text-5xl sm:text-6xl text-slate-700 -mt-3 transition-all">★</div>
+          <div id="star-3" class="text-4xl sm:text-5xl text-slate-700 transition-all">★</div>
+        </div>
+
+        <!-- Final Score Highlight -->
+        <div class="w-full bg-slate-950/70 border border-white/10 rounded-2xl py-3 px-4 mb-4">
+          <div class="text-xs uppercase tracking-widest text-slate-400 font-bold">Final Score</div>
+          <div id="final-score" class="font-num font-black text-4xl sm:text-5xl bg-gradient-to-r from-sky-300 via-white to-amber-300 bg-clip-text text-transparent mt-0.5">
+            0
+          </div>
+        </div>
+
+        <!-- 3 Telemetry Stats -->
+        <div class="w-full grid grid-cols-3 gap-2 mb-6">
+          <div class="bg-slate-800/70 rounded-2xl p-2.5 border border-white/5">
+            <div class="text-[10px] uppercase font-bold text-slate-400">Solved</div>
+            <div id="final-solved" class="font-num font-black text-xl text-emerald-400 mt-0.5">0</div>
+          </div>
+          <div class="bg-slate-800/70 rounded-2xl p-2.5 border border-white/5">
+            <div class="text-[10px] uppercase font-bold text-slate-400">Accuracy</div>
+            <div id="final-accuracy" class="font-num font-black text-xl text-sky-400 mt-0.5">100%</div>
+          </div>
+          <div class="bg-slate-800/70 rounded-2xl p-2.5 border border-white/5">
+            <div class="text-[10px] uppercase font-bold text-slate-400">Best Streak</div>
+            <div id="final-streak" class="font-num font-black text-xl text-amber-400 mt-0.5">0</div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="w-full flex flex-col gap-2.5">
+          <button id="btn-play-again" class="btn-3d btn-play w-full py-3.5 rounded-2xl text-lg font-bold text-white flex items-center justify-center gap-2">
+            <span>PLAY AGAIN</span>
+            <span>↻</span>
+          </button>
+          <button id="btn-back-menu" class="btn-3d btn-key w-full py-3 rounded-2xl text-sm font-bold text-slate-300">
+            Change Difficulty Mode
+          </button>
+        </div>
+      </div>
+    </main>
+
+  </div>
+
+  <script>
+    /**
+     * ============================================================================
+     * 1. WEB AUDIO API ASMR SYNTHESIZER & LO-FI KALIMBA / RAIN AMBIENT ENGINE
+     *    Zero external audio files. Generates warm, tactile, relaxing ASMR sounds
+     *    and gentle pentatonic kalimba melodies with soft pink-noise rain texture.
+     * ============================================================================
+     */
+    class ASMRAudioEngine {
+      constructor() {
+        this.ctx = null;
+        this.masterGain = null;
+        this.musicGain = null;
+        this.sfxGain = null;
+        this.rainGain = null;
+
+        this.musicEnabled = true;
+        this.sfxEnabled = true;
+        this.isUnlocked = false;
+        this.musicTimer = null;
+        this.stepIndex = 0;
+
+        // Warm F Major Pentatonic Kalimba scale frequencies (Hz) for calming focus
+        this.kalimbaNotes = [
+          349.23, // F4
+          392.00, // G4
+          440.00, // A4
+          523.25, // C5
+          587.33, // D5
+          698.46, // F5
+          783.99, // G5
+          880.00  // A5
+        ];
+
+        // Gentle chord pads (Fmaj7 -> Dm7 -> Bbmaj7 -> C6)
+        this.padChords = [
+          [174.61, 220.00, 261.63, 329.63],
+          [146.83, 174.61, 220.00, 261.63],
+          [116.54, 174.61, 220.00, 293.66],
+          [130.81, 196.00, 220.00, 261.63]
+        ];
+      }
+
+      unlock() {
+        if (!this.ctx) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioCtx();
+
+          this.masterGain = this.ctx.createGain();
+          this.masterGain.gain.value = 0.85;
+          this.masterGain.connect(this.ctx.destination);
+
+          this.musicGain = this.ctx.createGain();
+          this.musicGain.gain.value = this.musicEnabled ? 0.32 : 0;
+          this.musicGain.connect(this.masterGain);
+
+          this.sfxGain = this.ctx.createGain();
+          this.sfxGain.gain.value = this.sfxEnabled ? 0.75 : 0;
+          this.sfxGain.connect(this.masterGain);
+
+          this._startSoftRainTexture();
+          this._startAmbientLoop();
+        }
+
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+        this.isUnlocked = true;
+      }
+
+      toggleMusic() {
+        this.unlock();
+        this.musicEnabled = !this.musicEnabled;
+        if (this.musicGain) {
+          this.musicGain.gain.setTargetAtTime(this.musicEnabled ? 0.32 : 0, this.ctx.currentTime, 0.15);
+        }
+        return this.musicEnabled;
+      }
+
+      toggleSFX() {
+        this.unlock();
+        this.sfxEnabled = !this.sfxEnabled;
+        if (this.sfxGain) {
+          this.sfxGain.gain.setTargetAtTime(this.sfxEnabled ? 0.75 : 0, this.ctx.currentTime, 0.08);
+        }
+        return this.sfxEnabled;
+      }
+
+      // Soft pink-noise ASMR rainfall filtered warmly in the background
+      _startSoftRainTexture() {
+        const bufferSize = this.ctx.sampleRate * 3;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const output = buffer.getChannelData(0);
+        let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+
+        for (let i = 0; i < bufferSize; i++) {
+          const white = Math.random() * 2 - 1;
+          b0 = 0.99886 * b0 + white * 0.0555179;
+          b1 = 0.99332 * b1 + white * 0.0750759;
+          b2 = 0.96900 * b2 + white * 0.1538520;
+          b3 = 0.86650 * b3 + white * 0.3104856;
+          b4 = 0.55000 * b4 + white * 0.5329522;
+          b5 = -0.7616 * b5 - white * 0.0168980;
+          output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.025;
+          b6 = white * 0.115926;
+        }
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        noise.loop = true;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 650;
+
+        this.rainGain = this.ctx.createGain();
+        this.rainGain.gain.value = 0.22;
+
+        noise.connect(filter);
+        filter.connect(this.rainGain);
+        this.rainGain.connect(this.musicGain);
+        noise.start();
+      }
+
+      // Generative relaxing Kalimba + Warm Pad loop
+      _startAmbientLoop() {
+        if (this.musicTimer) clearInterval(this.musicTimer);
+
+        const playStep = () => {
+          if (!this.musicEnabled || !this.ctx || this.ctx.state !== 'running') return;
+          const now = this.ctx.currentTime;
+
+          // Every 8 steps, swell a warm lo-fi chord pad
+          if (this.stepIndex % 8 === 0) {
+            const chord = this.padChords[(this.stepIndex / 8) % this.padChords.length];
+            chord.forEach((freq) => {
+              const osc = this.ctx.createOscillator();
+              const gain = this.ctx.createGain();
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(freq, now);
+
+              gain.gain.setValueAtTime(0.0001, now);
+              gain.gain.linearRampToValueAtTime(0.045, now + 0.9);
+              gain.gain.exponentialRampToValueAtTime(0.0001, now + 4.2);
+
+              osc.connect(gain);
+              gain.connect(this.musicGain);
+              osc.start(now);
+              osc.stop(now + 4.3);
+            });
+          }
+
+          // Sparse, soothing kalimba pluck pattern
+          const pattern = [0, 2, 4, -1, 3, 5, 2, -1];
+          const noteIdx = pattern[this.stepIndex % pattern.length];
+          if (noteIdx >= 0) {
+            // Add subtle organic variation
+            const variation = (Math.random() > 0.72) ? 1 : 0;
+            const freq = this.kalimbaNotes[(noteIdx + variation) % this.kalimbaNotes.length];
+            this._triggerKalimbaPluck(freq, now, 0.14);
+          }
+
+          this.stepIndex++;
+        };
+
+        playStep();
+        this.musicTimer = setInterval(playStep, 560);
+      }
+
+      _triggerKalimbaPluck(freq, time, volume = 0.15) {
+        const osc = this.ctx.createOscillator();
+        const overtone = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, time);
+
+        // Soft metallic tine harmonic overtone
+        overtone.type = 'triangle';
+        overtone.frequency.setValueAtTime(freq * 2.98, time);
+
+        const overtoneGain = this.ctx.createGain();
+        overtoneGain.gain.setValueAtTime(volume * 0.18, time);
+        overtoneGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.12);
+
+        gain.gain.setValueAtTime(0.0001, time);
+        gain.gain.linearRampToValueAtTime(volume, time + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.0001, time + 1.35);
+
+        osc.connect(gain);
+        overtone.connect(overtoneGain);
+        overtoneGain.connect(gain);
+        gain.connect(this.musicGain);
+
+        osc.start(time);
+        overtone.start(time);
+        osc.stop(time + 1.4);
+        overtone.stop(time + 0.15);
+      }
+
+      // Tactile ASMR Mechanical Keycap "Thock" + Water-Droplet Pop
+      playKeyTap(pitchOffset = 0) {
+        if (!this.sfxEnabled) return;
+        this.unlock();
+        const now = this.ctx.currentTime;
+
+        // 1. Creamy mechanical "thock" body
+        const thockOsc = this.ctx.createOscillator();
+        const thockGain = this.ctx.createGain();
+        thockOsc.type = 'sine';
+        const baseFreq = 165 + (pitchOffset % 5) * 14;
+        thockOsc.frequency.setValueAtTime(baseFreq, now);
+        thockOsc.frequency.exponentialRampToValueAtTime(62, now + 0.055);
+
+        thockGain.gain.setValueAtTime(0.38, now);
+        thockGain.gain.exponentialRampToValueAtTime(0.001, now + 0.065);
+
+        thockOsc.connect(thockGain);
+        thockGain.connect(this.sfxGain);
+        thockOsc.start(now);
+        thockOsc.stop(now + 0.07);
+
+        // 2. Subtle ASMR droplet transient
+        const dropOsc = this.ctx.createOscillator();
+        const dropGain = this.ctx.createGain();
+        dropOsc.type = 'triangle';
+        dropOsc.frequency.setValueAtTime(520 + (pitchOffset % 5) * 35, now);
+        dropOsc.frequency.exponentialRampToValueAtTime(880, now + 0.032);
+
+        dropGain.gain.setValueAtTime(0.11, now);
+        dropGain.gain.exponentialRampToValueAtTime(0.001, now + 0.036);
+
+        dropOsc.connect(dropGain);
+        dropGain.connect(this.sfxGain);
+        dropOsc.start(now);
+        dropOsc.stop(now + 0.04);
+      }
+
+      // Crisp Crystal Marimba / Glass Chime Arpeggio scaling upward with Streak
+      playCorrect(streak = 1) {
+        if (!this.sfxEnabled) return;
+        this.unlock();
+        const now = this.ctx.currentTime;
+
+        // Pitch scales smoothly upward with streak (capped at +12 semitones)
+        const semitoneBoost = Math.min(streak - 1, 12);
+        const pitchMult = Math.pow(2, semitoneBoost / 12);
+
+        const notes = [523.25 * pitchMult, 659.25 * pitchMult, 783.99 * pitchMult];
+        notes.forEach((freq, idx) => {
+          const t = now + idx * 0.045;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, t);
+
+          gain.gain.setValueAtTime(0.001, t);
+          gain.gain.linearRampToValueAtTime(0.28, t + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.0008, t + 0.48);
+
+          osc.connect(gain);
+          gain.connect(this.sfxGain);
+          osc.start(t);
+          osc.stop(t + 0.5);
+        });
+      }
+
+      // Celebratory Wind-Chime Cascade on Streak Milestones (+2s bonus!)
+      playStreakMilestone() {
+        if (!this.sfxEnabled) return;
+        this.unlock();
+        const now = this.ctx.currentTime;
+        const shimmer = [783.99, 987.77, 1174.66, 1318.51, 1567.98];
+        shimmer.forEach((freq, idx) => {
+          const t = now + idx * 0.042;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, t);
+
+          gain.gain.setValueAtTime(0.001, t);
+          gain.gain.linearRampToValueAtTime(0.22, t + 0.012);
+          gain.gain.exponentialRampToValueAtTime(0.0008, t + 0.65);
+
+          osc.connect(gain);
+          gain.connect(this.sfxGain);
+          osc.start(t);
+          osc.stop(t + 0.7);
+        });
+      }
+
+      // Soft Muted Wooden Thud on Wrong Answer (non-harsh, ASMR-friendly)
+      playWrong() {
+        if (!this.sfxEnabled) return;
+        this.unlock();
+        const now = this.ctx.currentTime;
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(145, now);
+        osc.frequency.exponentialRampToValueAtTime(68, now + 0.19);
+
+        gain.gain.setValueAtTime(0.34, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.21);
+
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start(now);
+        osc.stop(now + 0.22);
+      }
+
+      // Gentle Tick in Final 10 Seconds
+      playUrgentTick() {
+        if (!this.sfxEnabled) return;
+        this.unlock();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, now);
+        gain.gain.setValueAtTime(0.09, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start(now);
+        osc.stop(now + 0.05);
+      }
+
+      // End-of-Round Star Reveal Chime
+      playStarChime(starIndex) {
+        if (!this.sfxEnabled) return;
+        this.unlock();
+        const now = this.ctx.currentTime;
+        const freqs = [587.33, 783.99, 1046.50];
+        const freq = freqs[starIndex % freqs.length];
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now);
+
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(0.28, now + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0008, now + 0.75);
+
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start(now);
+        osc.stop(now + 0.8);
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 2. CANVAS PARTICLE & AMBIENT FLOATING MATH SYMBOLS ENGINE
+     *    Renders drifting background math symbols, shockwave ripples, confetti bursts,
+     *    and crisp floating score/combo/time popups.
+     * ============================================================================
+     */
+    class ParticleFXEngine {
+      constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.width = window.innerWidth;
+        this.height = window.innerHeight;
+
+        this.ambientSymbols = [];
+        this.particles = [];
+        this.ripples = [];
+        this.floatingTexts = [];
+
+        this._initAmbientSymbols();
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+      }
+
+      resize() {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        this.width = window.innerWidth;
+        this.height = window.innerHeight;
+        this.canvas.width = this.width * dpr;
+        this.canvas.height = this.height * dpr;
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
+      _initAmbientSymbols() {
+        const glyphs = ['+', '−', '×', '÷', '=', 'π', '%', '∑', '7', '3', '8'];
+        const colors = ['rgba(56,189,248,0.09)', 'rgba(167,139,250,0.09)', 'rgba(52,211,153,0.08)', 'rgba(251,191,36,0.08)'];
+        for (let i = 0; i < 24; i++) {
+          this.ambientSymbols.push({
+            glyph: glyphs[i % glyphs.length],
+            x: Math.random() * this.width,
+            y: Math.random() * this.height,
+            size: 18 + Math.random() * 26,
+            vx: (Math.random() - 0.5) * 0.28,
+            vy: -0.18 - Math.random() * 0.35,
+            rot: Math.random() * Math.PI * 2,
+            vRot: (Math.random() - 0.5) * 0.008,
+            color: colors[i % colors.length]
+          });
+        }
+      }
+
+      spawnRipple(x, y, color = '#38BDF8') {
+        this.ripples.push({
+          x,
+          y,
+          radius: 16,
+          maxRadius: 170,
+          alpha: 0.75,
+          color
+        });
+      }
+
+      spawnConfetti(x, y, count = 28) {
+        const palette = ['#38BDF8', '#34D399', '#FBBF24', '#F472B6', '#A78BFA', '#FFFFFF'];
+        for (let i = 0; i < count; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 2.5 + Math.random() * 6.5;
+          this.particles.push({
+            x,
+            y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 2.2,
+            gravity: 0.22,
+            size: 5 + Math.random() * 6,
+            color: palette[Math.floor(Math.random() * palette.length)],
+            rot: Math.random() * Math.PI * 2,
+            vRot: (Math.random() - 0.5) * 0.25,
+            life: 1,
+            decay: 0.016 + Math.random() * 0.014,
+            shape: Math.random() > 0.45 ? 'rect' : 'circle'
+          });
+        }
+      }
+
+      spawnFloatingText(x, y, text, color = '#34D399', scale = 1) {
+        this.floatingTexts.push({
+          x,
+          y,
+          vy: -1.65,
+          text,
+          color,
+          scale,
+          life: 1,
+          decay: 0.018
+        });
+      }
+
+      updateAndRender() {
+        const ctx = this.ctx;
+        ctx.clearRect(0, 0, this.width, this.height);
+
+        // 1. Ambient drifting background symbols
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (const s of this.ambientSymbols) {
+          s.x += s.vx;
+          s.y += s.vy;
+          s.rot += s.vRot;
+
+          if (s.y < -40) {
+            s.y = this.height + 40;
+            s.x = Math.random() * this.width;
+          }
+          if (s.x < -40) s.x = this.width + 40;
+          if (s.x > this.width + 40) s.x = -40;
+
+          ctx.save();
+          ctx.translate(s.x, s.y);
+          ctx.rotate(s.rot);
+          ctx.font = `800 ${s.size}px "Fredoka", sans-serif`;
+          ctx.fillStyle = s.color;
+          ctx.fillText(s.glyph, 0, 0);
+          ctx.restore();
+        }
+
+        // 2. Shockwave ripples
+        for (let i = this.ripples.length - 1; i >= 0; i--) {
+          const r = this.ripples[i];
+          r.radius += (r.maxRadius - r.radius) * 0.12;
+          r.alpha -= 0.028;
+
+          if (r.alpha <= 0) {
+            this.ripples.splice(i, 1);
+            continue;
+          }
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+          ctx.strokeStyle = r.color;
+          ctx.globalAlpha = r.alpha;
+          ctx.lineWidth = 3.5;
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // 3. Confetti & Sparkle particles
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+          const p = this.particles[i];
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += p.gravity;
+          p.vx *= 0.98;
+          p.rot += p.vRot;
+          p.life -= p.decay;
+
+          if (p.life <= 0) {
+            this.particles.splice(i, 1);
+            continue;
+          }
+
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.globalAlpha = Math.max(0, p.life);
+          ctx.fillStyle = p.color;
+
+          if (p.shape === 'rect') {
+            ctx.fillRect(-p.size / 2, -p.size / 3, p.size, p.size * 0.65);
+          } else {
+            ctx.beginPath();
+            ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+
+        // 4. Floating score / combo / +2s popups
+        for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
+          const ft = this.floatingTexts[i];
+          ft.y += ft.vy;
+          ft.vy *= 0.96;
+          ft.life -= ft.decay;
+
+          if (ft.life <= 0) {
+            this.floatingTexts.splice(i, 1);
+            continue;
+          }
+
+          ctx.save();
+          ctx.globalAlpha = Math.min(1, ft.life * 1.4);
+          ctx.font = `900 ${Math.round(22 * ft.scale)}px "Fredoka", sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = 'rgba(15, 23, 42, 0.85)';
+          ctx.strokeText(ft.text, ft.x, ft.y);
+          ctx.fillStyle = ft.color;
+          ctx.fillText(ft.text, ft.x, ft.y);
+          ctx.restore();
+        }
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 3. DYNAMIC MATH PROBLEM GENERATOR
+     *    Supports Kids/Easy, Classic 60s, and Blitz Pro modes, scaling smoothly
+     *    with player streak while guaranteeing clean integers and non-negatives.
+     * ============================================================================
+     */
+    class MathGenerator {
+      static randInt(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+      }
+
+      static generate(mode = 'classic', streak = 0) {
+        // Difficulty tier ramps gently every 4 streak
+        const tier = Math.min(Math.floor(streak / 4), 4);
+        const ops = mode === 'kids'
+          ? ['+', '−', '×']
+          : ['+', '−', '×', '÷'];
+
+        const op = ops[Math.floor(Math.random() * ops.length)];
+        let a = 0, b = 0, answer = 0, label = '';
+
+        if (mode === 'kids') {
+          if (op === '+') {
+            a = this.randInt(2, 12 + tier * 4);
+            b = this.randInt(2, 12 + tier * 3);
+            answer = a + b;
+            label = 'ADDITION';
+          } else if (op === '−') {
+            b = this.randInt(1, 10 + tier * 2);
+            answer = this.randInt(1, 12 + tier * 3);
+            a = b + answer;
+            label = 'SUBTRACT';
+          } else {
+            a = this.randInt(2, 6 + tier);
+            b = this.randInt(2, 6 + tier);
+            answer = a * b;
+            label = 'MULTIPLY';
+          }
+        } else if (mode === 'blitz') {
+          if (op === '+') {
+            a = this.randInt(18, 65 + tier * 15);
+            b = this.randInt(14, 58 + tier * 12);
+            answer = a + b;
+            label = 'ADDITION';
+          } else if (op === '−') {
+            b = this.randInt(15, 55 + tier * 10);
+            answer = this.randInt(12, 65 + tier * 12);
+            a = b + answer;
+            label = 'SUBTRACT';
+          } else if (op === '×') {
+            a = this.randInt(6, 14 + tier * 2);
+            b = this.randInt(4, 12 + tier);
+            answer = a * b;
+            label = 'MULTIPLY';
+          } else {
+            b = this.randInt(4, 12 + tier);
+            answer = this.randInt(5, 15 + tier * 2);
+            a = b * answer;
+            label = 'DIVIDE';
+          }
+        } else {
+          // Classic 60s (matches user examples like 8 × 7, 45 ÷ 5, 23 + 19, 100 − 37)
+          if (op === '+') {
+            a = this.randInt(11, 45 + tier * 12);
+            b = this.randInt(9, 39 + tier * 10);
+            answer = a + b;
+            label = 'ADDITION';
+          } else if (op === '−') {
+            if (Math.random() < 0.3) {
+              // Classic round subtraction like 100 - 37
+              a = [50, 60, 75, 80, 90, 100][this.randInt(0, 5)];
+              b = this.randInt(12, a - 8);
+              answer = a - b;
+            } else {
+              b = this.randInt(8, 35 + tier * 8);
+              answer = this.randInt(9, 45 + tier * 10);
+              a = b + answer;
+            }
+            label = 'SUBTRACT';
+          } else if (op === '×') {
+            a = this.randInt(3, 10 + tier);
+            b = this.randInt(3, 10 + tier);
+            answer = a * b;
+            label = 'MULTIPLY';
+          } else {
+            b = this.randInt(3, 9 + tier);
+            answer = this.randInt(3, 11 + tier);
+            a = b * answer;
+            label = 'DIVIDE';
+          }
+        }
+
+        return {
+          text: `${a} ${op} ${b} = ?`,
+          answer: String(answer),
+          label
+        };
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 4. MAIN GAME CONTROLLER
+     *    Manages state transitions, 60-second timer, combo multipliers, localStorage
+     *    high scores, keyboard + touch numpad input, and celebratory star summary.
+     * ============================================================================
+     */
+    class MathSprintGame {
+      constructor() {
+        this.audio = new ASMRAudioEngine();
+        this.fx = new ParticleFXEngine(document.getElementById('fx-canvas'));
+
+        this.mode = 'classic';
+        this.state = 'start'; // 'start' | 'playing' | 'gameover'
+
+        // Gameplay Telemetry
+        this.timeLeft = 60;
+        this.maxTime = 60;
+        this.score = 0;
+        this.streak = 0;
+        this.bestStreak = 0;
+        this.solvedCount = 0;
+        this.attemptsCount = 0;
+        this.currentProblem = null;
+        this.userInput = '';
+        this.timerInterval = null;
+        this.isTransitioningProblem = false;
+
+        // High Scores per Mode via localStorage
+        this.highScores = this._loadHighScores();
+
+        this._bindElements();
+        this._bindEvents();
+        this._updateBestScoreUI();
+        this._startRenderLoop();
+      }
+
+      _loadHighScores() {
+        try {
+          const saved = localStorage.getItem('math_sprint_highscores_v1');
+          return saved ? JSON.parse(saved) : { kids: 0, classic: 0, blitz: 0 };
+        } catch (e) {
+          return { kids: 0, classic: 0, blitz: 0 };
+        }
+      }
+
+      _saveHighScores() {
+        try {
+          localStorage.setItem('math_sprint_highscores_v1', JSON.stringify(this.highScores));
+        } catch (e) {
+          // Ignore storage quota errors
+        }
+      }
+
+      _bindElements() {
+        // Screens
+        this.elScreenStart = document.getElementById('screen-start');
+        this.elScreenGame = document.getElementById('screen-game');
+        this.elScreenGameOver = document.getElementById('screen-gameover');
+
+        // HUD
+        this.elBtnHome = document.getElementById('btn-home');
+        this.elHudBest = document.getElementById('hud-best-score');
+        this.elHudModeBadge = document.getElementById('hud-mode-badge');
+        this.elToggleMusic = document.getElementById('toggle-music');
+        this.elIconMusic = document.getElementById('icon-music');
+        this.elToggleSfx = document.getElementById('toggle-sfx');
+        this.elIconSfx = document.getElementById('icon-sfx');
+        this.elScreenFlash = document.getElementById('screen-flash');
+
+        // Gameplay UI
+        this.elScore = document.getElementById('game-score');
+        this.elTimer = document.getElementById('game-timer');
+        this.elTimerRing = document.getElementById('timer-ring');
+        this.elTimerWrapper = document.getElementById('timer-wrapper');
+        this.elStreak = document.getElementById('game-streak');
+        this.elStreakFlame = document.getElementById('streak-flame');
+        this.elMultiplier = document.getElementById('game-multiplier');
+        this.elBonusLabel = document.getElementById('bonus-progress-label');
+        this.elBonusBar = document.getElementById('bonus-progress-bar');
+
+        this.elProblemContainer = document.getElementById('problem-container');
+        this.elProblemOpTag = document.getElementById('problem-op-tag');
+        this.elSolved = document.getElementById('game-solved');
+        this.elEquationBox = document.getElementById('equation-box');
+        this.elProblemText = document.getElementById('problem-text');
+        this.elAnswerBox = document.getElementById('answer-display-box');
+        this.elUserAnswer = document.getElementById('user-answer-text');
+        this.elAnswerPlaceholder = document.getElementById('answer-placeholder');
+
+        // Game Over UI
+        this.elNewRecordBadge = document.getElementById('new-record-badge');
+        this.elGameOverSubtitle = document.getElementById('gameover-subtitle');
+        this.elFinalScore = document.getElementById('final-score');
+        this.elFinalSolved = document.getElementById('final-solved');
+        this.elFinalAccuracy = document.getElementById('final-accuracy');
+        this.elFinalStreak = document.getElementById('final-streak');
+        this.elStars = [
+          document.getElementById('star-1'),
+          document.getElementById('star-2'),
+          document.getElementById('star-3')
+        ];
+      }
+
+      _bindEvents() {
+        // Audio Toggles
+        this.elToggleMusic.addEventListener('click', () => {
+          const on = this.audio.toggleMusic();
+          this.elIconMusic.textContent = on ? '🎵' : '🔇';
+          this.elToggleMusic.classList.toggle('opacity-50', !on);
+        });
+
+        this.elToggleSfx.addEventListener('click', () => {
+          const on = this.audio.toggleSFX();
+          this.elIconSfx.textContent = on ? '🔊' : '🔈';
+          this.elToggleSfx.classList.toggle('opacity-50', !on);
+        });
+
+        // Mode Selection Pills
+        document.querySelectorAll('.mode-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            this.audio.playKeyTap(2);
+            this.mode = btn.dataset.mode;
+            this._updateModeButtonsUI();
+            this._updateBestScoreUI();
+          });
+        });
+
+        // Navigation Buttons
+        document.getElementById('btn-start-game').addEventListener('click', () => {
+          this.audio.unlock();
+          this.audio.playCorrect(1);
+          this.startGame();
+        });
+
+        document.getElementById('btn-play-again').addEventListener('click', () => {
+          this.audio.playCorrect(1);
+          this.startGame();
+        });
+
+        document.getElementById('btn-back-menu').addEventListener('click', () => {
+          this.audio.playKeyTap(0);
+          this.showStartScreen();
+        });
+
+        this.elBtnHome.addEventListener('click', () => {
+          this.audio.playKeyTap(0);
+          this.showStartScreen();
+        });
+
+        // On-Screen Tactile Numpad
+        document.querySelectorAll('#numpad-grid button').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const key = btn.dataset.key;
+            this._handleInputKey(key);
+          });
+        });
+
+        // Full Physical Keyboard Support
+        window.addEventListener('keydown', (e) => {
+          if (this.state !== 'playing') {
+            if (e.key === 'Enter' && (this.state === 'start' || this.state === 'gameover')) {
+              this.audio.unlock();
+              this.startGame();
+            }
+            return;
+          }
+
+          if (e.key >= '0' && e.key <= '9') {
+            this._animateVirtualKeyPress(e.key);
+            this._handleInputKey(e.key);
+          } else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === 'Escape') {
+            e.preventDefault();
+            this._animateVirtualKeyPress('clear');
+            this._handleInputKey('clear');
+          } else if (e.key === 'Enter') {
+            e.preventDefault();
+            this._animateVirtualKeyPress('enter');
+            this._handleInputKey('enter');
+          }
+        });
+      }
+
+      _animateVirtualKeyPress(key) {
+        const btn = document.querySelector(`#numpad-grid button[data-key="${key}"]`);
+        if (!btn) return;
+        btn.classList.add('is-pressed');
+        setTimeout(() => btn.classList.remove('is-pressed'), 110);
+      }
+
+      _updateModeButtonsUI() {
+        const modeLabels = {
+          kids: 'KIDS / EASY',
+          classic: 'CLASSIC 60s',
+          blitz: 'BLITZ PRO'
+        };
+        this.elHudModeBadge.textContent = modeLabels[this.mode] || 'CLASSIC 60s';
+
+        document.querySelectorAll('.mode-btn').forEach((btn) => {
+          const active = btn.dataset.mode === this.mode;
+          if (active) {
+            btn.className = 'mode-btn btn-3d py-2.5 px-2 rounded-2xl flex flex-col items-center justify-center transition-all bg-gradient-to-b from-sky-500/30 to-indigo-600/30 border border-sky-400/50 text-white shadow-inner';
+          } else {
+            btn.className = 'mode-btn btn-3d py-2.5 px-2 rounded-2xl flex flex-col items-center justify-center transition-all text-slate-300 hover:bg-white/5 border border-transparent';
+          }
+        });
+      }
+
+      _updateBestScoreUI() {
+        this.elHudBest.textContent = (this.highScores[this.mode] || 0).toLocaleString();
+      }
+
+      showStartScreen() {
+        clearInterval(this.timerInterval);
+        this.state = 'start';
+        this.elScreenStart.classList.remove('hidden');
+        this.elScreenGame.classList.add('hidden');
+        this.elScreenGameOver.classList.add('hidden');
+        this.elBtnHome.classList.add('hidden');
+        this._updateBestScoreUI();
+      }
+
+      startGame() {
+        clearInterval(this.timerInterval);
+        this.state = 'playing';
+        this.timeLeft = 60;
+        this.maxTime = 60;
+        this.score = 0;
+        this.streak = 0;
+        this.bestStreak = 0;
+        this.solvedCount = 0;
+        this.attemptsCount = 0;
+        this.userInput = '';
+        this.isTransitioningProblem = false;
+
+        // Switch screens
+        this.elScreenStart.classList.add('hidden');
+        this.elScreenGameOver.classList.add('hidden');
+        this.elScreenGame.classList.remove('hidden');
+        this.elBtnHome.classList.remove('hidden');
+        if (window._edtechraBridge) {
+          window._edtechraBridge.startTime = Date.now();
+          window._edtechraBridge.reported = false;
+        }
+
+        this._updateGameplayHUD();
+        this._nextProblem();
+
+        // Start 1-second countdown loop
+        this.timerInterval = setInterval(() => {
+          if (this.state !== 'playing') return;
+          this.timeLeft--;
+
+          if (this.timeLeft <= 10 && this.timeLeft > 0) {
+            this.audio.playUrgentTick();
+          }
+
+          this._updateTimerVisuals();
+
+          if (this.timeLeft <= 0) {
+            this.endGame();
+          }
+        }, 1000);
+      }
+
+      _getMultiplier() {
+        if (this.streak >= 10) return 3;
+        if (this.streak >= 5) return 2;
+        if (this.streak >= 3) return 1.5;
+        return 1;
+      }
+
+      _updateGameplayHUD() {
+        this.elScore.textContent = this.score.toLocaleString();
+        this.elSolved.textContent = this.solvedCount;
+        this.elStreak.textContent = this.streak;
+
+        const mult = this._getMultiplier();
+        this.elMultiplier.textContent = `${mult}x PTS`;
+
+        if (this.streak >= 3) {
+          this.elStreakFlame.classList.remove('opacity-40');
+          this.elStreakFlame.classList.add('scale-125');
+        } else {
+          this.elStreakFlame.classList.add('opacity-40');
+          this.elStreakFlame.classList.remove('scale-125');
+        }
+
+        // Bonus time progress (every 5th streak awards +2s)
+        const mod5 = this.streak % 5;
+        const pct = (mod5 / 5) * 100;
+        this.elBonusBar.style.width = `${pct}%`;
+        this.elBonusLabel.textContent = `${mod5} / 5 for +2s ⏱️`;
+
+        this._updateTimerVisuals();
+      }
+
+      _updateTimerVisuals() {
+        const clamped = Math.max(0, this.timeLeft);
+        this.elTimer.textContent = clamped;
+
+        const circumference = 232.48;
+        const ratio = Math.min(clamped / this.maxTime, 1);
+        const offset = circumference * (1 - ratio);
+        this.elTimerRing.style.strokeDashoffset = offset;
+
+        if (clamped <= 10) {
+          this.elTimerRing.setAttribute('stroke', '#FB7185');
+          this.elTimer.classList.add('text-rose-400');
+          this.elTimerWrapper.classList.add('timer-urgent');
+        } else if (clamped <= 25) {
+          this.elTimerRing.setAttribute('stroke', '#FBBF24');
+          this.elTimer.classList.remove('text-rose-400');
+          this.elTimerWrapper.classList.remove('timer-urgent');
+        } else {
+          this.elTimerRing.setAttribute('stroke', '#38BDF8');
+          this.elTimer.classList.remove('text-rose-400');
+          this.elTimerWrapper.classList.remove('timer-urgent');
+        }
+      }
+
+      _nextProblem() {
+        this.currentProblem = MathGenerator.generate(this.mode, this.streak);
+        this.userInput = '';
+        this.isTransitioningProblem = false;
+
+        this.elProblemOpTag.textContent = this.currentProblem.label;
+        this.elProblemText.textContent = this.currentProblem.text;
+        this._renderUserInput();
+
+        // Trigger Spring Pop-in Animation
+        this.elEquationBox.classList.remove('animate-problem-in');
+        void this.elEquationBox.offsetWidth; // Force reflow
+        this.elEquationBox.classList.add('animate-problem-in');
+
+        // Reset answer box border
+        this.elAnswerBox.className = 'w-48 sm:w-56 h-14 sm:h-16 rounded-2xl bg-slate-950/80 border-2 border-sky-400/50 flex items-center justify-center px-4 shadow-inner transition-colors duration-150';
+      }
+
+      _renderUserInput() {
+        if (this.userInput.length === 0) {
+          this.elUserAnswer.textContent = '';
+          this.elAnswerPlaceholder.classList.remove('hidden');
+        } else {
+          this.elUserAnswer.textContent = this.userInput;
+          this.elAnswerPlaceholder.classList.add('hidden');
+        }
+      }
+
+      _handleInputKey(key) {
+        if (this.state !== 'playing' || this.isTransitioningProblem) return;
+
+        if (key === 'clear') {
+          this.audio.playKeyTap(0);
+          if (this.userInput.length > 0) {
+            this.userInput = this.userInput.slice(0, -1);
+            this._renderUserInput();
+          }
+          return;
+        }
+
+        if (key === 'enter') {
+          if (this.userInput.length > 0) {
+            this._evaluateAnswer();
+          } else {
+            this.audio.playKeyTap(0);
+          }
+          return;
+        }
+
+        // Numeric digit 0-9
+        if (this.userInput.length < 4) {
+          this.audio.playKeyTap(parseInt(key, 10));
+          this.userInput += key;
+          this._renderUserInput();
+
+          // Auto-submit as soon as entered digits match exact answer length!
+          if (this.userInput.length === this.currentProblem.answer.length) {
+            this._evaluateAnswer();
+          }
+        }
+      }
+
+      _evaluateAnswer() {
+        this.attemptsCount++;
+        const rect = this.elProblemContainer.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+
+        if (this.userInput === this.currentProblem.answer) {
+          // CORRECT ANSWER!
+          this.isTransitioningProblem = true;
+          this.solvedCount++;
+          this.streak++;
+          if (this.streak > this.bestStreak) this.bestStreak = this.streak;
+
+          const mult = this._getMultiplier();
+          const pointsEarned = Math.round(100 * mult);
+          this.score += pointsEarned;
+
+          // Visual Emerald Glow & Ripple
+          this.elAnswerBox.className = 'w-48 sm:w-56 h-14 sm:h-16 rounded-2xl bg-emerald-950/70 border-2 border-emerald-400 flex items-center justify-center px-4 shadow-inner transition-colors duration-150';
+          this._triggerScreenFlash('rgba(52, 211, 153, 0.14)');
+          this.fx.spawnRipple(centerX, centerY, '#34D399');
+          this.fx.spawnFloatingText(centerX, centerY - 35, `+${pointsEarned}`, '#34D399', 1.05);
+
+          // Check 5-Streak Bonus Time (+2s!) & Combo Milestones
+          if (this.streak > 0 && this.streak % 5 === 0) {
+            this.timeLeft = Math.min(this.timeLeft + 2, 99);
+            this.audio.playStreakMilestone();
+            this.fx.spawnConfetti(centerX, centerY, 34);
+            this.fx.spawnFloatingText(centerX, centerY - 72, `🔥 ${this.streak} STREAK! +2s`, '#FBBF24', 1.2);
+          } else {
+            this.audio.playCorrect(this.streak);
+            if (this.streak === 3) {
+              this.fx.spawnConfetti(centerX, centerY, 18);
+              this.fx.spawnFloatingText(centerX, centerY - 68, 'COMBO 1.5x!', '#38BDF8', 1.1);
+            }
+          }
+
+          this._updateGameplayHUD();
+
+          setTimeout(() => {
+            if (this.state === 'playing') {
+              this._nextProblem();
+            }
+          }, 150);
+
+        } else {
+          // WRONG ANSWER!
+          this.streak = 0;
+          this.audio.playWrong();
+          this._updateGameplayHUD();
+
+          // Gentle Screen Shake + Coral Red Flash
+          this._triggerScreenFlash('rgba(251, 113, 133, 0.22)');
+          this.elAnswerBox.className = 'w-48 sm:w-56 h-14 sm:h-16 rounded-2xl bg-rose-950/75 border-2 border-rose-500 flex items-center justify-center px-4 shadow-inner transition-colors duration-150';
+
+          this.elProblemContainer.classList.remove('animate-shake');
+          void this.elProblemContainer.offsetWidth;
+          this.elProblemContainer.classList.add('animate-shake');
+
+          this.fx.spawnFloatingText(centerX, centerY - 30, 'Oops!', '#FB7185', 0.95);
+
+          setTimeout(() => {
+            if (this.state === 'playing') {
+              this.userInput = '';
+              this._renderUserInput();
+              this.elAnswerBox.className = 'w-48 sm:w-56 h-14 sm:h-16 rounded-2xl bg-slate-950/80 border-2 border-sky-400/50 flex items-center justify-center px-4 shadow-inner transition-colors duration-150';
+            }
+          }, 260);
+        }
+      }
+
+      _triggerScreenFlash(rgbaColor) {
+        this.elScreenFlash.style.backgroundColor = rgbaColor;
+        this.elScreenFlash.style.opacity = '1';
+        setTimeout(() => {
+          this.elScreenFlash.style.opacity = '0';
+        }, 160);
+      }
+
+      endGame() {
+        clearInterval(this.timerInterval);
+        this.state = 'gameover';
+
+        this.elScreenGame.classList.add('hidden');
+        this.elBtnHome.classList.add('hidden');
+        this.elScreenGameOver.classList.remove('hidden');
+
+        // High Score Check
+        const prevBest = this.highScores[this.mode] || 0;
+        const isNewRecord = this.score > prevBest && this.score > 0;
+        if (isNewRecord) {
+          this.highScores[this.mode] = this.score;
+          this._saveHighScores();
+          this._updateBestScoreUI();
+          this.elNewRecordBadge.classList.remove('hidden');
+        } else {
+          this.elNewRecordBadge.classList.add('hidden');
+        }
+
+        // Populate Final Telemetry
+        this.elFinalScore.textContent = this.score.toLocaleString();
+        this.elFinalSolved.textContent = this.solvedCount;
+        const accuracy = this.attemptsCount > 0
+          ? Math.round((this.solvedCount / this.attemptsCount) * 100)
+          : 100;
+        this.elFinalAccuracy.textContent = `${accuracy}%`;
+        this.elFinalStreak.textContent = this.bestStreak;
+
+        if (window._edtechraReportComplete) {
+          window._edtechraReportComplete({
+            scoreEarned: this.score,
+            maxAvailablePoints: Math.max(this.score, 2400),
+            details: {
+              rawScore: this.score,
+              correctAnswers: this.solvedCount,
+              totalAnswered: this.attemptsCount,
+              accuracyPct: accuracy,
+              bestStreak: this.bestStreak,
+              mode: this.mode
+            }
+          });
+        }
+
+        // Calculate 1 to 3 Star Rating based on score thresholds
+        let starsEarned = 1;
+        if (this.score >= 2400) {
+          starsEarned = 3;
+          this.elGameOverSubtitle.textContent = 'Legendary Math Grandmaster!';
+        } else if (this.score >= 1100) {
+          starsEarned = 2;
+          this.elGameOverSubtitle.textContent = 'Sharp reflexes & great focus!';
+        } else {
+          starsEarned = this.score > 0 ? 1 : 0;
+          this.elGameOverSubtitle.textContent = 'Warm-up complete — beat your record!';
+        }
+
+        // Reset Stars then animate sequentially with chimes & confetti
+        this.elStars.forEach((star) => {
+          star.className = 'text-4xl sm:text-5xl text-slate-700 transition-all';
+        });
+        this.elStars[1].classList.add('text-5xl', 'sm:text-6xl', '-mt-3');
+
+        for (let i = 0; i < starsEarned; i++) {
+          setTimeout(() => {
+            const starEl = this.elStars[i];
+            starEl.classList.remove('text-slate-700');
+            starEl.classList.add('text-amber-400', 'drop-shadow-[0_0_16px_rgba(251,191,36,0.75)]', 'star-earned');
+            this.audio.playStarChime(i);
+
+            const rect = starEl.getBoundingClientRect();
+            this.fx.spawnConfetti(rect.left + rect.width / 2, rect.top + rect.height / 2, 22);
+          }, 300 + i * 340);
+        }
+      }
+
+      _startRenderLoop() {
+        const loop = () => {
+          this.fx.updateAndRender();
+          requestAnimationFrame(loop);
+        };
+        requestAnimationFrame(loop);
+      }
+    }
+
+    // Boot application safely on window load
+    window.addEventListener('load', () => {
+      const targetOrigin = window.location.origin && window.location.origin !== 'null' ? window.location.origin : '*';
+      window._edtechraBridge = { active: false, mode: 'standalone', maxPoints: 100, startTime: Date.now(), reported: false };
+      window.addEventListener('message', (ev) => {
+        if (targetOrigin !== '*' && ev.origin !== targetOrigin) return;
+        const msg = ev.data;
+        if (!msg || msg.type !== 'EDTECHRA_INIT_GAME') return;
+        const p = msg.payload && typeof msg.payload === 'object' ? msg.payload : msg;
+        window._edtechraBridge.active = true;
+        window._edtechraBridge.mode = p.mode || 'student';
+        window._edtechraBridge.maxPoints = Number(p.maxPoints) || 100;
+        window._edtechraBridge.startTime = Date.now();
+        window._edtechraBridge.reported = false;
+      });
+      window._edtechraReportComplete = (data) => {
+        if (window._edtechraBridge.reported || window.parent === window) return;
+        window._edtechraBridge.reported = true;
+        const timeTakenSeconds = Math.max(1, Math.round((Date.now() - window._edtechraBridge.startTime) / 1000));
+        window.parent.postMessage({
+          type: 'EDTECHRA_GAME_COMPLETE',
+          payload: {
+            gameId: 'math-sprint',
+            scoreEarned: data.scoreEarned,
+            maxAvailablePoints: data.maxAvailablePoints,
+            completionStatus: 'completed',
+            timeTakenSeconds,
+            details: data.details
+          }
+        }, targetOrigin);
+      };
+      window.mathSprintApp = new MathSprintGame();
+      if (window.parent !== window) {
+        window.parent.postMessage({ type: 'EDTECHRA_GAME_READY', gameId: 'math-sprint' }, targetOrigin);
+      }
+    });
+  </script>
+</body>
+</html>

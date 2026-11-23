@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rapid knowledge challenge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Nunito+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#d9f0ff;--card:#fff;--text:#0b2545;--mute:#4c6385;--edge:#bcd6ec;--sun:#ffd23f;--ok:#1fb89c;--bad:#e8456b;--sky:#4aa8ff;--coral:#ff7a59;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0a1a33;--card:#112749;--text:#eaf4ff;--mute:#9db6d6;--edge:#24426b;color-scheme:dark}}
+:root[data-theme="light"]{--bg:#d9f0ff;--card:#fff;--text:#0b2545;--mute:#4c6385;--edge:#bcd6ec;color-scheme:light}
+:root[data-theme="dark"]{--bg:#0a1a33;--card:#112749;--text:#eaf4ff;--mute:#9db6d6;--edge:#24426b;color-scheme:dark}
+html{height:100%}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font:400 16px/1.5 "Nunito Sans",system-ui,sans-serif}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+button:focus-visible{outline:3px solid var(--sky);outline-offset:3px}
+[hidden]{display:none!important}
+#app{max-width:560px;margin:0 auto;padding:1.2rem 1rem 2.5rem}
+h1,.big,.q{font-family:"Bricolage Grotesque",system-ui,sans-serif}
+h1{margin:.2rem 0 .3rem;font-weight:800;font-size:clamp(2rem,9vw,2.7rem);line-height:1.04;text-align:center}
+.sub{margin:0 auto;text-align:center;color:var(--mute);max-width:24rem}
+.ringwrap{position:relative;width:150px;height:150px;margin:1.2rem auto}
+.ringwrap svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ringwrap circle{fill:none;stroke-width:11}
+.rt{stroke:var(--edge)}.rp{stroke:var(--sun);stroke-linecap:round;transition:stroke-dashoffset .1s linear,stroke .3s}
+.ringwrap.low .rp{stroke:var(--bad)}
+.ringwrap .n{position:absolute;inset:0;display:grid;place-items:center;font:800 3.2rem/1 "Bricolage Grotesque",sans-serif}
+.ringwrap .n small{display:block;font:600 .8rem "Nunito Sans";color:var(--mute);text-align:center;margin-top:-.2rem}
+.lbl{margin:1.1rem 0 .5rem;font-weight:700;font-size:.92rem;color:var(--mute)}
+.chips{display:flex;flex-wrap:wrap;gap:.45rem}
+.chip{padding:.5rem .9rem;border-radius:999px;background:var(--card);border:2px solid var(--edge);font-weight:600;font-size:.9rem;transition:background .15s,border-color .15s}
+.chip small{color:var(--mute);font-weight:600;margin-left:.25rem}
+.chip[aria-pressed="true"]{background:var(--text);border-color:var(--text);color:var(--bg)}
+.chip[aria-pressed="true"] small{color:inherit;opacity:.7}
+.go{display:block;width:100%;margin-top:1.4rem;padding:1rem;border-radius:20px;background:var(--sun);color:#0b2545;font:800 1.35rem "Bricolage Grotesque",sans-serif;box-shadow:0 6px 0 #c89a00;transition:transform .1s,box-shadow .1s}
+.go:active{transform:translateY(5px);box-shadow:0 1px 0 #c89a00}
+.go:disabled{opacity:.5;box-shadow:none;cursor:not-allowed}
+.go.alt{background:var(--card);color:var(--text);box-shadow:0 6px 0 var(--edge);font-size:1.1rem}
+.go.alt:active{box-shadow:0 1px 0 var(--edge)}
+.best{text-align:center;color:var(--mute);margin:.8rem 0 0;font-weight:600}
+.hud{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.5rem}
+.hud .ringwrap{width:84px;height:84px;margin:0}
+.hud .ringwrap circle{stroke-width:9}
+.hud .ringwrap .n{font-size:1.9rem}
+.stat{font-weight:700;font-variant-numeric:tabular-nums;font-size:1.05rem}
+.stat.r{text-align:right}
+.stat span{display:block;font:800 1.7rem/1 "Bricolage Grotesque",sans-serif}
+.pop{animation:up .6s ease-out}
+.card{background:var(--card);border:2px solid var(--edge);border-radius:24px;padding:1.2rem 1.1rem 1.4rem;margin:1rem 0 .9rem;min-height:9.5rem;display:flex;flex-direction:column;justify-content:center}
+.tag{align-self:flex-start;font-size:.8rem;font-weight:700;color:var(--mute);margin-bottom:.4rem}
+.q{font-weight:700;font-size:clamp(1.3rem,5.8vw,1.75rem);line-height:1.2}
+.opts{display:grid;gap:.6rem}
+.opt{display:flex;align-items:center;gap:.8rem;text-align:left;padding:.7rem .9rem;border-radius:18px;background:var(--card);border:2px solid var(--edge);box-shadow:0 4px 0 var(--edge);font-weight:700;font-size:1.05rem;transition:transform .08s,box-shadow .08s,background .12s}
+.opt:active{transform:translateY(3px);box-shadow:0 1px 0 var(--edge)}
+.opt b{flex:none;width:2.1rem;height:2.1rem;border-radius:10px;display:grid;place-items:center;color:#0b2545;font:800 1rem "Bricolage Grotesque",sans-serif}
+.opt.ok{background:var(--ok);border-color:var(--ok);box-shadow:0 4px 0 #0f7f6a;color:#04201b}
+.opt.no{background:var(--bad);border-color:var(--bad);box-shadow:0 4px 0 #a52346;color:#fff;animation:sh .35s}
+.opt.dim{opacity:.55}
+.opts.lock{pointer-events:none}
+.res{text-align:center}
+.res .big{font-size:4.2rem;font-weight:800;line-height:1;margin:.6rem 0 .1rem}
+.res .nb{display:inline-block;background:var(--sun);color:#0b2545;font-weight:800;border-radius:999px;padding:.2rem .9rem;margin:.3rem 0}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;margin:1rem 0}
+.grid div{background:var(--card);border:2px solid var(--edge);border-radius:16px;padding:.6rem .2rem;font-size:.78rem;color:var(--mute);font-weight:600}
+.grid b{display:block;font:800 1.4rem/1.1 "Bricolage Grotesque",sans-serif;color:var(--text)}
+.miss{text-align:left;margin:1rem 0 0;padding:0;list-style:none}
+.miss li{background:var(--card);border-left:6px solid var(--bad);border-radius:12px;padding:.6rem .8rem;margin:.45rem 0;font-size:.92rem}
+.miss b{color:var(--ok)}
+@keyframes sh{20%{transform:translateX(-7px)}50%{transform:translateX(7px)}80%{transform:translateX(-3px)}}
+@keyframes up{0%{transform:translateY(8px);opacity:0}100%{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.opt.no,.pop{animation:none}.rp{transition:none}}
+</style>
+</head>
+<body>
+<div id="app">
+<section id="home">
+  <h1>Rapid knowledge challenge</h1>
+  <p class="sub">Answer as many questions as you can before the clock runs out.</p>
+  <div class="ringwrap" id="hring"><svg viewBox="0 0 100 100"><circle class="rt" cx="50" cy="50" r="44"/><circle class="rp" cx="50" cy="50" r="44" stroke-dasharray="276.5" stroke-dashoffset="0"/></svg><div class="n"><div id="hnum">30<small>seconds</small></div></div></div>
+  <div class="lbl">Time</div>
+  <div class="chips" id="durs"><button class="chip" data-d="30">30 seconds</button><button class="chip" data-d="60">60 seconds</button></div>
+  <div class="lbl">Categories</div>
+  <div class="chips" id="cats"></div>
+  <button class="go" id="start">Start</button>
+  <p class="best" id="best"></p>
+</section>
+
+<section id="game" hidden>
+  <div class="hud">
+    <div class="stat">Streak<span id="st">0</span></div>
+    <div class="ringwrap" id="gring"><svg viewBox="0 0 100 100"><circle class="rt" cx="50" cy="50" r="44"/><circle class="rp" id="gp" cx="50" cy="50" r="44" stroke-dasharray="276.5" stroke-dashoffset="0"/></svg><div class="n" id="gnum">30</div></div>
+    <div class="stat r">Score<span id="sc">0</span></div>
+  </div>
+  <div class="card"><div class="tag" id="tag"></div><div class="q" id="q"></div></div>
+  <div class="opts" id="opts" role="group" aria-label="Answers"></div>
+  <p class="best" id="live" role="status" aria-live="polite" style="min-height:1.5em"></p>
+</section>
+
+<section id="end" class="res" hidden></section>
+</div>
+
+<script>
+(function(){
+  var DB=[],POOL={},CATS=[["English","📖"],["Science","🔬"],["Mathematics","➗"],["ICT","💻"],["General Knowledge","💡"],["History","🏛️"],["Geography","🗺️"]];
+  /* add(cat,pool,"question|answer[|d1,d2,d3]" lines) and tab(cat,pool,template,"a:b;c:d",reverseTemplate,reversePool) */
+  function add(c,p,s){s.split("\n").forEach(function(l){l=l.trim();if(!l)return;var x=l.split("|");DB.push({c:c,q:x[0],a:x[1],p:p,x:x[2]})})}
+  function tab(c,p,qt,s,rt,rp){s.split(";").forEach(function(r){var x=r.split(":");
+    DB.push({c:c,q:qt.replace("{0}",x[0]).replace("{1}",x[1]),a:x[1],p:p});
+    if(rt)DB.push({c:c,q:rt.replace("{0}",x[0]).replace("{1}",x[1]),a:x[0],p:rp})})}
+
+  /* ---------- Geography ---------- */
+  var G="Geography";
+  tab(G,"cap","What is the capital of {0}?","Japan:Tokyo;France:Paris;Italy:Rome;Germany:Berlin;Spain:Madrid;Portugal:Lisbon;United Kingdom:London;Ireland:Dublin;Egypt:Cairo;Kenya:Nairobi;Nigeria:Abuja;Ghana:Accra;Ethiopia:Addis Ababa;Morocco:Rabat;South Africa:Pretoria;Canada:Ottawa;United States:Washington, D.C.;Mexico:Mexico City;Brazil:Brasília;Argentina:Buenos Aires;Chile:Santiago;Peru:Lima;Colombia:Bogotá;Cuba:Havana;Australia:Canberra;New Zealand:Wellington;China:Beijing;India:New Delhi;Pakistan:Islamabad;Bangladesh:Dhaka;Nepal:Kathmandu;Thailand:Bangkok;Vietnam:Hanoi;Indonesia:Jakarta;Philippines:Manila;Malaysia:Kuala Lumpur;South Korea:Seoul;Russia:Moscow;Turkey:Ankara;Greece:Athens;Poland:Warsaw;Sweden:Stockholm;Norway:Oslo;Finland:Helsinki;Denmark:Copenhagen;Netherlands:Amsterdam;Belgium:Brussels;Switzerland:Bern;Austria:Vienna;Saudi Arabia:Riyadh;Iran:Tehran;Iraq:Baghdad;Ukraine:Kyiv;Jordan:Amman;Cambodia:Phnom Penh","{1} is the capital of which country?","country");
+  tab(G,"cont","Which continent is {0} in?","Egypt:Africa;Brazil:South America;Japan:Asia;Canada:North America;Australia:Oceania;Italy:Europe;Kenya:Africa;India:Asia;Peru:South America;Mexico:North America;Norway:Europe;New Zealand:Oceania;Nigeria:Africa;Thailand:Asia;Argentina:South America;Poland:Europe;Cuba:North America;Morocco:Africa;Vietnam:Asia;Chile:South America");
+  add(G,"cont",`Which continent is almost completely covered by ice?|Antarctica
+Which continent has the most countries?|Africa
+Which is the largest continent?|Asia`);
+  add(G,"ocean",`Which is the largest ocean on Earth?|Pacific Ocean
+Which is the smallest ocean?|Arctic Ocean
+Which ocean lies between Africa and Australia?|Indian Ocean
+Which ocean separates Europe from North America?|Atlantic Ocean
+Sri Lanka is an island in which ocean?|Indian Ocean`);
+  add(G,"river",`Which is the longest river in Africa?|Nile
+Which river flows through London?|Thames
+Which river flows through Paris?|Seine
+Which river carries the most water in the world?|Amazon
+Which river flows through Baghdad?|Tigris
+Which river flows through Vienna?|Danube
+Which river is sacred in India?|Ganges
+Which river flows through Cologne in Germany?|Rhine
+Which river flows through Cambodia and Vietnam?|Mekong
+Which is the longest river in China?|Yangtze
+Which river flows through the city of Cairo?|Nile`);
+  add(G,"mount",`Which is the highest mountain above sea level?|Mount Everest
+Which mountain range separates Europe from Asia?|Ural Mountains
+In which mountain range is Mount Everest?|Himalayas
+Which long mountain range is in South America?|Andes
+Which is the highest mountain in Africa?|Mount Kilimanjaro
+Which mountain range is found in Switzerland?|Alps
+Which range runs through western North America?|Rocky Mountains
+Which is the longest mountain range on land?|Andes`);
+  add(G,"desert",`Which is the largest hot desert in the world?|Sahara Desert
+Which desert is in northern Chile?|Atacama Desert
+Which desert lies in Mongolia and northern China?|Gobi Desert
+Which desert is in Botswana and Namibia?|Kalahari Desert
+Which desert covers much of Saudi Arabia?|Arabian Desert`);
+  add(G,"island",`Which is the largest island in the world?|Greenland
+Which large island lies off the east coast of Africa?|Madagascar
+Which island nation lies just south of India?|Sri Lanka
+Which island is known as the land of fire and ice?|Iceland
+Which is the largest island in the Caribbean?|Cuba`);
+  add(G,"country",`Which is the largest country in the world by area?|Russia
+Which is the smallest country in the world?|Vatican City
+Which country is shaped like a boot?|Italy
+Which country has the Great Barrier Reef?|Australia
+Which country has a maple leaf on its flag?|Canada
+Which country has a red circle on a white flag?|Japan
+In which country is the Mississippi River?|United States
+Mount Fuji is in which country?|Japan`);
+  add(G,"~",`How many states are in the United States?|50`);
+
+  /* ---------- Science ---------- */
+  var S="Science";
+  add(S,"planet",`Which planet is known as the Red Planet?|Mars
+Which planet is closest to the Sun?|Mercury
+Which planet is the hottest?|Venus
+Which is the third planet from the Sun?|Earth
+Which is the largest planet in our solar system?|Jupiter
+Which planet is famous for its bright rings?|Saturn
+Which planet spins on its side?|Uranus
+Which planet is farthest from the Sun?|Neptune
+Which is the smallest planet in our solar system?|Mercury
+Which planet is the second from the Sun?|Venus
+Which planet has a giant storm called the Great Red Spot?|Jupiter`);
+  tab(S,"sym","What is the chemical symbol for {0}?","Hydrogen:H;Helium:He;Carbon:C;Nitrogen:N;Oxygen:O;Sodium:Na;Magnesium:Mg;Aluminium:Al;Silicon:Si;Sulfur:S;Chlorine:Cl;Calcium:Ca;Iron:Fe;Copper:Cu;Zinc:Zn;Silver:Ag;Gold:Au;Lead:Pb;Potassium:K;Mercury:Hg","Which element has the symbol {1}?","elem");
+  tab(S,"agrp","Which group of animals does a {0} belong to?","dolphin:Mammals;eagle:Birds;frog:Amphibians;snake:Reptiles;shark:Fish;butterfly:Insects;whale:Mammals;crocodile:Reptiles;penguin:Birds;salamander:Amphibians;spider:Arachnids;bat:Mammals;turtle:Reptiles;salmon:Fish;ant:Insects;ostrich:Birds;scorpion:Arachnids;toad:Amphibians");
+  add(S,"diet",`An animal that eats only plants is called a…|Herbivore
+An animal that eats only meat is called a…|Carnivore
+An animal that eats plants and animals is called an…|Omnivore
+An animal that eats mainly insects is called an…|Insectivore`);
+  add(S,"body",`Which organ pumps blood around the body?|Heart
+Which organs do we use to breathe?|Lungs
+Which organ controls the body and helps us think?|Brain
+Which organs filter the blood and make urine?|Kidneys
+Which is the largest organ of the human body?|Skin
+Which organ mixes food with acid to start digestion?|Stomach
+Which is the largest organ inside the body?|Liver`);
+  add(S,"gas",`Which gas do plants take in from the air?|Carbon dioxide
+Which gas do plants give out during photosynthesis?|Oxygen
+Which gas makes up most of Earth’s air?|Nitrogen
+Which is the lightest gas?|Hydrogen
+Which gas is used to fill floating party balloons?|Helium`);
+  add(S,"ppart",`Which part of a plant takes in water from the soil?|Roots
+Which part of a plant carries water up to the leaves?|Stem
+Which part of a plant makes food using sunlight?|Leaves
+Which part of a plant makes seeds?|Flower`);
+  add(S,"pterm",`What process do plants use to make food from sunlight?|Photosynthesis
+Which green substance in leaves absorbs sunlight?|Chlorophyll
+What is the transfer of pollen between flowers called?|Pollination
+What is it called when a seed starts to grow?|Germination`);
+  tab(S,"unit","What unit do we use to measure {0}?","length:Metre;mass:Kilogram;time:Second;temperature:Degree Celsius;electric current:Ampere;force:Newton;energy:Joule;the volume of a liquid:Litre");
+  add(S,"force",`Which force pulls objects towards the Earth?|Gravity
+Which force slows things down when surfaces rub together?|Friction
+Which force makes a magnet attract iron?|Magnetism
+Which force slows down a falling parachute?|Air resistance`);
+  add(S,"light",`What do we call light bouncing off a mirror?|Reflection
+What do we call light bending as it enters water?|Refraction
+What forms when an object blocks light?|Shadow
+What do we call the band of colours in a rainbow?|Spectrum`);
+  add(S,"energy",`Which energy comes from the Sun?|Solar energy
+Which energy comes from moving air?|Wind energy
+Which fuels are made from ancient plants and animals?|Fossil fuels
+What type of energy is stored in food?|Chemical energy
+Which energy comes from flowing water?|Hydropower`);
+  add(S,"weather",`What is water falling from clouds called?|Precipitation
+What is liquid water turning into vapour called?|Evaporation
+What is water vapour turning into droplets called?|Condensation
+What is a huge spinning storm over warm ocean water called?|Hurricane`);
+  add(S,"instr",`Which instrument measures temperature?|Thermometer
+Which instrument measures air pressure?|Barometer
+Which instrument makes tiny things look bigger?|Microscope
+Which instrument helps us see distant stars?|Telescope
+Which instrument do doctors use to hear a heartbeat?|Stethoscope`);
+  add(S,"space",`What is the name of our galaxy?|The Milky Way
+What is the closest star to Earth?|The Sun
+What natural object orbits the Earth?|The Moon
+What do we call a pattern of stars in the night sky?|Constellation`);
+  add(S,"~",`How many legs does an insect have?|6
+How many legs does a spider have?|8
+How many hearts does an octopus have?|3
+How many bones does an adult human have?|206
+How many teeth does a full set of adult teeth have?|32
+How many chambers does the human heart have?|4
+How many senses do humans traditionally have?|5
+How many planets are in our solar system?|8
+About how many days does Earth take to orbit the Sun?|365
+At what temperature in °C does water boil at sea level?|100
+At what temperature in °C does water freeze?|0
+How many moons does Earth have?|1`);
+
+  /* ---------- English ---------- */
+  var E="English";
+  tab(E,"ant","What is the opposite of {0}?","ancient:modern;big:small;hot:cold;fast:slow;happy:sad;day:night;up:down;early:late;full:empty;strong:weak;hard:soft;light:dark;wet:dry;rich:poor;clean:dirty;open:closed;brave:fearful;loud:quiet;tall:short;thick:thin;deep:shallow;smooth:rough;sweet:sour;win:lose;buy:sell;push:pull;begin:end;arrive:depart;accept:refuse;increase:decrease;generous:selfish","What is the opposite of {1}?","ant2");
+  tab(E,"syn","Which word means the same as {0}?","big:large;small:tiny;fast:quick;happy:joyful;smart:clever;tired:weary;angry:furious;shout:yell;talk:speak;hard:difficult;pretty:beautiful;scared:frightened;calm:peaceful;rich:wealthy;mistake:error;help:assist;choose:select;buy:purchase;fix:repair;begin:start;end:finish;freezing:icy");
+  tab(E,"plu","What is the plural of {0}?","child:children;mouse:mice;foot:feet;tooth:teeth;man:men;woman:women;goose:geese;person:people;leaf:leaves;knife:knives;wolf:wolves;life:lives;shelf:shelves;box:boxes");
+  tab(E,"past","What is the past tense of “{0}”?","go:went;eat:ate;run:ran;see:saw;buy:bought;think:thought;swim:swam;write:wrote;take:took;give:gave;teach:taught;catch:caught;drink:drank;fly:flew;bring:brought");
+  add(E,"pos",`Which type of word names a person, place or thing?|Noun
+Which type of word is an action word?|Verb
+Which type of word describes a noun?|Adjective
+Which type of word describes a verb?|Adverb
+Words like “and” and “but” are called…|Conjunction
+Words like “he” and “she” are called…|Pronoun`);
+  add(E,"punc",`Which punctuation mark ends a question?|Question mark
+Which punctuation mark ends a statement?|Full stop
+Which punctuation mark shows excitement?|Exclamation mark
+Which punctuation mark joins words like “well-known”?|Hyphen
+Which punctuation mark shows missing letters in “don’t”?|Apostrophe`);
+  add(E,"lit",`Words that sound the same but have different meanings are called…|Homophones
+Words that mean the opposite are called…|Antonyms
+Words that mean the same are called…|Synonyms
+A comparison using “like” or “as” is a…|Simile
+Saying something is something else is a…|Metaphor
+A word that imitates a sound, such as “buzz”, is…|Onomatopoeia`);
+  add(E,"sp",`Which is the correct spelling?|necessary|neccessary,necesary,neccesary
+Which is the correct spelling?|separate|seperate,separete,seprate
+Which is the correct spelling?|definitely|definately,definitly,defanitely
+Which is the correct spelling?|February|Febuary,Februery,Febuarry
+Which is the correct spelling?|because|becuase,becase,becouse
+Which is the correct spelling?|friend|freind,frend,friand
+Which is the correct spelling?|beautiful|beutiful,beautifull,butiful
+Which is the correct spelling?|library|libary,librery,liberary
+Which is the correct spelling?|grammar|grammer,gramar,grammur
+Which is the correct spelling?|receive|recieve,receve,reseive
+Which is the correct spelling?|different|diffrent,diferent,differant
+Which is the correct spelling?|calendar|calender,calandar,calandor`);
+  add(E,"hom",`Choose the right word: Put the books over ___.|there|their,they’re,thare
+Choose the right word: ___ going to the park today.|They’re|There,Their,Thay’re
+Choose the right word: The dog wagged ___ tail.|its|it’s,its’,itts
+Choose the right word: I can ___ the sea from here.|see|sea,c,sie
+Choose the right word: I ___ a letter yesterday.|wrote|rote,right,write
+Choose the right word: We ___ to the zoo last week.|went|gone,goed,wend`);
+  add(E,"~",`How many letters are in the English alphabet?|26
+How many vowels are in the English alphabet?|5`);
+
+  /* ---------- ICT ---------- */
+  var I="ICT";
+  tab(I,"acr","What does {0} stand for?","CPU:Central Processing Unit;RAM:Random Access Memory;ROM:Read Only Memory;USB:Universal Serial Bus;HTML:HyperText Markup Language;URL:Uniform Resource Locator;PDF:Portable Document Format;GPU:Graphics Processing Unit;LAN:Local Area Network;WAN:Wide Area Network;ISP:Internet Service Provider;SSD:Solid State Drive;HDD:Hard Disk Drive;OS:Operating System;HTTP:HyperText Transfer Protocol;IP:Internet Protocol;DNS:Domain Name System;VPN:Virtual Private Network;CSS:Cascading Style Sheets;GUI:Graphical User Interface;AI:Artificial Intelligence;SMS:Short Message Service;JPEG:Joint Photographic Experts Group;QR:Quick Response;LED:Light Emitting Diode;LCD:Liquid Crystal Display","Which abbreviation stands for “{1}”?","abbr");
+  add(I,"hw",`Which device do you use to type text into a computer?|Keyboard
+Which device do you use to point and click?|Mouse
+Which device prints on paper?|Printer
+Which device shows the picture from a computer?|Monitor
+Which device lets you speak into a computer?|Microphone
+Which device copies a paper page into a computer?|Scanner
+Which device plays sound from a computer?|Speakers
+Which device lets a computer join a network and the internet?|Router
+Which part is called the brain of the computer?|CPU
+Which device lets you see friends during a video call?|Webcam`);
+  add(I,"sw",`Which software do you use to browse the internet?|Web browser
+Which software do you use to write documents?|Word processor
+Which software works with rows, columns and formulas?|Spreadsheet
+Which software helps you make slides for a talk?|Presentation software
+Which software protects a computer from viruses?|Antivirus software
+Which software manages the computer, such as Windows?|Operating system
+Which software stores and organises lots of data?|Database`);
+  add(I,"ext",`Which file ending is used for a photo?|.jpg
+Which file ending is used for a music file?|.mp3
+Which file ending is used for a Word document?|.docx
+Which file ending is used for a web page?|.html
+Which file ending is used for a PDF?|.pdf
+Which file ending is used for a video?|.mp4
+Which file ending is used for a spreadsheet?|.xlsx`);
+  add(I,"key",`On Windows, which shortcut copies selected text?|Ctrl + C
+On Windows, which shortcut pastes copied text?|Ctrl + V
+On Windows, which shortcut cuts selected text?|Ctrl + X
+On Windows, which shortcut undoes the last action?|Ctrl + Z
+On Windows, which shortcut saves a file?|Ctrl + S
+On Windows, which shortcut selects everything?|Ctrl + A
+On Windows, which shortcut prints a page?|Ctrl + P`);
+  add(I,"numsys",`Which number system uses only 0 and 1?|Binary
+Which number system uses the digits 0 to 9?|Decimal
+Which number system uses 0 to 9 and A to F?|Hexadecimal
+Which number system uses the digits 0 to 7?|Octal`);
+  add(I,"ictw",`What is a small picture that stands for a program or file?|Icon
+What is software designed to harm a computer called?|Malware
+What is the blinking line that shows where you type?|Cursor
+What do we use to organise files on a computer?|Folder
+What is clickable text that takes you to another page?|Hyperlink
+What is it called to copy a file from the internet to your device?|Download
+What is a message sent over the internet?|Email
+What do we call a person who breaks into computer systems illegally?|Hacker`);
+  add(I,"safe",`Which is the strongest password?|T7!pLq9#vR|password,12345678,myname2015
+A stranger online asks for your home address. What should you do?|Tell a trusted adult|Give it to them,Post it publicly,Send a photo of your house
+You get an email saying you won a prize and must click a link. What should you do?|Do not click it and tell an adult|Click the link quickly,Reply with your details,Forward it to everyone
+Which information should you keep private online?|Your password|Your favourite colour,Your favourite sport,A joke you like`);
+  add(I,"~",`How many bits are in one byte?|8
+What is the binary number 101 in decimal?|5
+What is the binary number 11 in decimal?|3`);
+
+  /* ---------- History ---------- */
+  var H="History";
+  tab(H,"~y","In which year {0}?","did World War I begin:1914;did World War II end:1945;did the Titanic sink:1912;did humans first land on the Moon:1969;did the Berlin Wall fall:1989;was the Berlin Wall built:1961;did Columbus reach the Americas:1492;did the French Revolution begin:1789;did Nelson Mandela become President of South Africa:1994;was the American Declaration of Independence signed:1776;did the Great Fire of London happen:1666;did Sri Lanka gain independence:1948;did India gain independence:1947;did the Wright brothers make their first flight:1903;did the Chernobyl disaster happen:1986;did the Battle of Hastings take place:1066;was the Magna Carta signed:1215;did the American Civil War begin:1861;was the first iPhone released:2007;was Pearl Harbor attacked:1941;did the Soviet Union collapse:1991;did the Western Roman Empire fall:476;did the Indian Ocean tsunami strike:2004;did Queen Victoria begin her reign:1837;did Magellan’s voyage around the world set sail:1519;were the first modern Olympic Games held:1896");
+  tab(H,"who","Who {0}?","was the first person to walk on the Moon:Neil Armstrong;was the first President of the United States:George Washington;led India’s non-violent movement for independence:Mahatma Gandhi;painted the Mona Lisa:Leonardo da Vinci;wrote Romeo and Juliet:William Shakespeare;developed the theory of relativity:Albert Einstein;was the first woman to win a Nobel Prize:Marie Curie;was a famous queen of ancient Egypt:Cleopatra;sailed to the Americas in 1492:Christopher Columbus;was the first woman to fly solo across the Atlantic:Amelia Earhart;became President after fighting apartheid in South Africa:Nelson Mandela;was Britain’s Prime Minister for most of World War II:Winston Churchill;invented the telephone:Alexander Graham Bell;developed a practical electric light bulb:Thomas Edison;was the first woman in space:Valentina Tereshkova;was the first person in space:Yuri Gagarin;was a Roman general who crossed the Rubicon:Julius Caesar;wrote the first computer program for a machine:Ada Lovelace;gave the “I Have a Dream” speech:Martin Luther King Jr.;was the first Prime Minister of India:Jawaharlal Nehru;was the first Prime Minister of Sri Lanka, then called Ceylon:D. S. Senanayake;led the first voyage around the world:Ferdinand Magellan;founded the Mongol Empire:Genghis Khan;was the French emperor defeated at Waterloo:Napoleon Bonaparte;was US President during the Civil War:Abraham Lincoln;invented the World Wide Web:Tim Berners-Lee;discovered gravity after an apple fell, as the story goes:Isaac Newton");
+  add(H,"civ",`Which ancient civilisation built the pyramids of Giza?|Ancient Egypt
+Which ancient civilisation built the Colosseum?|Ancient Rome
+Which ancient civilisation held the first Olympic Games?|Ancient Greece
+Which ancient civilisation built Machu Picchu?|The Inca
+Which ancient civilisation built Chichen Itza?|The Maya
+Which ancient empire built Angkor Wat?|The Khmer Empire`);
+  add(H,"war",`Which war was fought between 1914 and 1918?|World War I
+Which war was fought between 1939 and 1945?|World War II
+Which war was fought in the USA between North and South?|American Civil War
+What was the tense rivalry between the USA and the Soviet Union after World War II?|Cold War`);
+  add(H,"hist",`What do we call a person who studies the past by digging up old objects?|Archaeologist|Historian,Geographer,Meteorologist
+What do we call a person who writes about and studies history?|Historian|Archaeologist,Biologist,Astronomer`);
+
+  /* ---------- General Knowledge ---------- */
+  var K="General Knowledge";
+  add(K,"color",`What colour do you get by mixing blue and yellow?|Green
+What colour do you get by mixing red and yellow?|Orange
+What colour do you get by mixing red and blue?|Purple
+What colour do you get by mixing red and white?|Pink`);
+  add(K,"~",`How many days are in a leap year?|366
+How many days are in a week?|7
+How many months are in a year?|12
+How many hours are in a day?|24
+How many minutes are in an hour?|60
+How many seconds are in a minute?|60
+How many days does February have in a common year?|28
+How many players are on a football team on the pitch?|11
+How many strings does a standard guitar have?|6
+How many keys does a full-size piano have?|88
+How many colours are in a rainbow?|7
+How many sides does a stop sign have?|8
+How many rings are in the Olympic symbol?|5
+How many years are between Olympic Games?|4`);
+  add(K,"month",`Which is the shortest month?|February
+Which month comes after June?|July
+Which is the first month of the year?|January
+Which is the last month of the year?|December
+Which month has Halloween?|October`);
+  add(K,"day",`Which day comes after Tuesday?|Wednesday
+Which day comes before Sunday?|Saturday
+Which day comes after Sunday?|Monday
+Which day comes before Saturday?|Friday
+Which day comes after Wednesday?|Thursday`);
+  add(K,"animal",`Which is the largest animal on Earth?|Blue whale
+Which is the fastest land animal?|Cheetah
+Which is the tallest animal?|Giraffe
+Which animal is called the king of the jungle?|Lion
+Which is the largest bird that cannot fly?|Ostrich
+Which animal gives us wool?|Sheep
+Which is the largest land animal?|African elephant
+Which animal has black and white stripes?|Zebra
+Which insect makes honey?|Bee
+Which animal carries its baby in a pouch?|Kangaroo
+Which sea animal has eight arms?|Octopus`);
+  add(K,"food",`Which fruit is said to keep the doctor away?|Apple
+Which long yellow fruit has a peel?|Banana
+Which vegetable can make you cry when you cut it?|Onion
+Which sweet food do bees make?|Honey
+Which grain is used to make most bread?|Wheat
+Which orange vegetable is good for your eyes?|Carrot`);
+  add(K,"sport",`In which sport do players hit a shuttlecock?|Badminton
+In which sport do players use a puck on ice?|Ice hockey
+In which sport can a team score a try?|Rugby
+Which sport uses a bat, a ball and wickets?|Cricket
+In which sport do players shoot hoops?|Basketball
+Which sport is played at Wimbledon?|Tennis
+In which sport do teams hit a ball over a high net with their hands?|Volleyball`);
+  add(K,"inst",`Which instrument has black and white keys?|Piano
+Which string instrument is played with a bow?|Violin
+Which brass instrument do you blow into with buzzing lips?|Trumpet
+Which instrument do you hit with sticks?|Drums
+Which instrument has six strings and frets?|Guitar`);
+  tab(K,"cur","What currency is used in {0}?","Japan:Yen;United States:US dollar;United Kingdom:Pound sterling;India:Indian rupee;Sri Lanka:Sri Lankan rupee;China:Yuan;Russia:Russian ruble;Mexico:Mexican peso;Switzerland:Swiss franc;South Korea:Won;Brazil:Real;Thailand:Baht;South Africa:Rand;Australia:Australian dollar;France:Euro");
+  tab(K,"lang","What is the main language spoken in {0}?","Brazil:Portuguese;Mexico:Spanish;France:French;Germany:German;Italy:Italian;Japan:Japanese;China:Mandarin Chinese;Russia:Russian;Egypt:Arabic;Turkey:Turkish;Greece:Greek;Netherlands:Dutch");
+  tab(K,"country","In which country is {0}?","the Eiffel Tower:France;the Taj Mahal:India;the Colosseum:Italy;Big Ben:United Kingdom;the Statue of Liberty:United States;Machu Picchu:Peru;the Great Wall:China;the Pyramids of Giza:Egypt;the Sydney Opera House:Australia;Christ the Redeemer:Brazil;Angkor Wat:Cambodia;Petra:Jordan;Stonehenge:United Kingdom;the Leaning Tower of Pisa:Italy;the Acropolis:Greece;Sigiriya Rock Fortress:Sri Lanka;Mount Kilimanjaro:Tanzania;Burj Khalifa:United Arab Emirates;Niagara Falls:Canada;the Kremlin:Russia");
+
+  /* ---------- Mathematics (generated) ---------- */
+  (function(){
+    var C="Mathematics",s=7,i,j,a,b;
+    function r(n){s=(s*16807)%2147483647;return s%n}
+    function m(q,v){DB.push({c:C,q:q,a:String(v),p:"#m"})}
+    for(i=2;i<=12;i++)for(j=2;j<=12;j++)m("What is "+i+" × "+j+"?",i*j);
+    for(i=2;i<=12;i++)for(j=2;j<=12;j++)if((i+j)%3===0)m("What is "+i*j+" ÷ "+i+"?",j);
+    for(i=0;i<30;i++){a=11+r(80);b=11+r(80);m("What is "+a+" + "+b+"?",a+b)}
+    for(i=0;i<30;i++){a=40+r(60);b=10+r(a-10);m("What is "+a+" − "+b+"?",a-b)}
+    for(i=2;i<=15;i++){m("What is "+i+" squared?",i*i);m("What is the square root of "+i*i+"?",i)}
+    [["1/2",2],["1/4",4],["1/3",3],["1/5",5],["1/10",10]].forEach(function(f){for(i=0;i<6;i++){var N=f[1]*(2+r(10));m("What is "+f[0]+" of "+N+"?",N/f[1])}});
+    [[10,10],[25,4],[50,2],[20,5]].forEach(function(p){for(i=0;i<7;i++){var B=20*(1+r(25));m("What is "+p[0]+"% of "+B+"?",B/p[1])}});
+    for(i=0;i<8;i++){a=2+r(14);b=2+r(14);m("What is the area of a rectangle "+a+" cm by "+b+" cm? (in cm²)",a*b);m("What is the perimeter of a rectangle "+a+" cm by "+b+" cm? (in cm)",2*(a+b))}
+    for(i=0;i<15;i++){a=11+r(980);if(a%10===5)a++;m("Round "+a+" to the nearest ten.",Math.round(a/10)*10)}
+    for(i=0;i<8;i++){a=120+r(870);if(a%100===50)a++;m("Round "+a+" to the nearest hundred.",Math.round(a/100)*100)}
+    for(i=0;i<15;i++){a=2+r(20);b=a+2+r(30);m("What number plus "+a+" equals "+b+"?",b-a)}
+    for(i=0;i<8;i++){a=2+r(11);b=a*(2+r(10));m("What number times "+a+" equals "+b+"?",b/a)}
+    for(i=0;i<10;i++){a=6+r(45);m("What is double "+a+"?",a*2);m("What is half of "+a*2+"?",a)}
+    add(C,"~",`How many sides does a triangle have?|3
+How many sides does a pentagon have?|5
+How many sides does a hexagon have?|6
+How many sides does a heptagon have?|7
+How many sides does an octagon have?|8
+How many sides does a decagon have?|10
+How many degrees are in a right angle?|90
+How many degrees are in a full turn?|360
+How many degrees do the angles of a triangle add up to?|180
+How many faces does a cube have?|6
+How many edges does a cube have?|12
+How many corners does a cube have?|8
+What number is the Roman numeral X?|10
+What number is the Roman numeral IX?|9
+What number is the Roman numeral XIV?|14
+How many centimetres are in a metre?|100
+How many millimetres are in a centimetre?|10
+How many grams are in a kilogram?|1000`);
+  })();
+
+  /* ---------- Build pools, indexes ---------- */
+  var seenK={},IDX={},tmp=[];
+  DB.forEach(function(it){var k=it.q+"|"+it.a;if(seenK[k])return;seenK[k]=1;tmp.push(it)});
+  DB=tmp;
+  DB.forEach(function(it,i){(IDX[it.c]=IDX[it.c]||[]).push(i);
+    if(it.p.charAt(0)!=="~"&&it.p!=="#m"&&!it.x){var P=POOL[it.p]=POOL[it.p]||[];if(P.indexOf(it.a)<0)P.push(it.a)}});
+
+  var $=function(i){return document.getElementById(i)},R=function(n){return Math.floor(Math.random()*n)};
+  function shuf(a){for(var i=a.length-1;i>0;i--){var j=R(i+1),t=a[i];a[i]=a[j];a[j]=t}return a}
+  function opts(it){
+    var a=it.a,d=[],n=+a,c;
+    if(it.x)d=it.x.split(",");
+    else if(it.p==="#m"){c=[n-1,n+1,n-2,n+2,n-3,n+3,n-5,n+5,n-10,n+10];d=c.filter(function(v){return v>=0&&v!==n}).map(String)}
+    else if(it.p==="~"){var b=Math.max(1,Math.round(n*.1));c=[-1,1,-2,2,-3,3].map(function(k){return n+k*b});d=c.filter(function(v){return v>=0&&v!==n}).map(String)}
+    else if(it.p==="~y"){c=[-10,10,-5,5,-25,25,-50,50].map(function(k){return n+k});d=c.filter(function(v){return v<=2026&&v!==n}).map(String)}
+    else d=POOL[it.p].filter(function(v){return v!==a});
+    d=shuf(d.slice()).slice(0,3);
+    var o=shuf([a].concat(d));return{o:o,i:o.indexOf(a)};
+  }
+
+  /* ---------- State, storage, home ---------- */
+  var CK=["#ff7a59","#ffd23f","#1fb89c","#4aa8ff"],sel={},dur=30,best={},G0=null,tm=0,Qs={};
+  var TARGET_ORIGIN=window.location.origin&&window.location.origin!=="null"?window.location.origin:"*";
+  var edtechraBridge={active:false,mode:"standalone",maxPoints:100,startTime:Date.now(),reported:false};
+  window.addEventListener("message",function(ev){
+    if(TARGET_ORIGIN!=="*"&&ev.origin!==TARGET_ORIGIN)return;
+    var msg=ev.data;if(!msg||msg.type!=="EDTECHRA_INIT_GAME")return;
+    var p=msg.payload&&typeof msg.payload==="object"?msg.payload:msg;
+    edtechraBridge.active=true;edtechraBridge.mode=p.mode||"student";
+    edtechraBridge.maxPoints=Number(p.maxPoints)||100;
+    edtechraBridge.startTime=Date.now();edtechraBridge.reported=false;
+  });
+  function reportToEdtechra(scoreEarned,maxRaw,details){
+    if(edtechraBridge.reported||window.parent===window)return;
+    edtechraBridge.reported=true;
+    var sec=Math.max(1,Math.round((Date.now()-edtechraBridge.startTime)/1000));
+    window.parent.postMessage({type:"EDTECHRA_GAME_COMPLETE",payload:{gameId:"rapid-knowledge-challenge",scoreEarned:scoreEarned,maxAvailablePoints:maxRaw,completionStatus:"completed",timeTakenSeconds:sec,details:details}},TARGET_ORIGIN);
+  }
+  CATS.forEach(function(c){sel[c[0]]=true});
+  try{var sv=JSON.parse(localStorage.getItem("rkc")||"{}");best=sv.best||{};if(sv.dur===60)dur=60;if(sv.sel){CATS.forEach(function(c){sel[c[0]]=!!sv.sel[c[0]]})}}catch(e){}
+  function save(){try{localStorage.setItem("rkc",JSON.stringify({best:best,dur:dur,sel:sel}))}catch(e){}}
+  function chosen(){return CATS.map(function(c){return c[0]}).filter(function(k){return sel[k]})}
+  function renderHome(){
+    $("cats").innerHTML='<button class="chip" data-c="*" aria-pressed="'+(chosen().length===CATS.length)+'">All <small>'+DB.length+'</small></button>'+CATS.map(function(c){return '<button class="chip" data-c="'+c[0]+'" aria-pressed="'+!!sel[c[0]]+'">'+c[1]+" "+c[0]+'<small>'+IDX[c[0]].length+'</small></button>'}).join("");
+    document.querySelectorAll("#durs .chip").forEach(function(b){b.setAttribute("aria-pressed",+b.dataset.d===dur?"true":"false")});
+    $("hnum").innerHTML=dur+"<small>seconds</small>";
+    $("best").textContent=best[dur]?"Your best for "+dur+" seconds: "+best[dur]+" points":"Pick your categories and press Start.";
+    $("start").disabled=chosen().length===0;
+  }
+  function show(id){["home","game","end"].forEach(function(x){$(x).hidden=x!==id});window.scrollTo(0,0)}
+  function home(){clearInterval(tm);G0=null;show("home");renderHome()}
+
+  /* ---------- Game ---------- */
+  var CIRC=276.5;
+  function ring(){var t=G0.t;$("gp").style.strokeDashoffset=(CIRC*(1-Math.max(0,t)/G0.dur)).toFixed(1);$("gnum").textContent=Math.max(0,Math.ceil(t));$("gring").classList.toggle("low",t<=5)}
+  function start(){
+    var cs=chosen();if(!cs.length)return;
+    save();Qs={};
+    edtechraBridge.startTime=Date.now();edtechraBridge.reported=false;
+    G0={dur:dur,t:dur,score:0,ok:0,tot:0,streak:0,bs:0,miss:[],cs:cs,lock:false,cur:null};
+    $("sc").textContent=0;$("st").textContent=0;$("live").textContent="";
+    show("game");ask();ring();
+    clearInterval(tm);tm=setInterval(function(){G0.t-=.1;ring();if(G0.t<=0)finish()},100);
+  }
+  function ask(){
+    var c=G0.cs[R(G0.cs.length)];
+    if(!Qs[c]||!Qs[c].length)Qs[c]=shuf(IDX[c].slice());
+    var it=DB[Qs[c].pop()],o=opts(it);
+    G0.cur={it:it,o:o.o,i:o.i};G0.lock=false;
+    var ic=CATS.filter(function(x){return x[0]===c})[0][1];
+    $("tag").textContent=ic+" "+c;$("q").textContent=it.q;
+    $("opts").classList.remove("lock");
+    $("opts").innerHTML=o.o.map(function(t,i){return '<button class="opt" data-i="'+i+'"><b style="background:'+CK[i]+'">'+"ABCD"[i]+'</b><span>'+t.replace(/&/g,"&amp;").replace(/</g,"&lt;")+'</span></button>'}).join("");
+  }
+  function answer(i){
+    if(!G0||G0.lock||G0.t<=0)return;
+    G0.lock=true;$("opts").classList.add("lock");
+    var g=G0,cur=G0.cur,ok=i===cur.i,bs=document.querySelectorAll("#opts .opt");
+    G0.tot++;
+    bs[cur.i].classList.add("ok");
+    if(ok){
+      G0.streak++;G0.ok++;G0.bs=Math.max(G0.bs,G0.streak);
+      var pts=10+2*Math.min(G0.streak-1,5);G0.score+=pts;
+      $("live").textContent="Correct! +"+pts;
+      setTimeout(function(){if(G0===g&&g.t>0)ask()},300);
+    }else{
+      bs[i].classList.add("no");bs.forEach(function(b,k){if(k!==i&&k!==cur.i)b.classList.add("dim")});
+      G0.streak=0;G0.t=Math.max(0,G0.t-2);ring();
+      G0.miss.push({q:cur.it.q,a:cur.o[cur.i],y:cur.o[i]});
+      $("live").textContent="Not quite. The answer is "+cur.o[cur.i]+". Lost 2 seconds.";
+      setTimeout(function(){if(G0===g&&g.t>0)ask()},1000);
+    }
+    $("sc").textContent=G0.score;$("st").textContent=G0.streak;
+    var sc=$("sc");sc.classList.remove("pop");void sc.offsetWidth;sc.classList.add("pop");
+  }
+  function esc(t){return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;")}
+  function finish(){
+    clearInterval(tm);var g=G0;g.lock=true;
+    var nb=g.score>(best[g.dur]||0);if(nb){best[g.dur]=g.score;save()}
+    var acc=g.tot?Math.round(g.ok/g.tot*100):0;
+    reportToEdtechra(g.score,Math.max(g.score,Math.max(100,g.tot*10)),{
+      rawScore:g.score,
+      correctAnswers:g.ok,
+      totalQuestions:g.tot,
+      accuracyPct:acc,
+      bestStreak:g.bs,
+      durationSeconds:g.dur
+    });
+    $("end").innerHTML='<h1>Time’s up!</h1><div class="big">'+g.score+'</div><div class="sub">points</div>'+(nb&&g.score>0?'<div class="nb">New best!</div>':"")+
+      '<div class="grid"><div><b>'+g.ok+'</b>correct</div><div><b>'+g.tot+'</b>answered</div><div><b>'+acc+'%</b>accuracy</div><div><b>'+g.bs+'</b>best streak</div></div>'+
+      (g.miss.length?'<div class="lbl" style="text-align:left">Review your misses</div><ul class="miss">'+g.miss.slice(0,10).map(function(m){return '<li>'+esc(m.q)+'<br>Answer: <b>'+esc(m.a)+'</b> (you chose '+esc(m.y)+')</li>'}).join("")+'</ul>':'<p class="sub">No misses. Perfect round!</p>')+
+      '<button class="go" id="again">Play again</button><button class="go alt" id="home2">Home</button>';
+    $("again").onclick=start;$("home2").onclick=home;
+    show("end");$("again").focus();
+  }
+
+  $("durs").addEventListener("click",function(e){var b=e.target.closest(".chip");if(!b)return;dur=+b.dataset.d;save();renderHome()});
+  $("cats").addEventListener("click",function(e){var b=e.target.closest(".chip");if(!b)return;var c=b.dataset.c;
+    if(c==="*"){var all=chosen().length!==CATS.length;CATS.forEach(function(x){sel[x[0]]=all})}else sel[c]=!sel[c];
+    renderHome()});
+  $("start").addEventListener("click",start);
+  $("opts").addEventListener("click",function(e){var b=e.target.closest(".opt");if(b)answer(+b.dataset.i)});
+  document.addEventListener("keydown",function(e){
+    if(G0&&!$("game").hidden){var k=e.key.toLowerCase(),i="1234".indexOf(k);if(i<0)i="abcd".indexOf(k);if(i>=0)answer(i)}
+    else if(e.key==="Enter"&&!$("home").hidden&&e.target.tagName!=="BUTTON")start();
+  });
+  renderHome();
+  if(window.parent!==window){window.parent.postMessage({type:"EDTECHRA_GAME_READY",gameId:"rapid-knowledge-challenge"},TARGET_ORIGIN);}
+})();
+</script>
+</body>
+</html>

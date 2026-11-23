@@ -1,0 +1,140 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0c2e"><title>Memory Lab</title>
+<style>
+:root{--bg1:#0d0c2e;--bg2:#2a1b6e;--tx:#F4F3FF;--mut:#B7B4E8;--cd:#ffffff14;--bd:#ffffff2e;--card:#ffffff12;--sun:#FFC247;--mint:#5BE3B0;--coral:#FF6B7A;--ink:#1a1240;color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg1:#F4F6FB;--bg2:#E3E8F7;--tx:#1B1F3B;--mut:#5A607A;--cd:#fff;--bd:#CBD2E3;--card:#fff;--sun:#F2A900;--mint:#1FB584;--coral:#E8475A;color-scheme:light}}
+:root[data-theme="dark"]{--bg1:#0d0c2e;--bg2:#2a1b6e}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;min-height:100%;background:linear-gradient(180deg,var(--bg1),var(--bg2));color:var(--tx);font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overscroll-behavior:none;-webkit-user-select:none;user-select:none;display:grid;place-items:center}
+#app{width:100%;max-width:520px;padding:16px}
+.view{animation:in .5s cubic-bezier(.2,.8,.2,1) both}@keyframes in{from{opacity:0;transform:translateY(20px) scale(.97)}}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:26px;padding:clamp(20px,5vw,32px);box-shadow:0 20px 50px -25px #0008}
+.c{text-align:center}
+h1{margin:6px 0 8px;font-size:clamp(32px,8vw,44px);letter-spacing:-.02em}p{color:var(--mut);line-height:1.5;margin:0 0 20px}
+.logo{font-size:56px;animation:pop .7s cubic-bezier(.2,1.4,.4,1) both}@keyframes pop{from{transform:scale(.3);opacity:0}}
+.lbl{font-size:13px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 8px;text-align:left}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+button{font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.chip{flex:1;min-width:0;padding:12px 10px;border-radius:14px;border:1px solid var(--bd);background:var(--cd);font-weight:600;transition:transform .2s cubic-bezier(.2,1.4,.4,1)}
+.chip:active{transform:scale(.95)}.chip.on{background:var(--sun);color:var(--ink);border-color:var(--sun)}
+.chip small{display:block;font-weight:400;font-size:12px;opacity:.8;margin-top:2px}
+.btn{width:100%;margin-top:22px;padding:16px;border:0;border-radius:999px;background:var(--sun);color:var(--ink);font-weight:800;font-size:18px;box-shadow:0 10px 28px -8px #ffc247aa;transition:transform .2s cubic-bezier(.2,1.4,.4,1)}.btn:active{transform:scale(.96)}
+.ghost{background:transparent;border:1px solid var(--bd);color:var(--tx);box-shadow:none;margin-top:10px}
+.stat{display:flex;justify-content:space-between;gap:10px;margin-top:18px;padding:12px 16px;border-radius:14px;background:var(--cd);border:1px solid var(--bd);font-size:14px;color:var(--mut)}.stat b{color:var(--tx)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.ib{width:42px;height:42px;border-radius:50%;border:1px solid var(--bd);background:var(--cd);font-size:16px;display:grid;place-items:center;padding:0}
+.pill{padding:8px 14px;border-radius:99px;background:var(--cd);border:1px solid var(--bd);font-weight:700}
+.hr{display:flex;gap:6px;font-size:24px;color:var(--coral)}.hr i{font-style:normal;transition:transform .3s,opacity .3s}.hr i.x{opacity:.2;transform:scale(.7)}
+.meta{min-height:24px;color:var(--mut);font-weight:600;margin:4px 0 14px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:min(78vw,330px);margin:0 auto 18px}
+.tile{aspect-ratio:1;border-radius:22px;border:1px solid var(--bd);background:var(--cd);padding:0;transition:transform .15s cubic-bezier(.2,1.4,.4,1),background .15s,box-shadow .15s}
+.tile.on{background:var(--sun);transform:scale(1.07);box-shadow:0 0 40px var(--sun)}.tile.good{background:var(--mint)}.tile.bad{background:var(--coral);animation:sh .4s}
+@keyframes sh{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.pr{height:6px;border-radius:6px;background:var(--cd);overflow:hidden}.pr i{display:block;height:100%;background:linear-gradient(90deg,var(--mint),var(--sun));transition:width .5s}
+.stars{display:flex;gap:10px;justify-content:center;margin:10px 0}.st{font-size:68px;line-height:1;color:var(--bd);animation:pop .7s cubic-bezier(.2,1.4,.4,1) both}.st.on{color:var(--sun);text-shadow:0 0 28px #ffc247aa}
+.big{font-size:56px;font-weight:800;color:var(--sun);line-height:1}.nb{display:inline-block;margin:10px 0 0;padding:5px 14px;border-radius:99px;background:var(--mint);color:#06281c;font-weight:800;font-size:13px}
+.pt{position:fixed;border-radius:50%;pointer-events:none;z-index:9}
+:focus-visible{outline:3px solid var(--mint);outline-offset:3px}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style></head><body><div id="app"></div>
+<script>
+const $=s=>document.querySelector(s),app=$('#app'),sl=ms=>new Promise(r=>setTimeout(r,ms));
+let S={};try{S=JSON.parse(localStorage.getItem('memlab')||'{}')}catch(e){}
+S.best=S.best||[0,0];S.hs=S.hs||[0,0];S.games=S.games||0;S.speed=S.speed==null?1:S.speed;S.mode=S.mode|0;
+const save=()=>{try{localStorage.setItem('memlab',JSON.stringify(S))}catch(e){}};
+const view=h=>{app.innerHTML=`<div class="view">${h}</div>`};
+
+/* EdTechra Bridge */
+const TARGET_ORIGIN=window.location.origin&&window.location.origin!=='null'?window.location.origin:'*';
+const edtechraBridge={active:false,mode:'standalone',maxPoints:100,startTime:Date.now(),reported:false};
+window.addEventListener('message',ev=>{
+  if(TARGET_ORIGIN!=='*'&&ev.origin!==TARGET_ORIGIN)return;
+  const msg=ev.data;
+  if(!msg||msg.type!=='EDTECHRA_INIT_GAME')return;
+  const p=msg.payload&&typeof msg.payload==='object'?msg.payload:msg;
+  edtechraBridge.active=true;
+  edtechraBridge.mode=p.mode||'student';
+  edtechraBridge.maxPoints=Number(p.maxPoints)||100;
+  edtechraBridge.startTime=Date.now();
+  edtechraBridge.reported=false;
+});
+function reportCompletionToEdtechra(score,ml,stars,roundsAttempted,roundsPassed){
+  if(edtechraBridge.reported||window.parent===window)return;
+  edtechraBridge.reported=true;
+  const timeTakenSeconds=Math.max(1,Math.round((Date.now()-edtechraBridge.startTime)/1000));
+  const maxRaw=Math.max(score,300);
+  const acc=roundsAttempted>0?Math.round((roundsPassed/roundsAttempted)*100):0;
+  window.parent.postMessage({
+    type:'EDTECHRA_GAME_COMPLETE',
+    payload:{
+      gameId:'memory-lab',
+      scoreEarned:score,
+      maxAvailablePoints:maxRaw,
+      completionStatus:'completed',
+      timeTakenSeconds,
+      details:{
+        rawScore:score,
+        levelReached:ml,
+        longestPattern:ml,
+        bestPattern:S.best[S.mode]||ml,
+        mode:MODES[S.mode].name,
+        speed:SPN[S.speed],
+        accuracyPct:acc,
+        roundsPassed,
+        roundsAttempted,
+        stars
+      }
+    }
+  },TARGET_ORIGIN);
+}
+
+/* sound */
+let AC,mute=false;const nf=n=>261.63*Math.pow(2,n/12),PS=[0,2,4,7,9,12,14,16,19];
+function tone(f,d=.5,v=.12,ty='sine',dl=0,sl2=0){if(mute)return;try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();if(AC.state=='suspended')AC.resume();const o=AC.createOscillator(),g=AC.createGain(),s=AC.currentTime+dl;o.type=ty;o.frequency.setValueAtTime(f,s);sl2&&o.frequency.exponentialRampToValueAtTime(f*sl2,s+d);g.gain.setValueAtTime(0,s);g.gain.linearRampToValueAtTime(v,s+.012);g.gain.exponentialRampToValueAtTime(.0001,s+d);o.connect(g).connect(AC.destination);o.start(s);o.stop(s+d+.05)}catch(e){}}
+const tn=i=>tone(nf(PS[i]),.55,.14),chime=()=>[0,4,7,12].forEach((n,i)=>tone(nf(n),.55,.09,'sine',i*.07)),bad=()=>tone(220,.35,.09,'sine',0,.7),fan=()=>[0,4,7,12,16].forEach((n,i)=>tone(nf(n),.7,.07,'triangle',i*.09));
+function burst(el){if(matchMedia('(prefers-reduced-motion:reduce)').matches)return;const r=el.getBoundingClientRect(),C=['#FFC247','#5BE3B0','#FF6B7A','#fff'];for(let i=0;i<24;i++){const d=document.createElement('i'),z=4+Math.random()*6,a=Math.random()*6.28,k=60+Math.random()*120;d.className='pt';d.style.cssText=`left:${r.left+r.width/2}px;top:${r.top+r.height/2}px;width:${z}px;height:${z}px;background:${C[i%4]}`;document.body.appendChild(d);d.animate([{transform:'none',opacity:1},{transform:`translate(${Math.cos(a)*k}px,${Math.sin(a)*k+40}px) scale(0)`,opacity:0}],{duration:800+Math.random()*500,easing:'cubic-bezier(.2,.8,.2,1)'}).onfinish=()=>d.remove()}}
+document.addEventListener('pointerdown',e=>{if(e.target.closest('button')&&!e.target.closest('.tile'))tone(480,.12,.07,'sine',0,1.7);if(e.target.closest('button')&&navigator.vibrate)navigator.vibrate(6)});
+/* data */
+const SP=[{on:800,gap:320},{on:580,gap:230},{on:400,gap:150}];
+const MODES=[
+  {name:'Forward',icon:'➡️',desc:'Repeat the pattern in the same order.'},
+  {name:'Backward',icon:'⬅️',desc:'Repeat the pattern in reverse order.'}
+];
+const SPN=['Relaxed','Normal','Fast'];
+let TK=0;
+function home(){TK++;const m=S.mode;
+view(`<div class="card c"><div class="logo">🧠</div><h1>Memory Lab</h1><p>Watch the tiles light up, then repeat the pattern. Each win makes it one step longer.</p>
+<div class="lbl">Mode</div><div class="chips" id="md">${MODES.map((x,i)=>`<button class="chip ${i==m?'on':''}" data-i="${i}">${x.icon} ${x.name}<small>Best: ${S.best[i]}</small></button>`).join('')}</div>
+<div class="lbl">Speed</div><div class="chips" id="sp">${SPN.map((x,i)=>`<button class="chip ${i==S.speed?'on':''}" data-i="${i}">${x}</button>`).join('')}</div>
+<div class="stat"><span>🏆 High score: <b>${S.hs[m]}</b></span><span>🎮 Games: <b>${S.games}</b></span></div>
+<button class="btn" id="go">Play</button><button class="btn ghost" id="mt">${mute?'🔇':'🔊'} Sound</button></div>`);
+$('#md').onclick=e=>{const b=e.target.closest('.chip');if(b){S.mode=+b.dataset.i;save();home()}};
+$('#sp').onclick=e=>{const b=e.target.closest('.chip');if(b){S.speed=+b.dataset.i;save();home()}};
+$('#mt').onclick=()=>{mute=!mute;home()};$('#go').onclick=play}
+async function play(){const my=++TK,c=()=>my!==TK,sp=SP[S.speed],bw=S.mode==1,MAX=12;let lives=3,score=0,len=bw?2:3,maxLen=0,roundsAttempted=0,roundsPassed=0;
+edtechraBridge.startTime=Date.now();edtechraBridge.reported=false;
+view(`<div class="top"><button class="ib" id="x" aria-label="Home">✕</button><div class="hr" id="hr"></div><div class="pill">⭐ <b id="sc">0</b></div></div><div class="card c"><div class="meta" id="mm"></div><div class="grid">${[...Array(9)].map((_,i)=>`<button class="tile" data-i="${i}" aria-label="Tile ${i+1}"></button>`).join('')}</div><div class="meta" id="mr"></div><div class="pr"><i id="pb" style="width:0"></i></div></div>`);
+$('#x').onclick=home;const T=[...app.querySelectorAll('.tile')],hr=()=>$('#hr').innerHTML=[0,1,2].map(i=>`<i class="${i<lives?'':'x'}">♥</i>`).join('');hr();
+const round=async(n,prac)=>{$('#mm').textContent='Watch closely';$('#mr').textContent=(prac?'Practice round · ':'')+'Pattern of '+n+(bw?' · backwards':'');
+T.forEach(x=>{x.disabled=true;x.onpointerdown=null});await sl(800);if(c())return;
+const seq=[];while(seq.length<n){const k=Math.random()*9|0;if(k!==seq[seq.length-1])seq.push(k)}const ex=bw?[...seq].reverse():seq;
+for(const i of seq){T[i].classList.add('on');tn(i);await sl(sp.on);T[i].classList.remove('on');await sl(sp.gap);if(c())return}
+$('#mm').textContent=bw?'Your turn, backwards':'Your turn';
+const ok=await new Promise(res=>{let p=0;T.forEach(x=>{x.disabled=false;x.onpointerdown=()=>{const i=+x.dataset.i;x.classList.add('on');tn(i);setTimeout(()=>x.classList.remove('on'),200);if(i!==ex[p])return res(false);$('#pb').style.width=++p/ex.length*100+'%';if(p===ex.length)res(true)}})});
+if(c())return;T.forEach(x=>{x.onpointerdown=null;x.disabled=true;x.classList.add(ok?'good':'bad')});
+if(ok){chime();burst($('.grid'))}else bad();$('#mr').textContent=ok?'Locked in!':'Not quite';await sl(950);if(c())return;T.forEach(x=>x.classList.remove('good','bad'));$('#pb').style.width='0';return ok};
+if(await round(2,true)===undefined)return;
+while(lives>0&&len<=MAX){const ok=await round(len);if(ok===undefined)return;roundsAttempted++;if(ok){roundsPassed++;score+=len*10;maxLen=len;len++;$('#sc').textContent=score}else{lives--;hr()}}
+S.games++;const nb=score>S.hs[S.mode];S.hs[S.mode]=Math.max(S.hs[S.mode],score);S.best[S.mode]=Math.max(S.best[S.mode],maxLen);save();done(score,maxLen,nb,roundsAttempted,roundsPassed)}
+function done(score,ml,nb,roundsAttempted,roundsPassed){const st=()=>S.mode==1?(ml>=6?3:ml>=4?2:1):(ml>=7?3:ml>=5?2:1),n=st();fan();
+view(`<div class="card c"><div class="meta">${MODES[S.mode].name} · ${SPN[S.speed]}</div><h1>${ml>=12?'Perfect memory!':'Round over'}</h1><div class="stars">${[0,1,2].map(i=>`<span class="st ${i<n?'on':''}" style="animation-delay:${.2+i*.2}s">★</span>`).join('')}</div>
+<div class="big">${score}</div><div class="meta">points</div>${nb?`<span class="nb">🏆 New high score!</span>`:''}
+<div class="stat"><span>Longest pattern: <b>${ml}</b></span><span>Best: <b>${S.best[S.mode]}</b></span></div>
+<button class="btn" id="ag">Play again</button><button class="btn ghost" id="hm">Home</button></div>`);
+reportCompletionToEdtechra(score,ml,n,roundsAttempted,roundsPassed);
+for(let i=0;i<n;i++)setTimeout(()=>tn(i*2+2),300+i*200);setTimeout(()=>burst($('.stars')),400);$('#ag').onclick=play;$('#hm').onclick=home}
+home();
+if(window.parent!==window){window.parent.postMessage({type:'EDTECHRA_GAME_READY',gameId:'memory-lab'},TARGET_ORIGIN);}
+</script></body></html>

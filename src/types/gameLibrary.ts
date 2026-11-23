@@ -5,7 +5,35 @@ export type GameId =
   | 'classroom-jigsaw'
   | 'lumina-words'
   | 'snake-spell'
-  | 'connections';
+  | 'connections'
+  | 'chrono-vault'
+  | 'memory-lab'
+  | 'math-sprint'
+  | 'rapid-knowledge-challenge'
+  | 'box-breathing'
+  | 'missing-piece'
+  | 'number-memory-challenge'
+  | 'stroop-challenge';
+
+export type ActivityCategory =
+  | 'brain-memory'
+  | 'focus-speed'
+  | 'mathematics'
+  | 'knowledge'
+  | 'language'
+  | 'mindfulness'
+  | 'problem-solving'
+  | 'creativity'
+  | 'competitions';
+
+export type ActivityType =
+  | 'game'
+  | 'cognitive_training'
+  | 'mindfulness'
+  | 'knowledge_challenge'
+  | 'competition';
+
+export type ActivityDifficulty = 'Beginner' | 'Adaptive' | 'Intermediate' | 'All Levels' | 'Gentle';
 
 export type LevelUnlockMode = 'sequential' | 'scheduled' | 'daily_limit';
 
@@ -156,6 +184,12 @@ export interface ConnectionsConfig {
   groups: ConnectionsGroupItem[];
 }
 
+export interface StandaloneTrainingConfig {
+  title?: string;
+  teacherNote?: string;
+  focusGoal?: string;
+}
+
 export type GameConfig =
   | LiquidSentencesConfig
   | SaveTheBalloonConfig
@@ -163,7 +197,8 @@ export type GameConfig =
   | ClassroomJigsawConfig
   | LuminaWordsConfig
   | SnakeSpellConfig
-  | ConnectionsConfig;
+  | ConnectionsConfig
+  | StandaloneTrainingConfig;
 
 export interface GameLevelDefinition {
   id: string;
@@ -181,11 +216,19 @@ export interface GameCatalogItem {
   name: string;
   shortDescription: string;
   category: string;
+  categoryId: ActivityCategory;
+  activityType: ActivityType;
+  estimatedDuration?: string;
+  difficulty?: ActivityDifficulty;
   thumbnailUrl: string;
   accentColor: string;
   badgeLabel: string;
   htmlPath: string;
   defaultPoints: number;
+  isStandaloneBuiltIn?: boolean;
+  supportsScoring?: boolean;
+  defaultLeaderboardEnabled?: boolean;
+  resultMetrics?: string[];
 }
 
 export interface GameAssignmentSettings {
@@ -193,6 +236,16 @@ export interface GameAssignmentSettings {
   library_game_id?: string;
   game_id: GameId;
   game_name: string;
+  activity_type?: ActivityType;
+  category_id?: ActivityCategory;
+  teacher_instructions?: string;
+  start_date?: string | null;
+  max_attempts?: number | null;
+  is_compulsory?: boolean;
+  show_scores_to_students?: boolean;
+  leaderboard_enabled?: boolean;
+  assigned_student_ids?: string[] | null;
+  supports_scoring?: boolean;
   unlock_mode?: LevelUnlockMode;
   daily_limit?: number;
   levels?: GameLevelDefinition[];
@@ -223,6 +276,8 @@ export interface CompletedLevelRecord {
   percentage: number;
   timeTakenSeconds: number;
   completedAt: string;
+  attempts?: number;
+  supportsScoring?: boolean;
   details?: Record<string, unknown> | null;
 }
 

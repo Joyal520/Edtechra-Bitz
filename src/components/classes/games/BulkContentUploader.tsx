@@ -112,6 +112,17 @@ function getTemplateMeta(gameId: GameId) {
         secondaryLabel: 'Four Words (comma-separated)',
         minPrimaryWords: 1
       };
+    default:
+      return {
+        title: 'Bulk Upload Items',
+        formatHint: 'One item per line. Optional note after "|" or comma.',
+        placeholder: 'Item 1 | Note\nItem 2 | Note',
+        sampleFilename: 'activity-template.csv',
+        sampleContent: 'Item 1 | Note\nItem 2 | Note\n',
+        primaryLabel: 'Item',
+        secondaryLabel: 'Note (Optional)',
+        minPrimaryWords: 1
+      };
   }
 }
 

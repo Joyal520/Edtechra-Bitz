@@ -32,6 +32,7 @@ import { GameLevelSelectModal } from '@/components/classes/games/GameLevelSelect
 import { CourseGamePlayerModal } from '@/components/course-studio/games/CourseGamePlayerModal';
 import type {
   CompletedLevelRecord,
+  GameAssignmentSettings,
   GameConfig,
   GameId,
   GameLevelDefinition,
@@ -42,6 +43,8 @@ import {
   evaluateLevelsForStudent,
   getLevelQuestionCount,
   isAssignmentPublished,
+  isAssignmentStarted,
+  isStudentAssignedToActivity,
   normalizeAssignmentLevels,
   parseStudentLevelProgress
 } from '@/utils/gameLevelUtils';
@@ -791,6 +794,21 @@ export const ClassroomDetailPage: React.FC = () => {
     if (!gameAssignment?.settings?.is_game_library) return;
     if (isTeacher) {
       setActiveGameAssignment(gameAssignment);
+      return;
+    }
+
+    if (!isStudentAssignedToActivity(gameAssignment, user?.id)) {
+      setToastMessage('This activity is assigned to selected students only.');
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
+
+    if (!isAssignmentStarted(gameAssignment)) {
+      const startAt = gameAssignment.settings?.start_date
+        ? new Date(gameAssignment.settings.start_date).toLocaleString()
+        : 'a scheduled date';
+      setToastMessage(`This activity unlocks on ${startAt}.`);
+      setTimeout(() => setToastMessage(null), 4500);
       return;
     }
 
@@ -1938,12 +1956,12 @@ export const ClassroomDetailPage: React.FC = () => {
                 </div>
                 <div className="space-y-1 text-center">
                   <h3 className="text-sm sm:text-[15px] font-black text-slate-900 group-hover:text-amber-950 transition-colors">
-                    Games & Competitions
+                    Games & Training
                   </h3>
                   <p className="text-xs text-slate-500 font-medium leading-relaxed line-clamp-2">
                     {isTeacher
-                      ? 'Create educational games or AI-evaluated classroom challenges.'
-                      : 'Play assigned educational games and join classroom challenges.'}
+                      ? 'Assign educational games, brain training, mindfulness activities, skill challenges, and competitions.'
+                      : 'Play assigned educational games, brain training, mindfulness activities, skill challenges, and competitions.'}
                   </p>
                 </div>
               </div>
@@ -1952,7 +1970,7 @@ export const ClassroomDetailPage: React.FC = () => {
                 onClick={() => setChallengeListModalOpen(true)}
                 className="btn-liquid-amber w-full py-2.5 px-4 text-xs font-bold"
               >
-                {isTeacher ? 'Games & Competitions' : 'Games & Challenges'}
+                Games & Training
               </button>
             </div>
 
@@ -2796,7 +2814,9 @@ export const ClassroomDetailPage: React.FC = () => {
         onClose={() => setChallengeListModalOpen(false)}
         onUpdated={() => loadAllClassroomData(true)}
         gameAssignments={assignments.filter(
-          (a) => Boolean(a.settings?.is_game_library) && (isTeacher || isAssignmentPublished(a))
+          (a) =>
+            Boolean(a.settings?.is_game_library) &&
+            (isTeacher || (isAssignmentPublished(a) && isStudentAssignedToActivity(a, user?.id)))
         )}
         onTogglePublish={handleToggleAssignmentPublish}
         publishingAssignmentId={publishingAssignmentId}
@@ -2952,7 +2972,7 @@ export const ClassroomDetailPage: React.FC = () => {
             });
           }}
           onPublished={(targetCid) => {
-            setToastMessage('Game assigned and announced to classroom!');
+            setToastMessage('Activity assigned and announced to classroom!');
             setTimeout(() => setToastMessage(null), 4000);
             if (targetCid === classroom.id) {
               loadAllClassroomData(true);
@@ -3099,6 +3119,9 @@ export const ClassroomDetailPage: React.FC = () => {
             levelTitle={activeGamePlay.levelTitle}
             questionCount={activeGamePlay.questionCount}
             maxPoints={activeGamePlay.maxPoints}
+            assignmentSettings={(playAssignment?.settings as GameAssignmentSettings) || undefined}
+            assignmentInstructions={playAssignment?.instructions}
+            assignmentDueDate={playAssignment?.due_date}
             isPreview={activeGamePlay.isPreview}
             isUnavailable={playUnavailable}
             alreadyCompletedScore={activeGamePlay.alreadyCompletedScore}
@@ -3138,10 +3161,15 @@ export const ClassroomDetailPage: React.FC = () => {
                   }));
                 }
 
+                const isNonScoring =
+                  playAssignment?.settings?.supports_scoring === false ||
+                  (result.maxPoints === 0 && result.pointsAwarded === 0);
                 setToastMessage(
-                  result.alreadySubmitted
-                    ? 'Game completed (score already recorded).'
-                    : `+${result.pointsAwarded} points added to leaderboard!`
+                  isNonScoring
+                    ? 'Activity session completed and recorded!'
+                    : result.alreadySubmitted
+                      ? 'Activity completed (score already recorded).'
+                      : `+${result.pointsAwarded} points added to leaderboard!`
                 );
                 setTimeout(() => setToastMessage(null), 4000);
                 loadAllClassroomData(true);

@@ -8,13 +8,14 @@ import {
   Trophy,
   X
 } from 'lucide-react';
-import { getGameCatalogItem } from '@/services/gameLibraryService';
+import { ACTIVITY_TYPE_LABELS, getGameCatalogItem } from '@/services/gameLibraryService';
 import type { Assignment } from '@/types/classroom';
-import type { GameId, GameLevelDefinition, LevelUnlockMode } from '@/types/gameLibrary';
+import type { ActivityType, GameId, GameLevelDefinition, LevelUnlockMode } from '@/types/gameLibrary';
 import {
   evaluateLevelsForStudent,
   getLevelQuestionCount,
   isAssignmentPublished,
+  isAssignmentStarted,
   normalizeAssignmentLevels,
   parseStudentLevelProgress
 } from '@/utils/gameLevelUtils';
@@ -39,11 +40,18 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
   if (!isOpen) return null;
 
   const isPublished = !isUnavailable && isAssignmentPublished(assignment);
+  const started = isAssignmentStarted(assignment);
   const gameId = (assignment.settings?.game_id as GameId) || 'liquid-sentences';
   const catalogItem = getGameCatalogItem(gameId);
   const levels = normalizeAssignmentLevels(assignment);
   const unlockMode: LevelUnlockMode = assignment.settings?.unlock_mode || 'sequential';
   const dailyLimit = Number(assignment.settings?.daily_limit || 1);
+  const supportsScoring = assignment.settings?.supports_scoring !== false && catalogItem.supportsScoring !== false;
+  const showScores = assignment.settings?.show_scores_to_students !== false;
+  const isCompulsory = assignment.settings?.is_compulsory !== false;
+  const maxAttempts = assignment.settings?.max_attempts ?? 1;
+  const teacherInstructions = assignment.settings?.teacher_instructions || assignment.instructions || '';
+  const actType = (assignment.settings?.activity_type || catalogItem.activityType) as ActivityType;
 
   const { completedMap, totalPointsEarned, completedCount } = parseStudentLevelProgress(
     assignment.my_submission
@@ -70,27 +78,42 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
             <img
               src={catalogItem.thumbnailUrl}
               alt={catalogItem.name}
-              className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover shrink-0 border border-sky-200 shadow-sm"
+              className="w-24 sm:w-28 aspect-video rounded-2xl object-cover shrink-0 border border-sky-200 shadow-sm"
             />
             <div className="min-w-0 space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-sky-600 text-white">
                   {catalogItem.name}
                 </span>
                 <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                  {unlockMode === 'sequential'
-                    ? 'Sequential Unlock'
-                    : unlockMode === 'scheduled'
-                    ? 'Scheduled Unlock'
-                    : `Daily Limit: ${dailyLimit}/day`}
+                  {ACTIVITY_TYPE_LABELS[actType] || 'Activity'}
                 </span>
+                <span
+                  className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                    isCompulsory
+                      ? 'bg-rose-50 text-rose-700 border-rose-200'
+                      : 'bg-teal-50 text-teal-700 border-teal-200'
+                  }`}
+                >
+                  {isCompulsory ? 'Compulsory' : 'Optional'}
+                </span>
+                {levels.length > 1 && (
+                  <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                    {unlockMode === 'sequential'
+                      ? 'Sequential Unlock'
+                      : unlockMode === 'scheduled'
+                      ? 'Scheduled Unlock'
+                      : `Daily Limit: ${dailyLimit}/day`}
+                  </span>
+                )}
               </div>
               <h2 className="text-lg sm:text-xl font-black text-slate-900 truncate">
                 {assignment.title}
               </h2>
               <p className="text-xs font-semibold text-slate-600">
                 Your Progress: {completedCount} of {levels.length}{' '}
-                {levels.length === 1 ? 'Level' : 'Levels'} Completed
+                {levels.length === 1 ? (supportsScoring ? 'Level' : 'Session') : 'Levels'} Completed
+                {assignment.due_date ? ` • Due ${new Date(assignment.due_date).toLocaleString()}` : ''}
               </p>
             </div>
           </div>
@@ -120,14 +143,23 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-200 shadow-2xs">
-            <Trophy className="w-4 h-4 text-amber-500" />
-            <div className="text-xs">
-              <span className="font-black text-slate-900">{totalPointsEarned}</span>
-              <span className="text-slate-500 font-semibold"> / {totalAvailablePoints} pts</span>
+          {supportsScoring && showScores && (
+            <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-200 shadow-2xs">
+              <Trophy className="w-4 h-4 text-amber-500" />
+              <div className="text-xs">
+                <span className="font-black text-slate-900">{totalPointsEarned}</span>
+                <span className="text-slate-500 font-semibold"> / {totalAvailablePoints} pts</span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
+
+        {teacherInstructions && (
+          <div className="px-5 sm:px-6 py-2.5 bg-sky-50/70 border-b border-sky-100 text-xs text-sky-950 font-medium shrink-0">
+            <span className="font-extrabold text-sky-800 mr-1.5">Instructions:</span>
+            {teacherInstructions}
+          </div>
+        )}
 
         {/* Level List */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-3 flex-1">
@@ -182,12 +214,14 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
                       Level {level.levelNumber}
                     </span>
 
-                    <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
-                      <Award className="w-3.5 h-3.5 text-amber-500" />
-                      {isCompleted && completionRecord
-                        ? `${completionRecord.scoreEarned} / ${level.points} pts earned`
-                        : `${level.points} pts`}
-                    </span>
+                    {supportsScoring && showScores && (
+                      <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+                        <Award className="w-3.5 h-3.5 text-amber-500" />
+                        {isCompleted && completionRecord
+                          ? `${completionRecord.scoreEarned} / ${level.points} pts earned`
+                          : `${level.points} pts`}
+                      </span>
+                    )}
 
                     {isCompleted && completionRecord && (
                       <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
@@ -222,23 +256,38 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
 
                 <div className="shrink-0">
                   {isCompleted ? (
-                    <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-extrabold">
-                      <CheckCircle2 className="w-4 h-4" />
-                      Completed
-                    </span>
-                  ) : isAvailable ? (
+                    (() => {
+                      const usedAttempts = Number(completionRecord?.attempts || 1);
+                      const canRetry = maxAttempts === 0 || (maxAttempts > 1 && usedAttempts < maxAttempts);
+                      return canRetry && started ? (
+                        <button
+                          type="button"
+                          onClick={() => onPlayLevel(level)}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-xs transition cursor-pointer"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span>Replay ({maxAttempts === 0 ? `${usedAttempts} played` : `${usedAttempts}/${maxAttempts}`})</span>
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-extrabold">
+                          <CheckCircle2 className="w-4 h-4" />
+                          Completed
+                        </span>
+                      );
+                    })()
+                  ) : isAvailable && started ? (
                     <button
                       type="button"
                       onClick={() => onPlayLevel(level)}
                       className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-extrabold shadow-sm transition cursor-pointer"
                     >
                       <Play className="w-3.5 h-3.5 fill-current" />
-                      Play Level
+                      {levels.length === 1 ? 'Start Activity' : 'Play Level'}
                     </button>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-200/80 text-slate-600 text-xs font-bold">
                       <Lock className="w-3.5 h-3.5" />
-                      Locked
+                      {!started ? 'Scheduled' : 'Locked'}
                     </span>
                   )}
                 </div>

@@ -236,10 +236,10 @@ export const StudentSubmissionsTab: React.FC<StudentSubmissionsTabProps> = ({
             onChange={(e) => setActivityFilter(e.target.value)}
             className="w-full px-3 py-2 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
-            <option value="all">All Games & Competitions</option>
+            <option value="all">All Games &amp; Training</option>
             {activityOptions.map((opt) => (
               <option key={opt.id} value={opt.id}>
-                {opt.itemType === 'competition' ? '[Comp] ' : '[Game] '}
+                {opt.itemType === 'competition' ? '[Comp] ' : '[Activity] '}
                 {opt.title}
               </option>
             ))}
@@ -310,9 +310,9 @@ export const StudentSubmissionsTab: React.FC<StudentSubmissionsTabProps> = ({
                   <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
                     <th className="py-3 px-4">Student</th>
                     <th className="py-3 px-4">Classroom</th>
-                    <th className="py-3 px-4">Game / Competition</th>
+                    <th className="py-3 px-4">Activity / Competition</th>
                     <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Score</th>
+                    <th className="py-3 px-4">Score / Result</th>
                     <th className="py-3 px-4">Date</th>
                     <th className="py-3 px-4 text-right">Details</th>
                   </tr>
@@ -349,7 +349,11 @@ export const StudentSubmissionsTab: React.FC<StudentSubmissionsTabProps> = ({
                         </span>
                       </td>
                       <td className="py-3 px-4 font-black text-slate-800">
-                        {row.scoreEarned !== null ? (
+                        {row.maxPoints === 0 ? (
+                          <span className="text-teal-700 font-bold">
+                            {row.status === 'Completed' ? 'Completed' : row.status}
+                          </span>
+                        ) : row.scoreEarned !== null ? (
                           <span>
                             {row.scoreEarned} / {row.maxPoints}{' '}
                             {row.percentage !== null && (
@@ -413,9 +417,13 @@ export const StudentSubmissionsTab: React.FC<StudentSubmissionsTabProps> = ({
                 </div>
                 <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100">
                   <span className="font-black text-indigo-700">
-                    {row.scoreEarned !== null
-                      ? `${row.scoreEarned}/${row.maxPoints} pts${row.percentage !== null ? ` (${row.percentage}%)` : ''}`
-                      : `— / ${row.maxPoints} pts`}
+                    {row.maxPoints === 0
+                      ? row.status === 'Completed'
+                        ? 'Session completed'
+                        : row.status
+                      : row.scoreEarned !== null
+                        ? `${row.scoreEarned}/${row.maxPoints} pts${row.percentage !== null ? ` (${row.percentage}%)` : ''}`
+                        : `— / ${row.maxPoints} pts`}
                   </span>
                   <span className="text-slate-500">
                     {row.completedAt ? new Date(row.completedAt).toLocaleDateString() : 'Not completed'}
@@ -465,11 +473,17 @@ export const StudentSubmissionsTab: React.FC<StudentSubmissionsTabProps> = ({
                   <div className="text-xs font-black text-slate-900 mt-1">{selectedRow.status}</div>
                 </div>
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-                  <div className="text-[10px] font-bold uppercase text-slate-400">Score Earned</div>
+                  <div className="text-[10px] font-bold uppercase text-slate-400">
+                    {selectedRow.maxPoints === 0 ? 'Result' : 'Score Earned'}
+                  </div>
                   <div className="text-xs font-black text-indigo-700 mt-1">
-                    {selectedRow.scoreEarned !== null
-                      ? `${selectedRow.scoreEarned} / ${selectedRow.maxPoints} pts`
-                      : `— / ${selectedRow.maxPoints} pts`}
+                    {selectedRow.maxPoints === 0
+                      ? selectedRow.status === 'Completed'
+                        ? 'Completed (Non-scoring)'
+                        : selectedRow.status
+                      : selectedRow.scoreEarned !== null
+                        ? `${selectedRow.scoreEarned} / ${selectedRow.maxPoints} pts`
+                        : `— / ${selectedRow.maxPoints} pts`}
                   </div>
                 </div>
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
@@ -512,7 +526,9 @@ export const StudentSubmissionsTab: React.FC<StudentSubmissionsTabProps> = ({
                             </div>
                             <div className="flex items-center gap-2 text-xs font-bold">
                               <span className="px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700">
-                                {lvl.scoreEarned} / {lvl.maxPoints} pts ({lvl.percentage}%)
+                                {lvl.maxPoints === 0
+                                  ? 'Completed'
+                                  : `${lvl.scoreEarned} / ${lvl.maxPoints} pts (${lvl.percentage}%)`}
                               </span>
                               {formatDuration(lvl.timeTakenSeconds) && (
                                 <span className="inline-flex items-center gap-1 text-slate-500">
@@ -525,6 +541,71 @@ export const StudentSubmissionsTab: React.FC<StudentSubmissionsTabProps> = ({
 
                           {/* Authentic Per-Game Metrics */}
                           <div className="flex flex-wrap gap-2 text-xs">
+                            {typeof d.cyclesCompleted === 'number' && (
+                              <span className="px-2.5 py-1 rounded-lg bg-teal-50 text-teal-800 font-semibold">
+                                Breathing Cycles: {d.cyclesCompleted}
+                              </span>
+                            )}
+                            {typeof d.durationSeconds === 'number' && (
+                              <span className="px-2.5 py-1 rounded-lg bg-teal-50 text-teal-800 font-semibold">
+                                Session Duration: {d.durationSeconds}s
+                              </span>
+                            )}
+                            {typeof d.paceSeconds === 'number' && (
+                              <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold">
+                                Pace: {d.paceSeconds}s/side
+                              </span>
+                            )}
+                            {typeof d.accuracyPct === 'number' && !d.questionsEnabled && (
+                              <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-800 font-semibold">
+                                Accuracy: {d.accuracyPct}%
+                              </span>
+                            )}
+                            {typeof d.correctAnswers === 'number' && typeof d.totalQuestions === 'number' && !d.questionsEnabled && (
+                              <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-semibold">
+                                Correct: {d.correctAnswers} / {d.totalQuestions}
+                              </span>
+                            )}
+                            {typeof d.correctAnswers === 'number' && typeof d.totalAnswered === 'number' && (
+                              <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-semibold">
+                                Correct: {d.correctAnswers} / {d.totalAnswered}
+                              </span>
+                            )}
+                            {typeof d.highestNumberRemembered === 'number' && (
+                              <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-800 font-semibold">
+                                Highest Number Remembered: {d.highestNumberRemembered} digits
+                              </span>
+                            )}
+                            {typeof d.longestPattern === 'number' && (
+                              <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-800 font-semibold">
+                                Longest Pattern: {d.longestPattern}
+                              </span>
+                            )}
+                            {typeof d.levelReached === 'number' && typeof d.longestPattern !== 'number' && (
+                              <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-800 font-semibold">
+                                Level Reached: {d.levelReached}
+                              </span>
+                            )}
+                            {typeof d.levelsCompleted === 'number' && (
+                              <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold">
+                                Levels Completed: {d.levelsCompleted}
+                              </span>
+                            )}
+                            {typeof d.par === 'number' && (
+                              <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold">
+                                Par: {d.par}
+                              </span>
+                            )}
+                            {typeof d.bestStreak === 'number' && (
+                              <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 font-semibold">
+                                Best Streak: {d.bestStreak}
+                              </span>
+                            )}
+                            {d.mode && (
+                              <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold">
+                                Mode: {String(d.mode)}
+                              </span>
+                            )}
                             {d.gridSize && (
                               <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold">
                                 Grid: {d.gridSize}×{d.gridSize}

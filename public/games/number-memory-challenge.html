@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Number memory challenge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Lexend:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#e9e6ff;--card:#fff;--text:#1d1a3f;--mute:#625f8c;--line:#1d1a3f;--soft:#f3f1ff;--ink:#1d1a3f;--m:#60a5fa;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15132e;--card:#241f4d;--text:#f1efff;--mute:#a9a5d6;--line:#07061a;--soft:#2e2960;color-scheme:dark}}
+:root[data-theme="light"]{--bg:#e9e6ff;--card:#fff;--text:#1d1a3f;--mute:#625f8c;--line:#1d1a3f;--soft:#f3f1ff;color-scheme:light}
+:root[data-theme="dark"]{--bg:#15132e;--card:#241f4d;--text:#f1efff;--mute:#a9a5d6;--line:#07061a;--soft:#2e2960;color-scheme:dark}
+html{height:100%}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font:400 16px/1.5 Lexend,system-ui,sans-serif}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+button:focus-visible{outline:3px solid var(--m);outline-offset:3px}
+#app{max-width:520px;margin:0 auto;padding:1.2rem 1rem 2rem}
+[hidden]{display:none!important}
+h1{margin:0;font:700 clamp(2rem,9vw,2.8rem)/1.05 Fredoka,system-ui,sans-serif;letter-spacing:.005em}
+header p{margin:.5rem 0 0;color:var(--mute)}
+.t{display:inline-flex;align-items:center;justify-content:center;font:700 1.35rem/1 Fredoka,sans-serif;width:2.6rem;height:2.6rem;border:3px solid var(--ink);border-radius:12px;color:var(--ink);box-shadow:0 3px 0 var(--ink)}
+.t.big{width:min(46vw,170px);height:min(46vw,170px);font-size:min(26vw,100px);border-radius:28px;box-shadow:0 8px 0 var(--ink)}
+.t.pop{animation:pop .38s cubic-bezier(.3,1.5,.5,1)}
+.t.bad{outline:3px solid #e11d48;outline-offset:2px}
+.t.q{background:var(--soft);color:var(--mute);border-style:dashed;box-shadow:none}
+.demo{display:flex;align-items:center;gap:.4rem;margin:1.1rem 0 .4rem;flex-wrap:wrap}
+.demo i{font-style:normal;color:var(--mute);font-weight:600}
+.sp{display:flex;align-items:center;gap:.5rem;margin:1rem 0;flex-wrap:wrap}
+.sp span{color:var(--mute);font-size:.9rem;margin-right:.2rem}
+.chip{padding:.4rem .9rem;border:2px solid var(--line);border-radius:999px;font-weight:500;font-size:.9rem;background:var(--card)}
+.chip[aria-pressed="true"]{background:var(--ink);color:#fff}
+.modes{display:flex;flex-direction:column;gap:.8rem}
+.mode{display:flex;align-items:center;gap:.9rem;text-align:left;background:var(--card);border:3px solid var(--line);border-radius:20px;box-shadow:0 5px 0 var(--line);padding:.85rem 1rem;transition:transform .12s,box-shadow .12s}
+.mode:active{transform:translateY(4px);box-shadow:0 1px 0 var(--line)}
+.ic{flex:none;width:3.2rem;height:3.2rem;border-radius:14px;background:var(--m);border:3px solid var(--ink);display:grid;place-items:center;font-size:1.5rem}
+.tx{flex:1;display:flex;flex-direction:column}
+.tx b{font:600 1.15rem/1.2 Fredoka,sans-serif}
+.tx small{color:var(--mute);font-size:.84rem;line-height:1.35}
+.bs{font-size:.8rem;font-weight:600;color:var(--mute);white-space:nowrap}
+.hud{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
+.back{padding:.45rem .9rem;border:2px solid var(--line);border-radius:999px;background:var(--card);font-weight:500;font-size:.9rem}
+#mname{font:600 1.05rem Fredoka,sans-serif;text-align:center}
+.lv{min-width:5.2rem;text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+.meter{height:12px;border:3px solid var(--line);border-radius:99px;background:var(--card);margin:.8rem 0 0;overflow:hidden}
+.meter i{display:block;height:100%;width:100%;background:var(--m)}
+.pill{display:inline-block;margin:.8rem 0 .6rem;padding:.2rem .8rem;border-radius:99px;background:var(--m);color:var(--ink);border:2px solid var(--ink);font-weight:600;font-size:.88rem}
+.stage{background:var(--card);border:3px solid var(--line);border-radius:26px;box-shadow:0 6px 0 var(--line);min-height:236px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.7rem;padding:1rem;text-align:center}
+.stage .row{display:flex;gap:.4rem;flex-wrap:wrap;justify-content:center;align-items:center}
+.stage .lb{color:var(--mute);font-size:.82rem;width:100%}
+.ready{font:600 1.5rem Fredoka,sans-serif;color:var(--mute)}
+.dots{display:flex;gap:.4rem;justify-content:center;min-height:14px;margin:.9rem 0 .2rem;flex-wrap:wrap}
+.dots b{width:12px;height:12px;border-radius:50%;border:2px solid var(--line);background:var(--card)}
+.dots b.on{background:var(--m)}
+.msg{margin:.5rem 0;text-align:center;min-height:3em;font-weight:500}
+.slots{display:flex;gap:.4rem;justify-content:center;flex-wrap:wrap;min-height:3.3rem}
+.slots .t{width:2.8rem;height:2.8rem}
+.slots .e{width:2.8rem;height:2.8rem;border:3px dashed var(--mute);border-radius:12px;opacity:.7}
+.act{display:flex;justify-content:center;margin:.8rem 0;min-height:3.2rem;gap:.6rem;flex-wrap:wrap}
+.btn{padding:.75rem 1.7rem;background:var(--m);color:var(--ink);font:600 1.05rem Fredoka,sans-serif;border:3px solid var(--ink);border-radius:16px;box-shadow:0 4px 0 var(--ink)}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
+.btn.alt{background:var(--card);color:var(--text);border-color:var(--line);box-shadow:0 4px 0 var(--line)}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:.55rem;margin-top:.6rem;transition:opacity .2s}
+.pad.off{opacity:.4;pointer-events:none}
+.pad button{height:3.6rem;border:3px solid var(--line);border-radius:16px;background:var(--card);box-shadow:0 4px 0 var(--line);font:600 1.6rem Fredoka,sans-serif}
+.pad button:active{transform:translateY(3px);box-shadow:0 1px 0 var(--line)}
+.shake{animation:shake .4s}
+.hop{animation:hop .5s}
+@keyframes pop{0%{transform:scale(.4) rotate(-8deg);opacity:0}100%{transform:none;opacity:1}}
+@keyframes shake{20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+@keyframes hop{40%{transform:translateY(-12px)}100%{transform:none}}
+@media (prefers-reduced-motion:reduce){.t.pop,.shake,.hop{animation:none}}
+</style>
+</head>
+<body>
+<div id="app">
+<section id="home">
+  <header>
+    <h1>Number memory challenge</h1>
+    <p>Watch the numbers appear, hold them in your head, then type them back.</p>
+    <div class="demo" id="demo" aria-hidden="true"></div>
+  </header>
+  <div class="sp" role="group" aria-label="Display speed"><span>Display speed</span>
+    <button class="chip" data-s="slow" aria-pressed="false">Slow</button><button class="chip" data-s="normal" aria-pressed="true">Normal</button><button class="chip" data-s="fast" aria-pressed="false">Fast</button></div>
+  <div class="modes" id="modes"></div>
+</section>
+
+<section id="game" hidden>
+  <div class="hud"><button class="back" id="back">Home</button><div id="mname"></div><div class="lv" id="lv"></div></div>
+  <div class="meter" id="bar" hidden><i id="barf"></i></div>
+  <div style="text-align:center"><span class="pill" id="len"></span></div>
+  <div class="stage" id="stage"></div>
+  <div class="dots" id="dots" aria-hidden="true"></div>
+  <p class="msg" id="msg" role="status" aria-live="polite"></p>
+  <div class="slots" id="slots"></div>
+  <div class="act" id="act"></div>
+  <div class="pad off" id="pad"></div>
+</section>
+</div>
+
+<script>
+(function(){
+  var COL=["#ffd166","#ff7a90","#5eead4","#60a5fa","#fdba74","#c4b5fd","#86efac","#f9a8d4","#67e8f9","#fde047"];
+  var M=[
+    {id:"fwd",ic:"➡️",name:"Forward recall",d:"Type the numbers in the same order you saw them.",c:"#60a5fa",s:3},
+    {id:"rev",ic:"⏪",name:"Reverse recall",d:"Type them backwards, starting with the last number.",c:"#f9a8d4",s:3},
+    {id:"mis",ic:"❓",name:"Missing number",d:"One number is hidden when the row comes back. Which one?",c:"#fde047",s:4},
+    {id:"pat",ic:"🔁",name:"Pattern recall",d:"Spot the hidden pattern and remember more.",c:"#86efac",s:4},
+    {id:"time",ic:"⏱️",name:"Timed challenge",d:"60 seconds. Clear as many rounds as you can.",c:"#fdba74",s:3}
+  ];
+  var SP={slow:1200,normal:850,fast:550},speed="normal",best={},G=null,tok=0,tm=0;
+  var TARGET_ORIGIN=window.location.origin&&window.location.origin!=="null"?window.location.origin:"*";
+  var edtechraBridge={active:false,mode:"standalone",maxPoints:100,startTime:Date.now(),reported:false};
+  window.addEventListener("message",function(ev){
+    if(TARGET_ORIGIN!=="*"&&ev.origin!==TARGET_ORIGIN)return;
+    var msg=ev.data;if(!msg||msg.type!=="EDTECHRA_INIT_GAME")return;
+    var p=msg.payload&&typeof msg.payload==="object"?msg.payload:msg;
+    edtechraBridge.active=true;edtechraBridge.mode=p.mode||"student";
+    edtechraBridge.maxPoints=Number(p.maxPoints)||100;
+    edtechraBridge.startTime=Date.now();edtechraBridge.reported=false;
+  });
+  function reportToEdtechra(scoreEarned,maxRaw,details){
+    if(edtechraBridge.reported||window.parent===window)return;
+    edtechraBridge.reported=true;
+    var sec=Math.max(1,Math.round((Date.now()-edtechraBridge.startTime)/1000));
+    window.parent.postMessage({type:"EDTECHRA_GAME_COMPLETE",payload:{gameId:"number-memory-challenge",scoreEarned:scoreEarned,maxAvailablePoints:maxRaw,completionStatus:"completed",timeTakenSeconds:sec,details:details}},TARGET_ORIGIN);
+  }
+  var $=function(i){return document.getElementById(i)},R=function(n){return Math.floor(Math.random()*n)};
+  try{var sv=JSON.parse(localStorage.getItem("nmc")||"{}");best=sv.best||{};if(sv.speed&&SP[sv.speed])speed=sv.speed}catch(e){}
+  function save(){try{localStorage.setItem("nmc",JSON.stringify({best:best,speed:speed}))}catch(e){}}
+  function tile(n,c){return '<span class="t '+(c||"")+'" style="background:'+COL[n]+'">'+n+'</span>'}
+
+  function home(){
+    tok++;clearInterval(tm);tm=0;G=null;
+    $("game").hidden=true;$("home").hidden=false;
+    $("demo").innerHTML=[4,8,2,9,5].map(function(n){return tile(n)}).join('<i>→</i>');
+    $("modes").innerHTML=M.map(function(m){var b=best[m.id];
+      return '<button class="mode" data-m="'+m.id+'" style="--m:'+m.c+'"><span class="ic">'+m.ic+'</span><span class="tx"><b>'+m.name+'</b><small>'+m.d+'</small></span><span class="bs">'+(b?(m.id==="time"?"Best "+b+" pts":"Best "+b):"New")+'</span></button>'}).join("");
+    document.querySelectorAll(".sp .chip").forEach(function(c){c.setAttribute("aria-pressed",c.dataset.s===speed?"true":"false")});
+  }
+
+  function pat(n){
+    var t=R(3),s=[],r,i;
+    if(t===0){var st=1+R(4),a=R(10),dir=R(2)?1:-1;
+      for(i=0;i<n;i++)s.push(((a+dir*st*i)%10+10)%10);
+      r="The pattern: "+(dir>0?"add ":"subtract ")+st+" each time, wrapping around after 9.";}
+    else if(t===1){var bl=2+R(2),b=[];for(i=0;i<bl;i++)b.push(R(10));
+      for(i=0;i<n;i++)s.push(b[i%bl]);
+      r="The pattern: the block "+b.join(" ")+" repeats.";}
+    else{var h=Math.ceil(n/2),f=[];for(i=0;i<h;i++)f.push(R(10));
+      s=f.concat(f.slice().reverse()).slice(0,n);
+      r="The pattern: the second half mirrors the first half.";}
+    return{s:s,r:r};
+  }
+
+  function stage(h){$("stage").innerHTML=h}
+  function msg(t){$("msg").textContent=t}
+  function dots(n,k){var h="";for(var i=0;i<n;i++)h+='<b class="'+(i<k?"on":"")+'"></b>';$("dots").innerHTML=h}
+  function hud(){
+    $("len").textContent=G.m.id==="mis"?"Sequence of "+G.len:"Length "+G.len;
+    if(G.m.id==="time")$("lv").textContent="Score "+G.score+"  "+Math.max(0,Math.ceil(G.t))+"s";
+    else{var h="";for(var i=0;i<3;i++)h+=i<G.lives?"♥":"♡";$("lv").textContent=h}
+  }
+  function slots(){
+    var h="";for(var i=0;i<G.exp.length;i++)h+=i<G.ent.length?tile(G.ent[i],"pop"):'<span class="e"></span>';
+    $("slots").innerHTML=h;
+  }
+
+  function start(id){
+    var m=M.filter(function(x){return x.id===id})[0];
+    G={m:m,len:m.s,lives:3,score:0,rounds:0,correctRounds:0,top:0,t:60,phase:"",seq:[],exp:[],ent:[],rule:"",mi:0};
+    edtechraBridge.startTime=Date.now();edtechraBridge.reported=false;
+    $("home").hidden=true;$("game").hidden=false;
+    $("game").style.setProperty("--m",m.c);
+    $("mname").textContent=m.ic+" "+m.name;
+    $("bar").hidden=id!=="time";$("barf").style.width="100%";
+    clearInterval(tm);tm=0;
+    if(id==="time")tm=setInterval(function(){
+      G.t-=.1;$("barf").style.width=Math.max(0,G.t/60*100)+"%";hud();
+      if(G.t<=0)end("Time’s up!")},100);
+    window.scrollTo(0,0);
+    round();
+  }
+
+  function round(){
+    var id=G.m.id,n=G.len,s=[],i;
+    G.ent=[];G.phase="show";G.rule="";
+    if(id==="pat"){var p=pat(n);s=p.s;G.rule=p.r}
+    else for(i=0;i<n;i++){var d=R(10);if(i&&d===s[i-1])d=(d+1+R(9))%10;s.push(d)}
+    G.seq=s;
+    G.exp=id==="rev"?s.slice().reverse():id==="mis"?[s[G.mi=R(n)]]:s.slice();
+    hud();slots();$("act").innerHTML="";$("pad").classList.add("off");
+    msg(id==="rev"?"Watch closely. You will type them backwards.":id==="mis"?"Watch closely. One number will go missing.":"Watch the numbers.");
+    dots(n,0);stage('<div class="ready">Get ready</div>');
+    var my=++tok,ms=id==="time"?500:SP[speed],k=0;
+    (function step(){
+      if(my!==tok)return;
+      if(k>=n){stage("");setTimeout(function(){if(my===tok)ask()},350);return}
+      stage(tile(s[k],"big pop"));dots(n,k+1);
+      setTimeout(function(){if(my!==tok)return;stage("");k++;setTimeout(step,260)},ms);
+    })();
+  }
+
+  function ask(){
+    var id=G.m.id;G.phase="input";dots(0,0);$("pad").classList.remove("off");
+    if(id==="mis"){
+      stage('<div class="lb">Which number is missing?</div><div class="row">'+G.seq.map(function(v,i){return i===G.mi?'<span class="t q">?</span>':tile(v)}).join("")+'</div>');
+      msg("Pick the missing number.");
+    }else{
+      stage('<div class="ready">Your turn</div>');
+      msg(id==="rev"?"Type the numbers backwards.":id==="pat"?"Type the whole pattern in order.":"Type the numbers in order.");
+    }
+  }
+
+  function press(d){
+    if(!G||G.phase!=="input")return;
+    G.ent.push(d);slots();
+    if(G.ent.length===G.exp.length){G.phase="check";setTimeout(check,280)}
+  }
+  function back(){if(G&&G.phase==="input"&&G.ent.length){G.ent.pop();slots()}}
+
+  function row(a,cmp){return '<div class="row">'+a.map(function(v,i){return tile(v,cmp&&cmp[i]!==v?"bad":"")}).join("")+'</div>'}
+  function check(){
+    if(!G)return;
+    var ok=G.ent.every(function(v,i){return v===G.exp[i]}),id=G.m.id,timed=id==="time";
+    G.rounds++;$("pad").classList.add("off");
+    if(ok){G.score+=G.len;G.correctRounds++;G.top=Math.max(G.top,G.len)}
+    else if(!timed)G.lives--;
+    updBest();
+    var h;
+    if(id==="mis")h='<div class="lb">The missing number was</div><div class="row">'+tile(G.exp[0],ok?"hop":"")+'</div>'+(ok?"":'<div class="lb">You picked</div><div class="row">'+tile(G.ent[0],"bad")+'</div>');
+    else if(ok)h='<div class="row">'+G.exp.map(function(v){return tile(v,"hop")}).join("")+'</div>';
+    else h='<div class="lb">You typed</div>'+row(G.ent,G.exp)+'<div class="lb">'+(id==="rev"?"Correct, backwards":"Correct answer")+'</div>'+row(G.exp);
+    stage(h);if(!ok)$("stage").classList.add("shake");
+    setTimeout(function(){$("stage").classList.remove("shake")},500);
+    var nextLen=ok?Math.min(12,G.len+1):(timed?Math.max(G.m.s,G.len-1):G.len);
+    var praise=["Great memory!","Nailed it!","Brilliant!","Sharp brain!"][R(4)];
+    msg((ok?praise:"Not quite.")+(id==="pat"&&G.rule?" "+G.rule:"")+(ok&&!timed&&nextLen>G.len?" Next round: "+nextLen+" numbers.":""));
+    G.len=nextLen;hud();
+    if(timed){var my=++tok;setTimeout(function(){if(my===tok&&G)round()},ok?900:1500);return}
+    if(G.lives<=0){$("act").innerHTML='<button class="btn" id="go">See results</button>';$("go").onclick=function(){end("Out of lives")};return}
+    $("act").innerHTML='<button class="btn" id="go">'+(ok?"Next round":"Try again")+'</button>';
+    $("go").onclick=round;$("go").focus();
+  }
+
+  function updBest(){
+    var id=G.m.id,v=id==="time"?G.score:G.top;
+    if(v>(best[id]||0)){best[id]=v;G.nb=true;save()}
+  }
+  function end(why){
+    tok++;clearInterval(tm);tm=0;G.phase="over";updBest();
+    var timed=G.m.id==="time";
+    var scoreVal=timed?G.score:Math.max(G.score,G.top*10);
+    var maxRaw=Math.max(scoreVal,100);
+    var acc=G.rounds>0?Math.round((G.correctRounds/G.rounds)*100):0;
+    reportToEdtechra(scoreVal,maxRaw,{
+      mode:G.m.name,
+      highestNumberRemembered:G.top,
+      levelsCompleted:G.correctRounds,
+      roundsPlayed:G.rounds,
+      accuracyPct:acc,
+      rawScore:G.score,
+      personalBest:best[G.m.id]||0
+    });
+    $("pad").classList.add("off");$("dots").innerHTML="";$("slots").innerHTML="";
+    stage('<div class="ready">'+why+'</div><div class="lb">'+(timed?"You scored "+G.score+" points":"Longest sequence: "+G.top)+'</div><div class="lb">Rounds played: '+G.rounds+'</div>'+(G.nb?'<div class="ready" style="color:var(--text)">New best!</div>':""));
+    msg(G.top>0||G.score>0?"Nice work. Every round trains your working memory.":"Give it another go. The first numbers are the easiest.");
+    $("act").innerHTML='<button class="btn" id="again">Play again</button><button class="btn alt" id="home2">Home</button>';
+    $("again").onclick=function(){start(G.m.id)};$("home2").onclick=home;
+  }
+
+  $("pad").innerHTML=[1,2,3,4,5,6,7,8,9].map(function(n){return '<button data-k="'+n+'">'+n+'</button>'}).join("")+'<button data-k="b" aria-label="Delete last number">⌫</button><button data-k="0">0</button><span></span>';
+  $("pad").addEventListener("click",function(e){var b=e.target.closest("button");if(!b)return;b.dataset.k==="b"?back():press(+b.dataset.k)});
+  $("modes").addEventListener("click",function(e){var b=e.target.closest(".mode");if(b)start(b.dataset.m)});
+  document.querySelector(".sp").addEventListener("click",function(e){var b=e.target.closest(".chip");if(!b)return;speed=b.dataset.s;save();
+    document.querySelectorAll(".sp .chip").forEach(function(c){c.setAttribute("aria-pressed",c===b?"true":"false")})});
+  $("back").addEventListener("click",home);
+  document.addEventListener("keydown",function(e){
+    if(!G)return;
+    if(/^[0-9]$/.test(e.key))press(+e.key);
+    else if(e.key==="Backspace")back();
+    else if(e.key==="Escape")home();
+  });
+  home();
+  if(window.parent!==window){window.parent.postMessage({type:"EDTECHRA_GAME_READY",gameId:"number-memory-challenge"},TARGET_ORIGIN);}
+})();
+</script>
+</body>
+</html>

@@ -25,11 +25,14 @@ import {
 import { supabase } from '@/lib/supabase';
 import { AiChallenge } from '@/types/aiChallenge';
 import type { Assignment } from '@/types/classroom';
-import type { GameConfig, GameId, SavedLibraryGame } from '@/types/gameLibrary';
+import type { ActivityCategory, GameConfig, GameId, SavedLibraryGame } from '@/types/gameLibrary';
 import {
+  ACTIVITY_CATEGORIES,
+  ACTIVITY_TYPE_LABELS,
   GAME_CATALOG,
   countGameContentItems,
   gameLibraryService,
+  getEmptyConfigForGame,
   getGameCatalogItem,
   type TeacherActivityAssignmentItem,
   type TeacherClassroomOption,
@@ -39,6 +42,7 @@ import {
 import { assignmentService } from '@/services/assignmentService';
 import {
   isAssignmentPublished,
+  isAssignmentStarted,
   normalizeAssignmentLevels,
   parseStudentLevelProgress
 } from '@/utils/gameLevelUtils';
@@ -100,6 +104,8 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
   const [activeTab, setActiveTab] = useState<
     'games' | 'library' | 'competitions' | 'activity-details' | 'submissions'
   >('games');
+  const [selectedCategory, setSelectedCategory] = useState<'all' | ActivityCategory>('all');
+  const [activitySearch, setActivitySearch] = useState('');
   const [challenges, setChallenges] = useState<AiChallenge[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -207,16 +213,20 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
     }
     setAssigning(true);
     setAssignError(null);
-    const totalPoints = (assigningGame.levels || []).reduce(
-      (sum, l) => sum + Math.max(1, Number(l.points || 20)),
-      0
-    );
+    const catalogMeta = getGameCatalogItem(assigningGame.game_id);
+    const supportsScoring = catalogMeta.supportsScoring !== false;
+    const totalPoints = supportsScoring
+      ? (assigningGame.levels || []).reduce(
+          (sum, l) => sum + Math.max(0, Number(l.points ?? 20)),
+          0
+        )
+      : 0;
     const dueIso = assignDueDate ? new Date(assignDueDate).toISOString() : null;
     const res = await gameLibraryService.createGameAssignment({
       classroomId: assignClassroomId,
       gameId: assigningGame.game_id,
       title: assignTitle.trim(),
-      points: totalPoints || 100,
+      points: supportsScoring ? (totalPoints || catalogMeta.defaultPoints || 100) : 0,
       dueDate: dueIso,
       levels: assigningGame.levels,
       unlockMode: assigningGame.unlock_mode,
@@ -366,12 +376,12 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
                 </span>
               </div>
               <h2 className="text-xl font-black tracking-tight">
-                Games & Competitions
+                Games & Training
               </h2>
               <p className="text-xs text-indigo-100 font-medium">
                 {isTeacher
-                  ? 'Assign educational games or create AI-evaluated classroom challenges'
-                  : 'Play assigned educational games and participate in classroom challenges'}
+                  ? 'Assign educational games, brain training, mindfulness activities, skill challenges, and competitions.'
+                  : 'Play assigned educational games, brain training, mindfulness activities, skill challenges, and competitions.'}
               </p>
             </div>
           </div>
@@ -396,10 +406,10 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
           </div>
         </div>
 
-        {/* Mode Switcher: Educational Games | Game Library | Competitions | Activity Details | Student Submissions */}
+        {/* Mode Switcher: Games & Training | Game Library | Competitions | Activity Details | Student Submissions */}
         <div
           role="tablist"
-          aria-label="Games and Competitions Tabs"
+          aria-label="Games and Training Tabs"
           className="px-4 sm:px-6 pt-3 pb-2.5 border-b border-slate-100 bg-slate-50/70 flex items-center gap-1.5 sm:gap-2 overflow-x-auto sm:flex-wrap shrink-0"
         >
           <button
@@ -414,7 +424,7 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
             }`}
           >
             <Gamepad2 className="w-3.5 h-3.5" />
-            <span>Educational Games</span>
+            <span>Games & Training</span>
           </button>
           {isTeacher && (
             <button
@@ -536,7 +546,7 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
                       Your Game Library is empty
                     </h3>
                     <p className="text-xs text-slate-500 max-w-md mx-auto">
-                      Create a game in Educational Games and save or assign it — it will automatically appear here so you can reuse it across any classroom.
+                      Create an activity in Games &amp; Training and save or assign it — it will automatically appear here so you can reuse it across any classroom.
                     </p>
                   </div>
                   <button
@@ -545,7 +555,7 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-sm transition cursor-pointer"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>Create Your First Game</span>
+                    <span>Create Your First Activity</span>
                   </button>
                 </div>
               ) : (
@@ -732,8 +742,7 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
               <div className="space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-sky-50/70 border border-sky-100 rounded-2xl px-4 py-3">
                   <p className="text-xs font-semibold text-sky-900">
-                    Choose a game template to create a new saved game, or manage classroom assignments cleanly in{' '}
-                    <span className="font-black">Activity Details</span>.
+                    Browse educational games, cognitive training, mindfulness activities, and knowledge challenges. Preview any activity or assign it to your classroom.
                   </p>
                   <button
                     type="button"
@@ -747,62 +756,204 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {GAME_CATALOG.map((game) => (
-                    <div
-                      key={game.id}
-                      className="rounded-2xl border border-slate-200 bg-white p-3.5 flex flex-col justify-between gap-3 hover:border-sky-300 hover:shadow-md transition"
-                    >
-                      <div className="space-y-2.5">
-                        <div className="w-full aspect-square rounded-xl overflow-hidden bg-slate-100 border border-slate-100">
-                          <img
-                            src={game.thumbnailUrl}
-                            alt={game.name}
-                            loading="lazy"
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div>
-                          <span className="inline-block text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 mb-1">
-                            {game.category}
-                          </span>
-                          <h3 className="text-sm font-extrabold text-slate-900">{game.name}</h3>
-                          <p className="text-[11px] text-slate-600 mt-1 leading-relaxed line-clamp-2">
-                            {game.shortDescription}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onClose();
-                          onOpenGameLibrary?.(game.id);
-                        }}
-                        className="w-full py-2 px-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>Create Game</span>
-                      </button>
-                    </div>
-                  ))}
+                {/* Search & Category Filters */}
+                <div className="space-y-2.5">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={activitySearch}
+                      onChange={(e) => setActivitySearch(e.target.value)}
+                      placeholder="Search games, brain training, math, mindfulness..."
+                      className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500/30"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                    {ACTIVITY_CATEGORIES.map((catOpt) => {
+                      const active = selectedCategory === catOpt.id;
+                      return (
+                        <button
+                          key={catOpt.id}
+                          type="button"
+                          onClick={() => {
+                            if (catOpt.id === 'competitions') {
+                              setActiveTab('competitions');
+                              return;
+                            }
+                            setSelectedCategory(catOpt.id);
+                          }}
+                          className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap shrink-0 border transition cursor-pointer ${
+                            active
+                              ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          {catOpt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
+
+                {(() => {
+                  const q = activitySearch.trim().toLowerCase();
+                  const filteredCatalog = GAME_CATALOG.filter((game) => {
+                    if (selectedCategory !== 'all' && game.categoryId !== selectedCategory) {
+                      return false;
+                    }
+                    if (!q) return true;
+                    return (
+                      game.name.toLowerCase().includes(q) ||
+                      game.shortDescription.toLowerCase().includes(q) ||
+                      game.category.toLowerCase().includes(q) ||
+                      ACTIVITY_TYPE_LABELS[game.activityType].toLowerCase().includes(q)
+                    );
+                  });
+
+                  if (filteredCatalog.length === 0) {
+                    return (
+                      <div className="py-10 text-center rounded-2xl bg-slate-50 border border-dashed border-slate-200 space-y-2">
+                        <p className="text-xs font-bold text-slate-700">
+                          No activities match this category or search yet.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCategory('all');
+                            setActivitySearch('');
+                          }}
+                          className="text-xs font-extrabold text-sky-700 hover:underline cursor-pointer"
+                        >
+                          Show All Activities
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {filteredCatalog.map((game) => (
+                        <div
+                          key={game.id}
+                          className="rounded-2xl border border-slate-200 bg-white p-3.5 flex flex-col justify-between gap-3 hover:border-sky-300 hover:shadow-md transition"
+                        >
+                          <div className="space-y-2.5">
+                            <div className="w-full aspect-video rounded-xl overflow-hidden bg-slate-100 border border-slate-100 relative">
+                              <img
+                                src={game.thumbnailUrl}
+                                alt={game.name}
+                                loading="lazy"
+                                className="w-full h-full object-cover"
+                              />
+                              <span className="absolute top-2 right-2 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-slate-900/75 text-white backdrop-blur-xs">
+                                {ACTIVITY_TYPE_LABELS[game.activityType]}
+                              </span>
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                <span className="inline-block text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
+                                  {game.category}
+                                </span>
+                                {game.estimatedDuration && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                                    {game.estimatedDuration}
+                                  </span>
+                                )}
+                                {game.difficulty && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200/70">
+                                    {game.difficulty}
+                                  </span>
+                                )}
+                              </div>
+                              <h3 className="text-sm font-extrabold text-slate-900">{game.name}</h3>
+                              <p className="text-[11px] text-slate-600 mt-1 leading-relaxed line-clamp-2">
+                                {game.shortDescription}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 pt-1">
+                            {onPreviewGame && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onPreviewGame(
+                                    game.id,
+                                    game.name,
+                                    getEmptyConfigForGame(game.id),
+                                    game.defaultPoints
+                                  )
+                                }
+                                className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold inline-flex items-center justify-center gap-1 transition cursor-pointer"
+                                title="Preview activity"
+                              >
+                                <Play className="w-3.5 h-3.5" />
+                                <span>Preview</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onClose();
+                                onOpenGameLibrary?.(game.id);
+                              }}
+                              className="flex-1 py-2 px-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
+                            >
+                              <Sparkles className="w-3.5 h-3.5" />
+                              <span>{game.isStandaloneBuiltIn ? 'Assign' : 'Create & Assign'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             ) : visibleGameAssignments.length === 0 ? (
               <div className="py-12 text-center space-y-2 rounded-2xl bg-slate-50 border border-dashed border-slate-200">
                 <Gamepad2 className="w-10 h-10 text-slate-300 mx-auto" />
-                <h3 className="text-sm font-extrabold text-slate-800">No educational games assigned yet</h3>
+                <h3 className="text-sm font-extrabold text-slate-800">No activities assigned yet</h3>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  When your teacher assigns a game, it will appear here and in the Announcement Panel.
+                  When your teacher assigns a game or training activity, it will appear here and in the Announcement Panel.
                 </p>
               </div>
             ) : (
               <div className="space-y-3">
-                {visibleGameAssignments.map((a) => {
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                  {ACTIVITY_CATEGORIES.filter((c) => c.id !== 'competitions').map((catOpt) => {
+                    const active = selectedCategory === catOpt.id;
+                    return (
+                      <button
+                        key={catOpt.id}
+                        type="button"
+                        onClick={() => setSelectedCategory(catOpt.id)}
+                        className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap shrink-0 border transition cursor-pointer ${
+                          active
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        {catOpt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {visibleGameAssignments
+                  .filter((a) => {
+                    if (selectedCategory === 'all') return true;
+                    const cat = getGameCatalogItem((a.settings?.game_id as GameId) || 'liquid-sentences');
+                    return (a.settings?.category_id || cat.categoryId) === selectedCategory;
+                  })
+                  .map((a) => {
                   const sub = a.my_submission;
                   const levels = normalizeAssignmentLevels(a);
                   const prog = parseStudentLevelProgress(sub);
                   const completed = levels.length > 0 && prog.completedCount >= levels.length;
                   const cat = getGameCatalogItem((a.settings?.game_id as GameId) || 'liquid-sentences');
+                  const supportsScoring = a.settings?.supports_scoring !== false && cat.supportsScoring !== false;
+                  const showScores = a.settings?.show_scores_to_students !== false;
+                  const isCompulsory = a.settings?.is_compulsory !== false;
+                  const started = isAssignmentStarted(a);
+                  const actType = (a.settings?.activity_type || cat.activityType) as keyof typeof ACTIVITY_TYPE_LABELS;
                   return (
                     <div
                       key={a.id}
@@ -812,35 +963,56 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
                         <img
                           src={cat.thumbnailUrl}
                           alt={cat.name}
-                          className="w-14 h-14 rounded-xl object-cover shrink-0 border border-slate-200"
+                          className="w-24 aspect-video rounded-xl object-cover shrink-0 border border-slate-200"
                         />
                         <div className="space-y-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                              {String(a.settings?.game_name || cat.name)}
+                              {cat.category}
                             </span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
-                              {prog.completedCount}/{levels.length} Levels
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                              {ACTIVITY_TYPE_LABELS[actType] || 'Activity'}
+                            </span>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                isCompulsory
+                                  ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                  : 'bg-teal-50 text-teal-700 border-teal-200'
+                              }`}
+                            >
+                              {isCompulsory ? 'Compulsory' : 'Optional'}
                             </span>
                             {completed ? (
                               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                                 <CheckCircle2 className="w-3 h-3" />
-                                Completed ({prog.totalPointsEarned}/{a.points} pts)
+                                {supportsScoring && showScores
+                                  ? `Completed (${prog.totalPointsEarned}/${a.points} pts)`
+                                  : 'Completed'}
                               </span>
-                            ) : (
+                            ) : supportsScoring && showScores ? (
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
                                 {prog.totalPointsEarned > 0
                                   ? `${prog.totalPointsEarned}/${a.points} pts`
                                   : `Up to ${a.points} pts`}
                               </span>
-                            )}
+                            ) : null}
                           </div>
                           <h3 className="text-sm font-bold text-slate-900 truncate">{a.title}</h3>
-                          {a.due_date && (
-                            <p className="text-[11px] text-slate-500">
-                              Due {new Date(a.due_date).toLocaleString()}
+                          {(a.settings?.teacher_instructions || a.instructions) && (
+                            <p className="text-[11px] text-slate-600 line-clamp-1">
+                              {a.settings?.teacher_instructions || a.instructions}
                             </p>
                           )}
+                          <div className="flex items-center gap-2 flex-wrap text-[11px] text-slate-500">
+                            {!started && a.settings?.start_date && (
+                              <span className="text-amber-700 font-semibold">
+                                Starts {new Date(a.settings.start_date).toLocaleString()}
+                              </span>
+                            )}
+                            {a.due_date && (
+                              <span>Due {new Date(a.due_date).toLocaleString()}</span>
+                            )}
+                          </div>
                         </div>
                       </div>
                       {completed ? (
@@ -858,14 +1030,15 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
                       ) : (
                         <button
                           type="button"
+                          disabled={!started}
                           onClick={() => {
                             onClose();
                             onPlayGameAssignment?.(a);
                           }}
-                          className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-sm transition shrink-0 cursor-pointer"
+                          className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:bg-slate-200 disabled:text-slate-500 text-white text-xs font-bold shadow-sm transition shrink-0 cursor-pointer"
                         >
                           <Play className="w-3.5 h-3.5 fill-current" />
-                          <span>Play Game</span>
+                          <span>{started ? 'Start' : 'Scheduled'}</span>
                         </button>
                       )}
                     </div>

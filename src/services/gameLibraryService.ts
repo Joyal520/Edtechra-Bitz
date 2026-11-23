@@ -2,6 +2,8 @@ import { authenticatedFetch } from '@/lib/apiAuth';
 import { supabase } from '@/lib/supabase';
 import type { Assignment } from '@/types/classroom';
 import type {
+  ActivityCategory,
+  ActivityType,
   ClassroomJigsawConfig,
   ConnectionsConfig,
   GameAssignmentSettings,
@@ -17,9 +19,37 @@ import type {
   MemoryMatchConfig,
   SaveTheBalloonConfig,
   SavedLibraryGame,
-  SnakeSpellConfig
+  SnakeSpellConfig,
+  StandaloneTrainingConfig
 } from '@/types/gameLibrary';
 import { createLevelId } from '@/utils/gameLevelUtils';
+
+export interface ActivityCategoryFilterOption {
+  id: 'all' | ActivityCategory;
+  label: string;
+  shortLabel: string;
+}
+
+export const ACTIVITY_CATEGORIES: ActivityCategoryFilterOption[] = [
+  { id: 'all', label: 'All Activities', shortLabel: 'All' },
+  { id: 'brain-memory', label: 'Brain & Memory', shortLabel: 'Brain & Memory' },
+  { id: 'focus-speed', label: 'Focus & Speed', shortLabel: 'Focus & Speed' },
+  { id: 'mathematics', label: 'Mathematics', shortLabel: 'Mathematics' },
+  { id: 'knowledge', label: 'General Knowledge', shortLabel: 'Knowledge' },
+  { id: 'language', label: 'Language', shortLabel: 'Language' },
+  { id: 'mindfulness', label: 'Mindfulness & Wellness', shortLabel: 'Mindfulness' },
+  { id: 'problem-solving', label: 'Problem Solving', shortLabel: 'Problem Solving' },
+  { id: 'creativity', label: 'Creativity', shortLabel: 'Creativity' },
+  { id: 'competitions', label: 'Competitions', shortLabel: 'Competitions' }
+];
+
+export const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {
+  game: 'Game',
+  cognitive_training: 'Cognitive Training',
+  mindfulness: 'Mindfulness / Wellness',
+  knowledge_challenge: 'Knowledge Challenge',
+  competition: 'Competition'
+};
 
 export const GAME_CATALOG: GameCatalogItem[] = [
   {
@@ -28,11 +58,17 @@ export const GAME_CATALOG: GameCatalogItem[] = [
     shortDescription:
       'Students arrange scrambled words into meaningful sentences with optional hints and fluid animations.',
     category: 'Grammar & Syntax',
+    categoryId: 'language',
+    activityType: 'game',
+    estimatedDuration: '3–5 min',
+    difficulty: 'All Levels',
     thumbnailUrl: '/games/thumbnails/Gemini_Generated_Image_6i2hc86i2hc86i2h.jpg',
     accentColor: 'from-cyan-500 to-blue-600',
     badgeLabel: 'Sentence Builder',
     htmlPath: '/games/liquid-sentences.html',
-    defaultPoints: 100
+    defaultPoints: 100,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true
   },
   {
     id: 'save-the-balloon',
@@ -40,11 +76,17 @@ export const GAME_CATALOG: GameCatalogItem[] = [
     shortDescription:
       'Guess letters to uncover each secret word before the balloon floats away, with custom clues and difficulty.',
     category: 'Vocabulary & Spelling',
+    categoryId: 'language',
+    activityType: 'game',
+    estimatedDuration: '3–5 min',
+    difficulty: 'Adaptive',
     thumbnailUrl: '/games/thumbnails/Gemini_Generated_Image_41exj441exj441ex.jpg',
     accentColor: 'from-rose-500 to-amber-500',
     badgeLabel: 'Word Rescue',
     htmlPath: '/games/save-the-balloon.html',
-    defaultPoints: 100
+    defaultPoints: 100,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true
   },
   {
     id: 'memory-match',
@@ -52,11 +94,17 @@ export const GAME_CATALOG: GameCatalogItem[] = [
     shortDescription:
       'Flip cards to pair vocabulary terms with definitions or uploaded pictures in a timed matching challenge.',
     category: 'Recall & Matching',
+    categoryId: 'brain-memory',
+    activityType: 'game',
+    estimatedDuration: '2–4 min',
+    difficulty: 'All Levels',
     thumbnailUrl: '/games/thumbnails/Gemini_Generated_Image_ezubsaezubsaezub.jpg',
     accentColor: 'from-violet-500 to-fuchsia-600',
     badgeLabel: 'Card Pairs',
     htmlPath: '/games/memory-match.html',
-    defaultPoints: 100
+    defaultPoints: 100,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true
   },
   {
     id: 'classroom-jigsaw',
@@ -64,11 +112,17 @@ export const GAME_CATALOG: GameCatalogItem[] = [
     shortDescription:
       'Upload one or more classroom images and turn them into interactive jigsaw puzzles at your chosen grid size.',
     category: 'Visual & Spatial',
+    categoryId: 'problem-solving',
+    activityType: 'game',
+    estimatedDuration: '4–8 min',
+    difficulty: 'All Levels',
     thumbnailUrl: '/games/thumbnails/Gemini_Generated_Image_oocop3oocop3ooco.jpg',
     accentColor: 'from-emerald-500 to-teal-600',
     badgeLabel: 'Visual Puzzle',
     htmlPath: '/games/classroom-jigsaw.html',
-    defaultPoints: 100
+    defaultPoints: 100,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true
   },
   {
     id: 'lumina-words',
@@ -76,11 +130,17 @@ export const GAME_CATALOG: GameCatalogItem[] = [
     shortDescription:
       'Swipe connected letters on the glowing wheel to solve a custom crossword generated from your words and clues.',
     category: 'Spelling & Wordplay',
+    categoryId: 'language',
+    activityType: 'game',
+    estimatedDuration: '3–6 min',
+    difficulty: 'Adaptive',
     thumbnailUrl: '/games/thumbnails/Gemini_Generated_Image_8kpi9b8kpi9b8kpi.jpg',
     accentColor: 'from-indigo-500 to-purple-600',
     badgeLabel: 'Word Wheel',
     htmlPath: '/games/lumina-words.html',
-    defaultPoints: 100
+    defaultPoints: 100,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true
   },
   {
     id: 'snake-spell',
@@ -88,11 +148,17 @@ export const GAME_CATALOG: GameCatalogItem[] = [
     shortDescription:
       'Guide the animated snake to catch missing letter orbs and spell custom classroom words with optional emoji or text clues.',
     category: 'Spelling & Phonics',
+    categoryId: 'language',
+    activityType: 'game',
+    estimatedDuration: '3–5 min',
+    difficulty: 'Beginner',
     thumbnailUrl: '/games/thumbnails/snake-spell.jpg',
     accentColor: 'from-emerald-500 to-cyan-600',
     badgeLabel: 'Word Arcade',
     htmlPath: '/games/snake-spell.html',
-    defaultPoints: 100
+    defaultPoints: 100,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true
   },
   {
     id: 'connections',
@@ -100,11 +166,177 @@ export const GAME_CATALOG: GameCatalogItem[] = [
     shortDescription:
       'Sort sixteen words into four hidden themed categories across graded logic tiers using hints and category clues.',
     category: 'Logic & Categorisation',
+    categoryId: 'problem-solving',
+    activityType: 'game',
+    estimatedDuration: '3–6 min',
+    difficulty: 'Intermediate',
     thumbnailUrl: '/games/thumbnails/connections.jpg',
     accentColor: 'from-amber-500 to-purple-600',
     badgeLabel: 'Word Logic',
     htmlPath: '/games/connections.html',
-    defaultPoints: 100
+    defaultPoints: 100,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true
+  },
+  {
+    id: 'memory-lab',
+    name: 'Memory Lab',
+    shortDescription:
+      'Observe luminous grid patterns and recall sequences forwards or backwards across progressive difficulty speeds.',
+    category: 'Brain & Memory',
+    categoryId: 'brain-memory',
+    activityType: 'game',
+    estimatedDuration: '3–5 min',
+    difficulty: 'Adaptive',
+    thumbnailUrl: '/games/thumbnails/memory-lab.jpg',
+    accentColor: 'from-indigo-600 to-violet-600',
+    badgeLabel: 'Pattern Memory',
+    htmlPath: '/games/memory-lab.html',
+    defaultPoints: 100,
+    isStandaloneBuiltIn: true,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true,
+    resultMetrics: ['Score', 'Level Reached', 'Accuracy']
+  },
+  {
+    id: 'number-memory-challenge',
+    name: 'Number Memory Challenge',
+    shortDescription:
+      'Train working memory by recalling forward, reverse, missing, and pattern-based number sequences.',
+    category: 'Brain & Memory',
+    categoryId: 'brain-memory',
+    activityType: 'cognitive_training',
+    estimatedDuration: '2–4 min',
+    difficulty: 'Adaptive',
+    thumbnailUrl: '/games/thumbnails/number-memory-challenge.jpg',
+    accentColor: 'from-blue-500 to-indigo-600',
+    badgeLabel: 'Working Memory',
+    htmlPath: '/games/number-memory-challenge.html',
+    defaultPoints: 100,
+    isStandaloneBuiltIn: true,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true,
+    resultMetrics: ['Highest Number Remembered', 'Levels Completed', 'Accuracy']
+  },
+  {
+    id: 'missing-piece',
+    name: 'Missing Piece',
+    shortDescription:
+      'Analyze visual rules across shapes, colors, sizes, and rotations to identify the missing geometric tile.',
+    category: 'Brain & Memory',
+    categoryId: 'brain-memory',
+    activityType: 'game',
+    estimatedDuration: '3–6 min',
+    difficulty: 'Adaptive',
+    thumbnailUrl: '/games/thumbnails/missing-piece.jpg',
+    accentColor: 'from-sky-500 to-purple-600',
+    badgeLabel: 'Visual IQ',
+    htmlPath: '/games/missing-piece.html',
+    defaultPoints: 100,
+    isStandaloneBuiltIn: true,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true,
+    resultMetrics: ['Score', 'Correct Answers', 'Levels Completed']
+  },
+  {
+    id: 'stroop-challenge',
+    name: 'Stroop Challenge',
+    shortDescription:
+      'Boost selective attention and reaction speed by matching ink colors instead of the written word under time pressure.',
+    category: 'Focus & Cognitive Speed',
+    categoryId: 'focus-speed',
+    activityType: 'cognitive_training',
+    estimatedDuration: '2–3 min',
+    difficulty: 'Adaptive',
+    thumbnailUrl: '/games/thumbnails/stroop-challenge.jpg',
+    accentColor: 'from-fuchsia-500 to-indigo-600',
+    badgeLabel: 'Focus & Reflex',
+    htmlPath: '/games/stroop-challenge.html',
+    defaultPoints: 100,
+    isStandaloneBuiltIn: true,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true,
+    resultMetrics: ['Score', 'Correct Responses', 'Accuracy']
+  },
+  {
+    id: 'chrono-vault',
+    name: 'Chrono Vault',
+    shortDescription:
+      'Slide interlocking blocks across 1,000 spatial logic levels to guide the glowing core through the vault exit.',
+    category: 'Focus & Cognitive Speed',
+    categoryId: 'focus-speed',
+    activityType: 'cognitive_training',
+    estimatedDuration: '3–8 min',
+    difficulty: 'All Levels',
+    thumbnailUrl: '/games/thumbnails/chrono-vault.jpg',
+    accentColor: 'from-amber-500 to-cyan-600',
+    badgeLabel: 'Spatial Logic',
+    htmlPath: '/games/chrono-vault.html',
+    defaultPoints: 100,
+    isStandaloneBuiltIn: true,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true,
+    resultMetrics: ['Levels Completed', 'Moves vs Par', 'Stars']
+  },
+  {
+    id: 'math-sprint',
+    name: 'Math Sprint',
+    shortDescription:
+      'Race the 60-second clock solving rapid mental arithmetic chains with streak multipliers across skill tiers.',
+    category: 'Mathematics',
+    categoryId: 'mathematics',
+    activityType: 'game',
+    estimatedDuration: '1–2 min',
+    difficulty: 'Adaptive',
+    thumbnailUrl: '/games/thumbnails/math-sprint.jpg',
+    accentColor: 'from-blue-600 to-cyan-500',
+    badgeLabel: 'Mental Math',
+    htmlPath: '/games/math-sprint.html',
+    defaultPoints: 100,
+    isStandaloneBuiltIn: true,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true,
+    resultMetrics: ['Score', 'Correct Answers', 'Accuracy']
+  },
+  {
+    id: 'rapid-knowledge-challenge',
+    name: 'Rapid Knowledge Challenge',
+    shortDescription:
+      'Test general knowledge across Science, Geography, History, English, Math, and ICT against a timed countdown.',
+    category: 'General Knowledge',
+    categoryId: 'knowledge',
+    activityType: 'knowledge_challenge',
+    estimatedDuration: '1–2 min',
+    difficulty: 'All Levels',
+    thumbnailUrl: '/games/thumbnails/rapid-knowledge-challenge.jpg',
+    accentColor: 'from-sky-500 to-emerald-500',
+    badgeLabel: 'Quick Trivia',
+    htmlPath: '/games/rapid-knowledge-challenge.html',
+    defaultPoints: 100,
+    isStandaloneBuiltIn: true,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true,
+    resultMetrics: ['Score', 'Correct Answers', 'Accuracy']
+  },
+  {
+    id: 'box-breathing',
+    name: 'Box Breathing',
+    shortDescription:
+      'Calm the mind and sharpen classroom readiness with a guided 4-phase square breathing mindfulness session.',
+    category: 'Mindfulness & Wellness',
+    categoryId: 'mindfulness',
+    activityType: 'mindfulness',
+    estimatedDuration: '1–5 min',
+    difficulty: 'Gentle',
+    thumbnailUrl: '/games/thumbnails/box-breathing.jpg',
+    accentColor: 'from-teal-500 to-indigo-600',
+    badgeLabel: 'Mindfulness',
+    htmlPath: '/games/box-breathing.html',
+    defaultPoints: 0,
+    isStandaloneBuiltIn: true,
+    supportsScoring: false,
+    defaultLeaderboardEnabled: false,
+    resultMetrics: ['Session Completed', 'Duration', 'Breathing Cycles']
   }
 ];
 
@@ -163,6 +395,13 @@ export function getEmptyConfigForGame(gameId: GameId): GameConfig {
           { title: '', level: 3, words: ['', '', '', ''] }
         ]
       };
+    default: {
+      const item = getGameCatalogItem(gameId);
+      return {
+        title: item.name,
+        teacherNote: ''
+      } satisfies StandaloneTrainingConfig;
+    }
   }
 }
 
@@ -243,6 +482,13 @@ export function getDemoConfigForGame(gameId: GameId): GameConfig {
           { title: 'Things That Have Keys', level: 3, words: ['PIANO', 'MAP', 'LOCK', 'TYPEWRITER'] }
         ]
       };
+    default: {
+      const item = getGameCatalogItem(gameId);
+      return {
+        title: item.name,
+        teacherNote: item.shortDescription
+      } satisfies StandaloneTrainingConfig;
+    }
   }
 }
 
@@ -251,6 +497,13 @@ export interface TeacherClassroomOption {
   name: string;
   subject?: string | null;
   grade_level?: string | null;
+}
+
+export interface ClassroomStudentOption {
+  id: string;
+  fullName: string;
+  email?: string | null;
+  avatarUrl?: string | null;
 }
 
 export function countGameContentItems(gameId: GameId, levels: GameLevelDefinition[]): number {
@@ -275,7 +528,7 @@ export function countGameContentItems(gameId: GameId, levels: GameLevelDefinitio
       case 'connections':
         return total + ((cfg as ConnectionsConfig).groups?.length || 0);
       default:
-        return total;
+        return total + 1;
     }
   }, 0);
 }
@@ -314,19 +567,55 @@ class GameLibraryService {
     return options;
   }
 
+  async getClassroomStudents(classroomId: string): Promise<ClassroomStudentOption[]> {
+    if (!supabase || !classroomId) return [];
+    const { data, error } = await supabase
+      .from('classroom_members')
+      .select('profile_id, profile:profiles(id, full_name, email, avatar_url)')
+      .eq('classroom_id', classroomId)
+      .eq('role', 'student')
+      .eq('status', 'active');
+
+    if (error || !data) return [];
+
+    const seen = new Set<string>();
+    const students: ClassroomStudentOption[] = [];
+    for (const row of data as any[]) {
+      const p = row.profile;
+      const id = p?.id || row.profile_id;
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        students.push({
+          id,
+          fullName: p?.full_name || p?.email || 'Student',
+          email: p?.email || null,
+          avatarUrl: p?.avatar_url || null
+        });
+      }
+    }
+    return students.sort((a, b) => a.fullName.localeCompare(b.fullName));
+  }
+
   async createGameAssignment(params: {
     classroomId: string;
+    classroomIds?: string[];
     gameId: GameId;
     title: string;
     points: number;
     dueDate?: string | null;
+    startDate?: string | null;
     instructions?: string;
+    maxAttempts?: number | null;
+    isCompulsory?: boolean;
+    showScoresToStudents?: boolean;
+    leaderboardEnabled?: boolean;
+    assignedStudentIds?: string[] | null;
     config?: GameConfig;
     levels?: GameLevelDefinition[];
     unlockMode?: LevelUnlockMode;
     dailyLimit?: number;
     libraryGameId?: string;
-  }): Promise<{ data?: Assignment; error?: string }> {
+  }): Promise<{ data?: Assignment; createdAssignments?: Assignment[]; error?: string }> {
     if (!supabase) return { error: 'Supabase is not configured' };
     const {
       data: { user }
@@ -334,141 +623,178 @@ class GameLibraryService {
     if (!user) return { error: 'Authentication required' };
 
     const catalogItem = getGameCatalogItem(params.gameId);
+    const supportsScoring = catalogItem.supportsScoring !== false;
+    const targetClassroomIds =
+      Array.isArray(params.classroomIds) && params.classroomIds.length > 0
+        ? Array.from(new Set(params.classroomIds.filter(Boolean)))
+        : [params.classroomId];
+
     let normalizedLevels =
       params.levels && params.levels.length > 0
         ? params.levels.map((lvl, idx) => ({
             ...lvl,
             levelNumber: idx + 1,
-            points: Math.max(1, Math.round(lvl.points || 20))
+            points: supportsScoring ? Math.max(0, Math.round(lvl.points ?? 20)) : 0
           }))
         : undefined;
 
-    const totalPoints = normalizedLevels
-      ? normalizedLevels.reduce((sum, l) => sum + l.points, 0)
-      : Math.max(1, Math.round(params.points || 100));
-
-    let jigsawSealedKeys: string | undefined;
-    let rawLevelsForKeySync: GameLevelDefinition[] | undefined;
-
-    if (params.gameId === 'classroom-jigsaw') {
-      const levelsToSeal =
-        normalizedLevels ||
-        (params.config
-          ? [
-              {
-                id: 'level-1',
-                levelNumber: 1,
-                title: params.title.trim(),
-                points: totalPoints,
-                config: params.config
-              } as GameLevelDefinition
-            ]
-          : []);
-
-      const hasAnyQuestions = levelsToSeal.some((lvl) => {
-        const jc = lvl.config as ClassroomJigsawConfig;
-        return Boolean(jc?.questionsEnabled) && Array.isArray(jc?.questions) && jc.questions.length > 0;
-      });
-
-      if (hasAnyQuestions) {
-        rawLevelsForKeySync = levelsToSeal;
-        try {
-          const sealRes = await authenticatedFetch('/api/games/jigsaw/seal-config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              classroomId: params.classroomId,
-              levels: levelsToSeal
-            })
-          });
-          const sealJson = await sealRes.json();
-          if (!sealRes.ok || !sealJson?.success) {
-            return {
-              error: sealJson?.error || 'Failed to secure interactive Jigsaw questions before publishing.'
-            };
-          }
-          jigsawSealedKeys = sealJson.jigsawSealedKeys;
-          if (normalizedLevels && Array.isArray(sealJson.levels)) {
-            normalizedLevels = sealJson.levels;
-          }
-        } catch (sealErr: any) {
-          return {
-            error: sealErr?.message || 'Unable to secure interactive Jigsaw questions before publishing.'
-          };
-        }
-      }
-    }
-
-    const sanitizedSingleConfig =
-      params.gameId === 'classroom-jigsaw'
-        ? normalizedLevels?.[0]?.config ||
-          (params.config
-            ? (() => {
-                const { questions: _ignored, ...rest } = params.config as ClassroomJigsawConfig;
-                return rest;
-              })()
-            : undefined)
-        : params.config || normalizedLevels?.[0]?.config;
-
-    const settings: GameAssignmentSettings & { jigsaw_sealed_keys?: string } = {
-      is_game_library: true,
-      ...(params.libraryGameId ? { library_game_id: params.libraryGameId } : {}),
-      game_id: params.gameId,
-      game_name: catalogItem.name,
-      unlock_mode: params.unlockMode || 'sequential',
-      daily_limit: params.dailyLimit || 1,
-      levels: normalizedLevels,
-      game_config: sanitizedSingleConfig,
-      ...(jigsawSealedKeys ? { jigsaw_sealed_keys: jigsawSealedKeys } : {})
-    };
+    const totalPoints = !supportsScoring
+      ? 0
+      : normalizedLevels
+        ? normalizedLevels.reduce((sum, l) => sum + l.points, 0)
+        : Math.max(0, Math.round(params.points ?? catalogItem.defaultPoints));
 
     const levelSummary = normalizedLevels
       ? `${normalizedLevels.length} ${normalizedLevels.length === 1 ? 'level' : 'levels'}`
-      : 'interactive challenge';
+      : 'interactive activity';
 
     const cleanInstructions =
       (params.instructions || '').trim() ||
-      `Play ${catalogItem.name}: "${params.title.trim()}" (${levelSummary}). Complete levels to earn up to ${totalPoints} points on the classroom leaderboard.`;
+      (supportsScoring
+        ? `Complete ${catalogItem.name}: "${params.title.trim()}" (${levelSummary}) to earn up to ${totalPoints} points.`
+        : `Complete the ${catalogItem.name} session: "${params.title.trim()}".`);
 
-    try {
-      const { data, error } = await supabase
-        .from('assignments')
-        .insert({
-          classroom_id: params.classroomId,
-          title: params.title.trim(),
-          instructions: cleanInstructions,
-          assignment_type: 'activity',
-          points: totalPoints,
-          due_date: params.dueDate || null,
-          attachment_urls: [],
-          settings,
-          created_by: user.id,
-          status: 'published'
-        })
-        .select()
-        .single();
+    const createdAssignments: Assignment[] = [];
 
-      if (error) throw error;
+    for (const targetClassroomId of targetClassroomIds) {
+      let jigsawSealedKeys: string | undefined;
+      let rawLevelsForKeySync: GameLevelDefinition[] | undefined;
+      let classroomLevels = normalizedLevels ? JSON.parse(JSON.stringify(normalizedLevels)) : undefined;
 
-      if (data?.id && rawLevelsForKeySync) {
-        authenticatedFetch('/api/games/jigsaw/seal-config', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            classroomId: params.classroomId,
-            assignmentId: data.id,
-            levels: rawLevelsForKeySync
-          })
-        }).catch(() => {
-          // Sealed payload inside assignment settings already protects answer keys.
+      if (params.gameId === 'classroom-jigsaw') {
+        const levelsToSeal =
+          classroomLevels ||
+          (params.config
+            ? [
+                {
+                  id: 'level-1',
+                  levelNumber: 1,
+                  title: params.title.trim(),
+                  points: totalPoints,
+                  config: params.config
+                } as GameLevelDefinition
+              ]
+            : []);
+
+        const hasAnyQuestions = levelsToSeal.some((lvl: GameLevelDefinition) => {
+          const jc = lvl.config as ClassroomJigsawConfig;
+          return Boolean(jc?.questionsEnabled) && Array.isArray(jc?.questions) && jc.questions.length > 0;
         });
+
+        if (hasAnyQuestions) {
+          rawLevelsForKeySync = levelsToSeal;
+          try {
+            const sealRes = await authenticatedFetch('/api/games/jigsaw/seal-config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                classroomId: targetClassroomId,
+                levels: levelsToSeal
+              })
+            });
+            const sealJson = await sealRes.json();
+            if (!sealRes.ok || !sealJson?.success) {
+              return {
+                error: sealJson?.error || 'Failed to secure interactive Jigsaw questions before publishing.'
+              };
+            }
+            jigsawSealedKeys = sealJson.jigsawSealedKeys;
+            if (classroomLevels && Array.isArray(sealJson.levels)) {
+              classroomLevels = sealJson.levels;
+            }
+          } catch (sealErr: any) {
+            return {
+              error: sealErr?.message || 'Unable to secure interactive Jigsaw questions before publishing.'
+            };
+          }
+        }
       }
 
-      return { data: data as Assignment };
-    } catch (err: any) {
-      console.error('[GameLibraryService] createGameAssignment error:', err);
-      return { error: err?.message || 'Failed to publish game assignment.' };
+      const sanitizedSingleConfig =
+        params.gameId === 'classroom-jigsaw'
+          ? classroomLevels?.[0]?.config ||
+            (params.config
+              ? (() => {
+                  const { questions: _ignored, ...rest } = params.config as ClassroomJigsawConfig;
+                  return rest;
+                })()
+              : undefined)
+          : params.config || classroomLevels?.[0]?.config;
+
+      const assignedStudentIds =
+        targetClassroomIds.length === 1 && Array.isArray(params.assignedStudentIds) && params.assignedStudentIds.length > 0
+          ? params.assignedStudentIds
+          : null;
+
+      const settings: GameAssignmentSettings & { jigsaw_sealed_keys?: string } = {
+        is_game_library: true,
+        ...(params.libraryGameId ? { library_game_id: params.libraryGameId } : {}),
+        game_id: params.gameId,
+        game_name: catalogItem.name,
+        activity_type: catalogItem.activityType,
+        category_id: catalogItem.categoryId,
+        supports_scoring: supportsScoring,
+        teacher_instructions: cleanInstructions,
+        start_date: params.startDate || null,
+        max_attempts: params.maxAttempts ?? 1,
+        is_compulsory: params.isCompulsory ?? true,
+        show_scores_to_students: supportsScoring ? (params.showScoresToStudents ?? true) : false,
+        leaderboard_enabled: supportsScoring ? (params.leaderboardEnabled ?? (catalogItem.defaultLeaderboardEnabled !== false)) : false,
+        assigned_student_ids: assignedStudentIds,
+        unlock_mode: params.unlockMode || 'sequential',
+        daily_limit: params.dailyLimit || 1,
+        levels: classroomLevels,
+        game_config: sanitizedSingleConfig,
+        ...(jigsawSealedKeys ? { jigsaw_sealed_keys: jigsawSealedKeys } : {})
+      };
+
+      try {
+        const { data, error } = await supabase
+          .from('assignments')
+          .insert({
+            classroom_id: targetClassroomId,
+            title: params.title.trim(),
+            instructions: cleanInstructions,
+            assignment_type: 'activity',
+            points: totalPoints,
+            due_date: params.dueDate || null,
+            attachment_urls: [],
+            settings,
+            created_by: user.id,
+            status: 'published'
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        if (data?.id && rawLevelsForKeySync) {
+          authenticatedFetch('/api/games/jigsaw/seal-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              classroomId: targetClassroomId,
+              assignmentId: data.id,
+              levels: rawLevelsForKeySync
+            })
+          }).catch(() => {
+            // Sealed payload inside assignment settings already protects answer keys.
+          });
+        }
+
+        if (data) {
+          createdAssignments.push(data as Assignment);
+        }
+      } catch (err: any) {
+        console.error('[GameLibraryService] createGameAssignment error:', err);
+        return { error: err?.message || 'Failed to publish activity assignment.' };
+      }
     }
+
+    return {
+      data: createdAssignments[0],
+      createdAssignments
+    };
   }
 
   async getSavedGames(): Promise<SavedLibraryGame[]> {
@@ -508,10 +834,11 @@ class GameLibraryService {
     if (!user) return { error: 'Authentication required' };
 
     const catalogItem = getGameCatalogItem(params.gameId);
+    const supportsScoring = catalogItem.supportsScoring !== false;
     const normalizedLevels = params.levels.map((lvl, idx) => ({
       ...lvl,
       levelNumber: idx + 1,
-      points: Math.max(1, Math.round(lvl.points || 20))
+      points: supportsScoring ? Math.max(0, Math.round(lvl.points ?? 20)) : 0
     }));
 
     const payload = {

@@ -21,6 +21,25 @@ export function isAssignmentPublished(assignment?: Assignment | null): boolean {
   return true;
 }
 
+export function isStudentAssignedToActivity(
+  assignment?: Assignment | null,
+  studentId?: string | null
+): boolean {
+  if (!assignment) return false;
+  const targetIds = assignment.settings?.assigned_student_ids;
+  if (!Array.isArray(targetIds) || targetIds.length === 0) return true;
+  if (!studentId) return false;
+  return targetIds.includes(studentId);
+}
+
+export function isAssignmentStarted(assignment?: Assignment | null): boolean {
+  const startDate = assignment?.settings?.start_date;
+  if (!startDate) return true;
+  const startMs = new Date(startDate).getTime();
+  if (isNaN(startMs)) return true;
+  return Date.now() >= startMs;
+}
+
 export function getLevelQuestionCount(gameId: GameId, cfg?: GameConfig | null): number {
   if (!cfg) return 0;
   switch (gameId) {
@@ -83,6 +102,7 @@ export function createLevelId(): string {
 
 export function normalizeAssignmentLevels(assignment: Assignment): GameLevelDefinition[] {
   const settings = assignment.settings || {};
+  const isNonScoring = settings.supports_scoring === false;
   if (Array.isArray(settings.levels) && settings.levels.length > 0) {
     return [...settings.levels]
       .sort((a, b) => Number(a.levelNumber || 0) - Number(b.levelNumber || 0))
@@ -90,7 +110,7 @@ export function normalizeAssignmentLevels(assignment: Assignment): GameLevelDefi
         ...lvl,
         id: lvl.id || `level-${idx + 1}`,
         levelNumber: Number(lvl.levelNumber || idx + 1),
-        points: Math.max(1, Number(lvl.points || 20))
+        points: isNonScoring || Number(lvl.points) === 0 ? 0 : Math.max(1, Number(lvl.points || 20))
       }));
   }
 
@@ -101,7 +121,7 @@ export function normalizeAssignmentLevels(assignment: Assignment): GameLevelDefi
         levelNumber: 1,
         title: assignment.title || 'Level 1',
         instructions: assignment.instructions || '',
-        points: Math.max(1, Number(assignment.points || 100)),
+        points: isNonScoring || Number(assignment.points) === 0 ? 0 : Math.max(1, Number(assignment.points || 100)),
         isManuallyLocked: false,
         unlockAt: null,
         config: settings.game_config as GameConfig

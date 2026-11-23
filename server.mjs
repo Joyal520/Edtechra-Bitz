@@ -24216,6 +24216,25 @@ app.post('/api/games/submit-score', async (req, res) => {
     if (!assignment.settings?.is_game_library) {
       return res.status(400).json({ success: false, error: 'Assignment is not a Game Library activity' });
     }
+    if (assignment.settings?.game_id && String(assignment.settings.game_id) !== String(gameId)) {
+      return res.status(400).json({ success: false, error: 'Activity gameId mismatch for this assignment' });
+    }
+    if (
+      Array.isArray(assignment.settings?.assigned_student_ids) &&
+      assignment.settings.assigned_student_ids.length > 0 &&
+      !assignment.settings.assigned_student_ids.includes(studentId)
+    ) {
+      return res.status(403).json({ success: false, error: 'You are not assigned to this activity.' });
+    }
+    if (assignment.settings?.start_date) {
+      const startMs = new Date(assignment.settings.start_date).getTime();
+      if (!isNaN(startMs) && Date.now() < startMs) {
+        return res.status(403).json({
+          success: false,
+          error: `This activity starts on ${new Date(startMs).toLocaleString()}.`
+        });
+      }
+    }
 
     // 2. Verify classroom membership & fetch classroom timezone
     const [{ data: membership }, { data: classroomRow }] = await Promise.all([
@@ -24297,23 +24316,34 @@ app.post('/api/games/submit-score', async (req, res) => {
       }
     }
 
-    // 5. Duplicate submission check for THIS specific level
-    if (levelsCompleted[resolvedLevelId]) {
-      const existingRec = levelsCompleted[resolvedLevelId];
+    // 5. Attempt & duplicate submission check for THIS specific level
+    const maxAttempts = assignment.settings?.max_attempts !== undefined && assignment.settings?.max_attempts !== null
+      ? Number(assignment.settings.max_attempts)
+      : 1;
+    const existingRec = levelsCompleted[resolvedLevelId] || null;
+    const existingAttempts = existingRec ? Math.max(1, Number(existingRec.attempts || 1)) : 0;
+    const isNonScoringActivity =
+      assignment.settings?.supports_scoring === false || Number(targetLevel.points) === 0;
+    const leaderboardEnabled =
+      !isNonScoringActivity && assignment.settings?.leaderboard_enabled !== false;
+
+    if (existingRec && maxAttempts !== 0 && existingAttempts >= Math.max(1, maxAttempts)) {
       const completedCount = Object.keys(levelsCompleted).length;
       const totalEarned = Object.values(levelsCompleted).reduce((s, r) => s + Number(r?.scoreEarned || 0), 0);
+      const resolvedMax = isNonScoringActivity ? 0 : Math.max(1, Number(targetLevel.points || 20));
       return res.json({
         success: true,
         alreadySubmitted: true,
         pointsAwarded: 0,
         existingScore: Number(existingRec.scoreEarned || 0),
-        maxPoints: Math.max(1, Number(targetLevel.points || 20)),
+        maxPoints: resolvedMax,
         percentage: Number(existingRec.percentage ?? 100),
         submissionId: existingSubmission?.id || null,
         levelId: resolvedLevelId,
         completedLevelsCount: completedCount,
         totalLevels: rawLevels.length,
         totalPointsEarned: totalEarned,
+        details: existingRec.details || null,
         message: 'You have already completed this level. Duplicate submissions do not award extra points.'
       });
     }
@@ -24366,14 +24396,45 @@ app.post('/api/games/submit-score', async (req, res) => {
       }
     }
 
-    // 7. Compute bounded score scaled to this level's points
-    const levelMax = Math.max(1, Number(targetLevel.points || 20));
-    const reportedMax = Math.max(1, Number(maxPoints || levelMax));
-    const rawScore = Math.max(0, Number(scoreEarned || 0));
-    const ratio = Math.min(1, Math.max(0, rawScore / reportedMax));
-    let pointsAwarded = Math.min(levelMax, Math.max(0, Math.round(ratio * levelMax)));
-    let percentage = Math.round(ratio * 100);
-    let resolvedDetails = details || null;
+    // 7. Sanitize details and compute bounded score (supports non-scoring mindfulness activities)
+    const sanitizeActivityDetails = (rawObj) => {
+      if (!rawObj || typeof rawObj !== 'object' || Array.isArray(rawObj)) return null;
+      const out = {};
+      const entries = Object.entries(rawObj).slice(0, 32);
+      for (const [k, v] of entries) {
+        const key = String(k).slice(0, 64);
+        if (v === null || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))) {
+          out[key] = v;
+        } else if (typeof v === 'string') {
+          out[key] = v.slice(0, 300);
+        } else if (Array.isArray(v)) {
+          out[key] = v.slice(0, 40).map((item) => {
+            if (item && typeof item === 'object' && !Array.isArray(item)) {
+              const cleanItem = {};
+              for (const [ik, iv] of Object.entries(item).slice(0, 12)) {
+                if (iv === null || typeof iv === 'boolean' || (typeof iv === 'number' && Number.isFinite(iv))) {
+                  cleanItem[String(ik).slice(0, 48)] = iv;
+                } else if (typeof iv === 'string') {
+                  cleanItem[String(ik).slice(0, 48)] = iv.slice(0, 200);
+                }
+              }
+              return cleanItem;
+            }
+            return typeof item === 'string' ? item.slice(0, 120) : item;
+          });
+        }
+      }
+      const serialized = JSON.stringify(out);
+      return serialized.length <= 16000 ? out : null;
+    };
+
+    const levelMax = isNonScoringActivity ? 0 : Math.max(1, Number(targetLevel.points || 20));
+    const reportedMax = isNonScoringActivity ? 0 : Math.max(1, Number(maxPoints || levelMax));
+    const rawScore = isNonScoringActivity ? 0 : Math.max(0, Number(scoreEarned || 0));
+    const ratio = isNonScoringActivity ? 1 : Math.min(1, Math.max(0, rawScore / reportedMax));
+    let pointsAwarded = isNonScoringActivity ? 0 : Math.min(levelMax, Math.max(0, Math.round(ratio * levelMax)));
+    let percentage = isNonScoringActivity ? 100 : Math.round(ratio * 100);
+    let resolvedDetails = sanitizeActivityDetails(details);
 
     if (gameId === 'classroom-jigsaw') {
       const { questionsEnabled, questions: canonicalQuestions } = await resolveJigsawCanonicalQuestions(
@@ -24444,17 +24505,28 @@ app.post('/api/games/submit-score', async (req, res) => {
     const safeTimeSeconds = Math.max(0, Math.round(Number(timeTakenSeconds || 0)));
     const nowIso = new Date().toISOString();
 
+    const prevBestScore = existingRec ? Math.max(0, Number(existingRec.scoreEarned || 0)) : 0;
+    const bestLevelScore = isNonScoringActivity ? 0 : Math.max(prevBestScore, pointsAwarded);
+    const bestLevelPct = isNonScoringActivity
+      ? 100
+      : Math.max(existingRec ? Number(existingRec.percentage || 0) : 0, percentage);
+    const incrementalPoints = leaderboardEnabled
+      ? Math.max(0, bestLevelScore - prevBestScore)
+      : 0;
+
     const updatedLevelsCompleted = {
       ...levelsCompleted,
       [resolvedLevelId]: {
         levelId: resolvedLevelId,
         levelNumber: Number(targetLevel.levelNumber || targetIndex + 1),
         title: targetLevel.title || `Level ${targetIndex + 1}`,
-        scoreEarned: pointsAwarded,
+        scoreEarned: bestLevelScore,
         maxPoints: levelMax,
-        percentage,
+        percentage: bestLevelPct,
         timeTakenSeconds: safeTimeSeconds,
         completedAt: nowIso,
+        attempts: existingAttempts + 1,
+        supportsScoring: !isNonScoringActivity,
         details: resolvedDetails
       }
     };
@@ -24468,12 +24540,15 @@ app.post('/api/games/submit-score', async (req, res) => {
       0
     );
     const allLevelsCompleted = completedLevelsCount >= rawLevels.length;
-    const assignmentTotalMax = rawLevels.reduce((sum, l) => sum + Math.max(1, Number(l.points || 20)), 0);
+    const assignmentTotalMax = isNonScoringActivity
+      ? 0
+      : rawLevels.reduce((sum, l) => sum + Math.max(0, Number(l.points ?? 20)), 0);
 
     const summaryText = JSON.stringify({
       game_id: gameId,
       game_name: assignment.settings?.game_name || gameId,
       is_multi_level: true,
+      supports_scoring: !isNonScoringActivity,
       student_id: studentId,
       classroom_id: classroomId,
       assignment_id: assignmentId,
@@ -24486,7 +24561,9 @@ app.post('/api/games/submit-score', async (req, res) => {
     });
 
     const newStatus = allLevelsCompleted ? 'graded' : 'submitted';
-    const feedbackText = `${completedLevelsCount}/${rawLevels.length} levels completed (${totalPointsEarned}/${assignmentTotalMax} pts)`;
+    const feedbackText = isNonScoringActivity
+      ? `${completedLevelsCount}/${rawLevels.length} ${rawLevels.length === 1 ? 'session' : 'sessions'} completed`
+      : `${completedLevelsCount}/${rawLevels.length} levels completed (${totalPointsEarned}/${assignmentTotalMax} pts)`;
 
     // 8. Save submission record (insert or update)
     let submissionId = existingSubmission?.id || null;
@@ -24533,12 +24610,12 @@ app.post('/api/games/submit-score', async (req, res) => {
       submissionId = insertedSub?.id || null;
     }
 
-    // 9. Award classroom leaderboard points idempotently per level (with rollback on failure)
+    // 9. Award classroom leaderboard points idempotently per level (skip if non-scoring or leaderboard disabled)
     const levelSourceId = UUID_REGEX.test(resolvedLevelId) ? resolvedLevelId : assignmentId;
-    if (pointsAwarded > 0) {
+    if (leaderboardEnabled && incrementalPoints > 0) {
       const { data: existingPts } = await serverSupabase
         .from('classroom_points')
-        .select('id')
+        .select('id, points')
         .eq('classroom_id', classroomId)
         .eq('student_id', studentId)
         .eq('source_type', 'activity')
@@ -24551,7 +24628,7 @@ app.post('/api/games/submit-score', async (req, res) => {
           .insert({
             classroom_id: classroomId,
             student_id: studentId,
-            points: pointsAwarded,
+            points: incrementalPoints,
             source_type: 'activity',
             source_id: levelSourceId,
             reason: `Game Library: ${assignment.title || assignment.settings?.game_name || gameId} (${targetLevel.title || `Level ${targetIndex + 1}`})`,
@@ -24579,6 +24656,11 @@ app.post('/api/games/submit-score', async (req, res) => {
             error: 'Failed to update classroom leaderboard points. Please retry.'
           });
         }
+      } else if (bestLevelScore > Number(existingPts.points || 0)) {
+        await serverSupabase
+          .from('classroom_points')
+          .update({ points: bestLevelScore })
+          .eq('id', existingPts.id);
       }
     }
 
@@ -24604,9 +24686,9 @@ app.post('/api/games/submit-score', async (req, res) => {
     return res.json({
       success: true,
       alreadySubmitted: false,
-      pointsAwarded,
+      pointsAwarded: bestLevelScore,
       maxPoints: levelMax,
-      percentage,
+      percentage: bestLevelPct,
       timeTakenSeconds: safeTimeSeconds,
       submissionId,
       levelId: resolvedLevelId,
@@ -24614,7 +24696,11 @@ app.post('/api/games/submit-score', async (req, res) => {
       totalLevels: rawLevels.length,
       totalPointsEarned,
       details: resolvedDetails,
-      message: `${targetLevel.title || `Level ${targetIndex + 1}`} completed! +${pointsAwarded} points added to the classroom leaderboard.`
+      message: isNonScoringActivity
+        ? `${targetLevel.title || 'Session'} completed and recorded!`
+        : !leaderboardEnabled
+          ? `${targetLevel.title || `Level ${targetIndex + 1}`} completed (${bestLevelScore}/${levelMax} pts)!`
+          : `${targetLevel.title || `Level ${targetIndex + 1}`} completed! +${incrementalPoints} points added to the classroom leaderboard.`
     });
   } catch (err) {
     console.error('[games/submit-score] error:', err);
@@ -25049,17 +25135,24 @@ app.get('/api/teacher/games/dashboard', async (req, res) => {
 
       const rawLevels = Array.isArray(a.settings?.levels) && a.settings.levels.length > 0 ? a.settings.levels : [];
       const totalLevels = Math.max(1, rawLevels.length || 1);
-      const maxPoints =
-        rawLevels.length > 0
-          ? rawLevels.reduce((sum, l) => sum + Math.max(1, Number(l.points || 20)), 0)
-          : Math.max(1, Number(a.points || 100));
+      const isNonScoring = a.settings?.supports_scoring === false;
+      const maxPoints = isNonScoring
+        ? 0
+        : rawLevels.length > 0
+          ? rawLevels.reduce((sum, l) => sum + Math.max(0, Number(l.points ?? 20)), 0)
+          : Math.max(0, Number(a.points ?? 100));
 
       const subsForAssign = gameSubsByAssignment.get(a.id) || [];
       const subByStudent = new Map();
       subsForAssign.forEach((s) => subByStudent.set(s.student_id, s));
 
       const rosterMap = rosterByClassroom.get(a.classroom_id) || new Map();
-      const studentIdSet = new Set([...rosterMap.keys(), ...subByStudent.keys()]);
+      const assignedIds = Array.isArray(a.settings?.assigned_student_ids) && a.settings.assigned_student_ids.length > 0
+        ? a.settings.assigned_student_ids
+        : null;
+      const studentIdSet = assignedIds
+        ? new Set([...assignedIds, ...subByStudent.keys()])
+        : new Set([...rosterMap.keys(), ...subByStudent.keys()]);
 
       let completedCount = 0;
       let inProgressCount = 0;

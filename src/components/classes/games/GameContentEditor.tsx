@@ -1,6 +1,6 @@
 import React from 'react';
 import { AlertTriangle, ImagePlus, Layers, Plus, Sparkles, Trash2 } from 'lucide-react';
-import { getDemoConfigForGame } from '@/services/gameLibraryService';
+import { ACTIVITY_TYPE_LABELS, getDemoConfigForGame, getGameCatalogItem } from '@/services/gameLibraryService';
 import {
   LUMINA_MAX_WHEEL_LETTERS,
   LUMINA_MAX_WORD_LENGTH,
@@ -17,7 +17,8 @@ import type {
   LuminaWordsConfig,
   MemoryMatchConfig,
   SaveTheBalloonConfig,
-  SnakeSpellConfig
+  SnakeSpellConfig,
+  StandaloneTrainingConfig
 } from '@/types/gameLibrary';
 import { BulkContentUploader, type ParsedBulkRow } from './BulkContentUploader';
 import { ConnectionsEditor } from './ConnectionsEditor';
@@ -682,6 +683,72 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
         onChange={(next) => onChange(next)}
         onBulkImport={handleBulkImport}
       />
+    );
+  }
+
+  if (gameId !== 'lumina-words') {
+    const item = getGameCatalogItem(gameId);
+    const sc = (config || {}) as StandaloneTrainingConfig;
+    return (
+      <div className="space-y-4">
+        <div className="p-4 rounded-2xl border border-sky-200 bg-white flex flex-col sm:flex-row gap-4 items-start">
+          <img
+            src={item.thumbnailUrl}
+            alt={item.name}
+            className="w-full sm:w-40 aspect-video rounded-xl object-cover border border-slate-200 shrink-0"
+          />
+          <div className="space-y-1.5 flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
+                {item.category}
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                {ACTIVITY_TYPE_LABELS[item.activityType]}
+              </span>
+              {item.supportsScoring === false && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
+                  Completion-based (no forced score)
+                </span>
+              )}
+            </div>
+            <h4 className="text-sm font-black text-slate-900">{item.name}</h4>
+            <p className="text-xs text-slate-600 leading-relaxed">{item.shortDescription}</p>
+            {item.resultMetrics && item.resultMetrics.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Tracked results:
+                </span>
+                {item.resultMetrics.map((metric) => (
+                  <span
+                    key={metric}
+                    className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700"
+                  >
+                    {metric}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3">
+          <div>
+            <label className="block text-[11px] font-bold text-slate-700 mb-1">
+              Optional Focus Goal / Teacher Note
+            </label>
+            <input
+              type="text"
+              value={sc.teacherNote || ''}
+              onChange={(e) => onChange({ ...sc, title: sc.title || item.name, teacherNote: e.target.value })}
+              placeholder={`e.g., Complete one focused ${item.name} session before starting today's lesson`}
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/60 text-xs"
+            />
+          </div>
+          <p className="text-[11px] text-slate-500">
+            This activity runs out of the box with its built-in interactive engine. Use <strong>Preview</strong> above to test it, or proceed to <strong>Next: Assign</strong> to configure student targeting, dates, attempts, and scoring options.
+          </p>
+        </div>
+      </div>
     );
   }
 
