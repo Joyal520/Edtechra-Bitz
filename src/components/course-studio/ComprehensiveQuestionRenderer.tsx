@@ -645,8 +645,8 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
         </div>
       </div>
 
-      {/* READING PASSAGE REFERENCE CALLOUT */}
-      {passageText && (
+      {/* READING PASSAGE REFERENCE CALLOUT (hidden for cloze_passage which renders the passage inline) */}
+      {passageText && qType !== 'cloze_passage' && (
         <div className="p-4 rounded-2xl bg-[var(--theme-surface-subtle)] border-l-4 border-l-[var(--theme-accent)] border border-[var(--theme-border-subtle)] text-xs leading-relaxed text-theme-primary space-y-1.5 shadow-2xs">
           <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-theme-accent">
             <BookOpen className="w-3.5 h-3.5" />

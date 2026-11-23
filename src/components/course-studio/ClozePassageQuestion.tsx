@@ -1,12 +1,12 @@
 // ============================================================================
 // EDTECHRA DIGITAL CLASSROOM: CLOZE PASSAGE INTERACTIVE QUESTION
-// Renders a compact, readable passage with inline interactive dropdown blanks,
-// live completion counter ("Completed X of Y blanks"), Check Answer submission,
-// and immediate educational feedback.
+// Renders a compact, 14px dark-navy reading passage with inline <select>
+// vocabulary dropdowns, live "Completed X of Y blanks" counter,
+// Check Answers submission, and immediate educational feedback.
 // ============================================================================
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Check, X, ChevronDown, CheckCircle2, XCircle, Send } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { CheckCircle2, XCircle, Send } from 'lucide-react';
 import { CourseQuestion, ClozeBlank } from '@/types/courseStudio';
 import { playCorrectSound, playIncorrectSound, playCompleteSound } from '@/utils/courseAudio';
 import { triggerConfettiBurst } from '@/utils/courseConfetti';
@@ -61,7 +61,6 @@ export const ClozePassageQuestion: React.FC<Props> = ({
   const { user } = useAuth();
   const { passageText, blanks } = useMemo(() => parseClozePayload(question), [question]);
 
-  // State: mapping of blankId -> selected option string
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>(() => {
     if (!selectedAnswer || blanks.length === 0) return {};
     const restored: Record<string, string> = {};
@@ -76,8 +75,6 @@ export const ClozePassageQuestion: React.FC<Props> = ({
   });
 
   const [submitted, setSubmitted] = useState<boolean>(Boolean(isLocked));
-  const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isLocked) {
@@ -85,21 +82,16 @@ export const ClozePassageQuestion: React.FC<Props> = ({
     }
   }, [isLocked]);
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setActiveDropdownId(null);
-      }
-    };
-    document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, []);
-
-  const handleSelectOption = (blank: ClozeBlank, optionText: string) => {
+  const handleSelectChange = (blankId: string, value: string) => {
     if (submitted || isLocked || isSubmitting) return;
-    setUserAnswers(prev => ({ ...prev, [blank.id]: optionText }));
-    setActiveDropdownId(null);
+    setUserAnswers(prev => {
+      if (!value) {
+        const next = { ...prev };
+        delete next[blankId];
+        return next;
+      }
+      return { ...prev, [blankId]: value };
+    });
   };
 
   const answeredCount = blanks.filter(b => Boolean(userAnswers[b.id])).length;
@@ -121,7 +113,6 @@ export const ClozePassageQuestion: React.FC<Props> = ({
   const handleCheckAnswer = (e: React.MouseEvent<HTMLButtonElement>) => {
     if (!allAnswered || submitted || isLocked || isSubmitting) return;
     setSubmitted(true);
-    setActiveDropdownId(null);
 
     const allRight = blanks.every(
       b => (userAnswers[b.id] || '').trim().toLowerCase() === b.answer.trim().toLowerCase()
@@ -143,10 +134,10 @@ export const ClozePassageQuestion: React.FC<Props> = ({
 
   const renderPassageWithBlanks = () => {
     if (!passageText) {
-      return <p className="text-slate-500 italic reader-body">No passage content provided.</p>;
+      return <p className="text-[14px] leading-[1.8] text-slate-600 italic">No passage content provided.</p>;
     }
     if (blanks.length === 0) {
-      return <p className="leading-[1.85] text-slate-900 dark:text-slate-100 reader-body">{passageText}</p>;
+      return <p className="text-[14px] leading-[1.8] font-normal text-[#0f172a]">{passageText}</p>;
     }
 
     let workingText = passageText;
@@ -174,7 +165,7 @@ export const ClozePassageQuestion: React.FC<Props> = ({
     const splitParts = workingText.split(/(__CLOZE_TOKEN_\d+__)/g);
 
     return (
-      <div className="text-base sm:text-[17px] leading-[2.2] text-slate-900 dark:text-slate-100 font-medium reader-body">
+      <div className="text-[14px] leading-[1.8] font-normal text-[#0f172a] break-words">
         {splitParts.map((part, pIdx) => {
           const match = part.match(/__CLOZE_TOKEN_(\d+)__/);
           if (match) {
@@ -182,117 +173,64 @@ export const ClozePassageQuestion: React.FC<Props> = ({
             const blank = blanks[blankIdx];
             if (!blank) return null;
 
-            const selected = userAnswers[blank.id];
+            const selected = userAnswers[blank.id] || '';
             const status = blankStatuses[blank.id];
             const isEvaluated = submitted && status !== undefined;
-            const isOpen = activeDropdownId === blank.id;
+            const shuffledOpts = shuffleOptionsForStudent(
+              blank.options || [],
+              user?.id,
+              `${question.id || 'cloze'}_${blank.id}`
+            );
 
             return (
-              <span key={`blank_${blank.id}_${pIdx}`} className="inline-block relative align-middle my-0.5 mx-1">
-                <button
-                  type="button"
+              <span key={`blank_${blank.id}_${pIdx}`} className="inline-flex items-center gap-1 align-baseline mx-1 my-0.5">
+                <select
+                  aria-label={`Blank ${blankIdx + 1}`}
+                  value={selected}
                   disabled={isEvaluated || isLocked || isSubmitting}
-                  onClick={e => {
-                    e.stopPropagation();
-                    setActiveDropdownId(isOpen ? null : blank.id);
-                  }}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border-2 text-xs sm:text-sm font-black transition-all shadow-2xs reader-button ${
+                  onChange={e => handleSelectChange(blank.id, e.target.value)}
+                  className={`inline-block rounded-lg border px-2.5 py-0.5 text-[14px] leading-[1.4] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-sky-400/40 cursor-pointer disabled:cursor-default ${
                     isEvaluated
                       ? status.isCorrect
                         ? 'bg-emerald-50 border-emerald-400 text-emerald-900'
                         : 'bg-rose-50 border-rose-400 text-rose-900'
                       : selected
-                      ? 'bg-sky-50 border-sky-500 text-sky-900 cursor-pointer'
-                      : isOpen
-                      ? 'bg-sky-100 border-sky-600 text-sky-900 ring-2 ring-sky-400/30 cursor-pointer'
-                      : 'bg-white border-sky-300 text-slate-800 hover:border-sky-500 hover:bg-sky-50 cursor-pointer'
+                      ? 'bg-sky-50 border-sky-400 text-[#0f172a]'
+                      : 'bg-sky-50/80 border-sky-300 text-slate-700 hover:border-sky-500'
                   }`}
                 >
-                  {isEvaluated ? (
-                    <>
-                      {status.isCorrect ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 stroke-[3]" />
-                      ) : (
-                        <X className="w-3.5 h-3.5 text-rose-600 shrink-0 stroke-[3]" />
-                      )}
-                      <span>{selected}</span>
-                    </>
-                  ) : selected ? (
-                    <>
-                      <span className="text-sky-700 font-black">[{blankIdx + 1}]</span>
-                      <span>{selected}</span>
-                      <ChevronDown className="w-3.5 h-3.5 text-sky-600" />
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-sky-700 font-black">[{blankIdx + 1}]</span>
-                      <span className="text-slate-400">______</span>
-                      <ChevronDown className="w-3.5 h-3.5 text-sky-600" />
-                    </>
-                  )}
-                </button>
+                  <option value="">Choose...</option>
+                  {shuffledOpts.map((option, optIdx) => (
+                    <option key={optIdx} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
 
                 {isEvaluated && !status.isCorrect && (
-                  <span className="ml-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-300">
+                  <span className="text-[12px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-300">
                     ✓ {blank.answer}
                   </span>
-                )}
-
-                {isOpen && !isEvaluated && (
-                  <div
-                    className="absolute left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 bottom-full mb-2 z-50 w-52 sm:w-60 max-w-[calc(100vw-3rem)] p-2 rounded-2xl bg-white dark:bg-slate-900 space-y-1 shadow-xl border border-sky-200 dark:border-slate-700"
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <div className="text-[10px] font-bold text-sky-700 uppercase px-2 py-1 border-b border-slate-100 flex items-center justify-between">
-                      <span>Blank #{blankIdx + 1}</span>
-                      <span className="text-slate-400">Choose word</span>
-                    </div>
-                    {shuffleOptionsForStudent(
-                      blank.options || [],
-                      user?.id,
-                      `${question.id || 'cloze'}_${blank.id}`
-                    ).map((option, optIdx) => {
-                      const letter = String.fromCharCode(65 + optIdx);
-                      const isChosen = selected === option;
-                      return (
-                        <button
-                          key={optIdx}
-                          type="button"
-                          onClick={() => handleSelectOption(blank, option)}
-                          className={`w-full p-2 rounded-xl text-left text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                            isChosen
-                              ? 'bg-sky-100 text-sky-900'
-                              : 'text-slate-800 dark:text-slate-100 hover:bg-sky-50 dark:hover:bg-slate-800 hover:text-sky-700'
-                          }`}
-                        >
-                          <span className="w-5 h-5 rounded-md bg-sky-100 text-sky-700 border border-sky-200 flex items-center justify-center text-[10px] font-black shrink-0">
-                            {letter}
-                          </span>
-                          <span className="flex-1 truncate">{option}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
                 )}
               </span>
             );
           }
-          return <span key={pIdx}>{part}</span>;
+          return <React.Fragment key={pIdx}>{part}</React.Fragment>;
         })}
       </div>
     );
   };
 
   return (
-    <div ref={containerRef} className="w-full space-y-3.5 pt-1">
-      {/* Compact, Readable Passage Card */}
-      <div className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700 shadow-2xs">
+    <div className="w-full space-y-3" data-testid="cloze-passage-container">
+      {/* Compact, Content-Sized Passage Container */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs">
         {renderPassageWithBlanks()}
       </div>
 
-      {/* Completion Indicator + Check Answer Button */}
+      {/* Completion Counter + Check Answers Button */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-        <span className="text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-300">
+        <span className="text-xs sm:text-sm font-bold text-slate-700">
           Completed {answeredCount} of {totalBlanks} blanks
         </span>
 
@@ -301,10 +239,10 @@ export const ClozePassageQuestion: React.FC<Props> = ({
             type="button"
             disabled={!allAnswered || isSubmitting}
             onClick={handleCheckAnswer}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500 text-white text-xs sm:text-sm font-black shadow-sm transition-all cursor-pointer disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-600 text-white text-xs sm:text-sm font-black shadow-sm transition-all cursor-pointer disabled:cursor-not-allowed"
           >
             <Send className="w-4 h-4" />
-            <span>Check Answer</span>
+            <span>Check Answers</span>
           </button>
         )}
 
@@ -330,8 +268,8 @@ export const ClozePassageQuestion: React.FC<Props> = ({
 
       {/* Post-Submission Explanation */}
       {submitted && question.explanation && (
-        <div className="p-4 rounded-2xl bg-sky-50/70 border border-sky-200 text-xs sm:text-sm text-slate-800 leading-relaxed">
-          <p className="font-black text-sky-900 mb-1">✓ Passage Summary & Explanation</p>
+        <div className="p-3.5 rounded-xl bg-sky-50/70 border border-sky-200 text-xs sm:text-sm text-[#0f172a] leading-relaxed">
+          <p className="font-bold text-sky-900 mb-0.5">✓ Explanation</p>
           <p>{question.explanation}</p>
         </div>
       )}
