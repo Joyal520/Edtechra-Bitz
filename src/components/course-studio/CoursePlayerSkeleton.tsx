@@ -115,7 +115,7 @@ export const CoursePlayerSkeleton: React.FC<CoursePlayerSkeletonProps> = ({
         {/* Mobile legibility scrim so text & progress remain crisp on narrow screens */}
         <div
           aria-hidden="true"
-          className="sm:hidden absolute inset-0 bg-gradient-to-b from-[#021b4d]/92 via-[#021d52]/82 to-[#021844]/90 pointer-events-none"
+          className="sm:hidden absolute inset-0 bg-[#021844]/85 backdrop-blur-[1px] pointer-events-none"
         />
 
         {/* Center-Left Foreground Overlay */}
