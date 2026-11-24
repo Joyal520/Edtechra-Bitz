@@ -13,11 +13,20 @@ import {
   Play,
   Pause,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Calendar,
+  Clock,
+  Lock,
+  Unlock
 } from 'lucide-react';
 import { CourseClassroomAssignment } from '@/types/courseStudio';
 import { CourseCoverImage } from '@/utils/courseCover';
 import { Classroom } from '@/types/classroom';
+import {
+  formatUnlockDateLabel,
+  getDateStringInTimezone,
+  ymdToUtcMs
+} from '@/utils/dailyReleaseEngine';
 
 interface Props {
   classroomId: string;
@@ -204,6 +213,50 @@ export const ClassroomCoursesSection: React.FC<Props> = ({
             const isCompleted = progressPct >= 100;
             const hasStarted = progressPct > 0;
 
+            const cfg = (item as any).resolved_config || {};
+            const timeZone =
+              cfg.course_timezone ||
+              item.unlock_configuration?.course_timezone ||
+              item.settings?.course_timezone ||
+              'Asia/Colombo';
+            const availableFromRaw =
+              cfg.available_from ?? item.available_from ?? item.start_date ?? null;
+            const dueDateRaw =
+              cfg.due_date ?? item.due_date ?? item.settings?.due_date ?? null;
+            const dailyEnabled = Boolean(
+              cfg.daily_release_enabled ??
+                item.daily_unlock_enabled ??
+                item.settings?.daily_release_enabled
+            );
+            const intervalDays = Math.max(
+              1,
+              Number(
+                cfg.daily_release_interval_days ??
+                  item.unlock_configuration?.unlock_frequency_days ??
+                  item.settings?.daily_release_interval_days ??
+                  1
+              ) || 1
+            );
+            const lessonsPerRelease = Math.max(
+              1,
+              Number(
+                cfg.unlock_lessons_per_release ??
+                  item.unlock_configuration?.unlock_lessons_per_release ??
+                  item.settings?.unlock_lessons_per_release ??
+                  1
+              ) || 1
+            );
+
+            const todayYmd = getDateStringInTimezone((item as any).server_time || new Date(), timeZone);
+            const todayMs = ymdToUtcMs(todayYmd);
+            const availYmd = availableFromRaw ? getDateStringInTimezone(availableFromRaw, timeZone) : null;
+            const isBeforeAvailableFrom = Boolean(availYmd && todayMs < ymdToUtcMs(availYmd));
+            const availLabel = availYmd ? formatUnlockDateLabel(availYmd) : null;
+
+            const dueYmd = dueDateRaw ? getDateStringInTimezone(dueDateRaw, timeZone) : null;
+            const isPastDue = Boolean(dueYmd && !isCompleted && todayMs > ymdToUtcMs(dueYmd));
+            const dueLabel = dueYmd ? formatUnlockDateLabel(dueYmd) : null;
+
             const handleCardClick = () => {
               navigate(`/classes/${classroomId}/courses/${course.id}/learn`);
             };
@@ -233,6 +286,11 @@ export const ClassroomCoursesSection: React.FC<Props> = ({
                       <span className="px-2.5 py-1 rounded-full bg-amber-500/95 text-white text-[10px] font-black uppercase tracking-wider backdrop-blur-md shadow-xs flex items-center gap-1 border border-amber-300/40">
                         <Pause className="w-3 h-3" />
                         <span>Paused</span>
+                      </span>
+                    ) : isBeforeAvailableFrom ? (
+                      <span className="px-2.5 py-1 rounded-full bg-indigo-600/95 text-white text-[10px] font-black uppercase tracking-wider backdrop-blur-md shadow-xs flex items-center gap-1 border border-indigo-300/40">
+                        <Lock className="w-3 h-3" />
+                        <span>Opens {availLabel}</span>
                       </span>
                     ) : isCompleted ? (
                       <span className="px-2.5 py-1 rounded-full bg-emerald-500/95 text-white text-[10px] font-black uppercase tracking-wider backdrop-blur-md shadow-xs flex items-center gap-1 border border-emerald-300/40">
@@ -280,6 +338,50 @@ export const ClassroomCoursesSection: React.FC<Props> = ({
                         Interactive curriculum designed for your classroom.
                       </p>
                     )}
+
+                    {/* Class-Specific Assignment Schedule & Unlock Metadata Pills */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+                      {availLabel && (
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                            isBeforeAvailableFrom
+                              ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                              : 'bg-slate-50 text-slate-600 border-stone-200'
+                          }`}
+                        >
+                          <Calendar className="w-2.5 h-2.5 shrink-0" />
+                          <span>{isBeforeAvailableFrom ? `Opens ${availLabel}` : `Available ${availLabel}`}</span>
+                        </span>
+                      )}
+                      {dueLabel && (
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                            isPastDue
+                              ? 'bg-rose-50 text-rose-700 border-rose-200'
+                              : 'bg-amber-50/70 text-amber-800 border-amber-200/80'
+                          }`}
+                        >
+                          <Clock className="w-2.5 h-2.5 shrink-0" />
+                          <span>{isPastDue ? `Past Due • ${dueLabel}` : `Due ${dueLabel}`}</span>
+                        </span>
+                      )}
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                          dailyEnabled
+                            ? 'bg-sky-50 text-[#026fc3] border-sky-200'
+                            : 'bg-emerald-50/70 text-emerald-700 border-emerald-200/80'
+                        }`}
+                      >
+                        {dailyEnabled ? <Lock className="w-2.5 h-2.5 shrink-0" /> : <Unlock className="w-2.5 h-2.5 shrink-0" />}
+                        <span>
+                          {dailyEnabled
+                            ? lessonsPerRelease === 1 && intervalDays === 1
+                              ? 'Daily Unlock (1/day)'
+                              : `${lessonsPerRelease} lesson${lessonsPerRelease > 1 ? 's' : ''} / ${intervalDays === 7 ? 'week' : intervalDays === 1 ? 'day' : `${intervalDays}d`}`
+                            : 'All Lessons Open'}
+                        </span>
+                      </span>
+                    </div>
                   </div>
 
                   {/* Progress & Actions Section */}
@@ -335,6 +437,22 @@ export const ClassroomCoursesSection: React.FC<Props> = ({
                         >
                           <Pause className="w-3.5 h-3.5 text-amber-600" />
                           <span>{isTeacher ? 'Preview Paused Course' : 'Course Paused'}</span>
+                        </button>
+                      ) : isBeforeAvailableFrom ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isTeacher) handleCardClick();
+                          }}
+                          className={`w-full py-2.5 px-4 rounded-xl text-xs font-black shadow-2xs flex items-center justify-center gap-2 ${
+                            isTeacher
+                              ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 cursor-pointer'
+                              : 'bg-indigo-50/70 text-indigo-800 border border-indigo-200/90 cursor-not-allowed opacity-90'
+                          }`}
+                        >
+                          <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>{isTeacher ? `Preview (Opens ${availLabel})` : `Opens ${availLabel}`}</span>
                         </button>
                       ) : isCompleted ? (
                         <button

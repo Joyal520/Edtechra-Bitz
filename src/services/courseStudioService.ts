@@ -22,6 +22,8 @@ import {
   AIStructuredLessonPayload,
   AIStructuredLessonResponse,
   CourseAssignmentSettings,
+  ClassAssignmentInput,
+  ResolvedClassAssignmentConfig,
   EssayEvaluationResult
 } from '@/types/courseStudio';
 import { optimizeImageForUpload } from '@/utils/imageOptimization';
@@ -386,14 +388,19 @@ export const courseStudioService = {
   async publishAndAssignCourse(
     courseId: string,
     payload: {
-      classroom_ids: string[];
-      start_date?: string;
+      classroom_ids?: string[];
+      class_assignments?: ClassAssignmentInput[];
+      start_date?: string | null;
+      available_from?: string | null;
       due_date?: string | null;
       settings?: Partial<CourseAssignmentSettings>;
       daily_release_enabled?: boolean;
-      course_start_date?: string;
+      daily_unlock_enabled?: boolean;
+      course_start_date?: string | null;
+      unlock_start_date?: string | null;
       course_timezone?: string;
       daily_release_interval_days?: number;
+      unlock_lessons_per_release?: number;
     }
   ): Promise<{ course: Course; assigned_count: number; assignments: CourseClassroomAssignment[] }> {
     const headers = await getAuthHeader();
@@ -404,6 +411,38 @@ export const courseStudioService = {
     });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to publish & assign course.');
+    invalidateCourseCache(courseId);
+    return json;
+  },
+
+  async upsertClassAssignment(
+    courseId: string,
+    classroomId: string,
+    payload: Omit<ClassAssignmentInput, 'classroom_id'>
+  ): Promise<{ assignment: CourseClassroomAssignment; resolved_config?: ResolvedClassAssignmentConfig }> {
+    const headers = await getAuthHeader();
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/assignments/${classroomId}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.error || 'Failed to update class assignment.');
+    invalidateCourseCache(courseId);
+    return json;
+  },
+
+  async removeClassAssignment(
+    courseId: string,
+    classroomId: string
+  ): Promise<{ success: boolean; removed_classroom_id: string }> {
+    const headers = await getAuthHeader();
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/assignments/${classroomId}`, {
+      method: 'DELETE',
+      headers
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.error || 'Failed to remove class assignment.');
     invalidateCourseCache(courseId);
     return json;
   },
@@ -448,15 +487,23 @@ export const courseStudioService = {
 
   async getStudentProgress(courseId: string, classroomId: string): Promise<{
     enrollment: any;
+    assignment_id?: string | null;
+    assignment_status?: 'active' | 'paused' | 'archived' | 'completed' | string;
+    available_from?: string | null;
+    due_date?: string | null;
     completedEpisodeIds: string[];
     completedEpisodesMap?: Record<string, { completed_at?: string | null; score?: number; percentage?: number }>;
     last_completed_at?: string | null;
     progress_percent: number;
     daily_release_enabled?: boolean;
     daily_release_interval_days?: number;
+    unlock_lessons_per_release?: number;
+    unlock_start_date?: string | null;
     course_start_date?: string | null;
     course_timezone?: string;
     allow_retries?: boolean;
+    award_points?: boolean;
+    resolved_config?: ResolvedClassAssignmentConfig;
     server_time?: string;
     is_paused?: boolean;
     is_teacher?: boolean;

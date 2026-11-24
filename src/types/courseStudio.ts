@@ -437,6 +437,13 @@ export interface RoadmapLessonItem {
 // 3. CLASSROOM ASSIGNMENT & ENROLLMENT
 // ----------------------------------------------------------------------------
 
+export interface UnlockConfiguration {
+  unlock_frequency_days: number;
+  unlock_lessons_per_release: number;
+  unlock_start_date?: string | null;
+  course_timezone?: string;
+}
+
 export interface CourseAssignmentSettings {
   sequential_unlock: boolean;
   allow_retries: boolean;
@@ -444,8 +451,58 @@ export interface CourseAssignmentSettings {
   award_points: boolean;
   daily_release_enabled?: boolean;
   daily_release_interval_days?: number;
-  course_start_date?: string;
+  unlock_frequency_days?: number;
+  unlock_lessons_per_release?: number;
+  unlock_start_date?: string | null;
+  course_start_date?: string | null;
   course_timezone?: string;
+  available_from?: string | null;
+  due_date?: string | null;
+}
+
+export interface ResolvedClassAssignmentConfig {
+  assignment_id?: string | null;
+  course_id?: string | null;
+  classroom_id?: string | null;
+  assigned_by?: string | null;
+  status: 'active' | 'paused' | 'archived' | 'completed' | string;
+  created_at?: string | null;
+  assigned_at?: string | null;
+  updated_at?: string | null;
+  available_from?: string | null;
+  start_date?: string | null;
+  due_date?: string | null;
+  daily_release_enabled: boolean;
+  daily_unlock_enabled: boolean;
+  daily_release_interval_days: number;
+  unlock_frequency_days: number;
+  unlock_lessons_per_release: number;
+  unlock_start_date?: string | null;
+  course_start_date?: string | null;
+  course_timezone: string;
+  allow_retries: boolean;
+  award_points: boolean;
+  sequential_unlock: boolean;
+  track_mastery: boolean;
+  unlock_configuration: UnlockConfiguration;
+}
+
+export interface ClassAssignmentInput {
+  classroom_id: string;
+  status?: 'active' | 'paused' | 'archived' | 'completed';
+  available_from?: string | null;
+  start_date?: string | null;
+  due_date?: string | null;
+  daily_unlock_enabled?: boolean;
+  daily_release_enabled?: boolean;
+  daily_release_interval_days?: number;
+  unlock_frequency_days?: number;
+  unlock_lessons_per_release?: number;
+  unlock_start_date?: string | null;
+  course_start_date?: string | null;
+  course_timezone?: string;
+  settings?: Partial<CourseAssignmentSettings>;
+  unlock_configuration?: Partial<UnlockConfiguration>;
 }
 
 export interface CourseClassroomAssignment {
@@ -454,9 +511,14 @@ export interface CourseClassroomAssignment {
   classroom_id: string;
   assigned_by: string;
   start_date?: string | null;
+  available_from?: string | null;
   due_date?: string | null;
   status: 'active' | 'paused' | 'archived' | 'completed';
+  daily_unlock_enabled?: boolean;
+  unlock_configuration?: UnlockConfiguration;
   settings: CourseAssignmentSettings;
+  resolved_config?: ResolvedClassAssignmentConfig;
+  created_at?: string;
   assigned_at: string;
   updated_at: string;
 

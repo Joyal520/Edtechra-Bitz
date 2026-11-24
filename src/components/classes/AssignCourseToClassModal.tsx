@@ -67,25 +67,15 @@ export const AssignCourseToClassModal: React.FC<Props> = ({
     setError(null);
 
     try {
-      // 1. Fetch full course details to get current assigned classrooms
-      const full = await courseStudioService.getCourse(course.id);
-      const activeClassroomIds: string[] = ((full as any)?.assignments || (full as any)?.course_classroom_assignments || [])
-        .filter((a: any) => a.status === 'active')
-        .map((a: any) => a.classroom_id);
-
-      let newClassroomIds: string[];
+      // Update ONLY this classroom's independent assignment record without affecting other classes
       if (currentlyAssigned) {
-        // Remove this classroom
-        newClassroomIds = activeClassroomIds.filter(id => id !== classroom.id);
+        await courseStudioService.removeClassAssignment(course.id, classroom.id);
       } else {
-        // Add this classroom
-        newClassroomIds = Array.from(new Set([...activeClassroomIds, classroom.id]));
+        await courseStudioService.upsertClassAssignment(course.id, classroom.id, {
+          status: 'active',
+          available_from: new Date().toISOString().split('T')[0]
+        });
       }
-
-      await courseStudioService.publishAndAssignCourse(course.id, {
-        classroom_ids: newClassroomIds,
-        start_date: new Date().toISOString()
-      });
 
       // Reload list and notify parent classroom page
       await loadTeacherCourses();

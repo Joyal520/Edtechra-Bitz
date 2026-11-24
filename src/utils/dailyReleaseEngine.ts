@@ -28,6 +28,9 @@ export interface DailyReleaseCalculationOptions {
   completedEpisodesMap?: Record<string, { completed_at?: string | null }>;
   lastCompletedAt?: string | Date | null;
   studentStartDate?: string | Date | null;
+  availableFrom?: string | Date | null;
+  dueDate?: string | Date | null;
+  unlockLessonsPerRelease?: number;
   currentDate?: string | Date | null;
   currentActiveEpisodeId?: string | null;
   isPaused?: boolean;
@@ -40,8 +43,8 @@ export interface DailyReleaseCalculationOptions {
 export function getDateStringInTimezone(dateInput: Date | string | number, timeZone = 'Asia/Colombo'): string {
   try {
     const str = String(dateInput || '').trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-      return str;
+    if (/^\d{4}-\d{2}-\d{2}(T00:00:00(\.\d+)?Z)?$/.test(str)) {
+      return str.slice(0, 10);
     }
     const d = new Date(dateInput);
     const formatter = new Intl.DateTimeFormat('en-CA', {
@@ -195,6 +198,9 @@ export function computeCourseRoadmap(options: DailyReleaseCalculationOptions): {
   daysElapsed: number;
   timeZone: string;
   isPaused: boolean;
+  isBeforeAvailableFrom: boolean;
+  availableFromLabel?: string;
+  unlockLessonsPerRelease: number;
 } {
   const {
     course,
@@ -202,9 +208,12 @@ export function computeCourseRoadmap(options: DailyReleaseCalculationOptions): {
     completedEpisodesMap = {},
     lastCompletedAt,
     studentStartDate,
+    availableFrom,
+    unlockLessonsPerRelease,
     currentDate,
     currentActiveEpisodeId,
-    isPaused = false
+    isPaused = false,
+    isTeacher = false
   } = options;
 
   const completedSet = completedEpisodeIds instanceof Set
@@ -214,6 +223,10 @@ export function computeCourseRoadmap(options: DailyReleaseCalculationOptions): {
   const dailyReleaseEnabled = Boolean(course.daily_release_enabled);
   const timeZone = course.course_timezone || 'Asia/Colombo';
   const intervalDays = Math.max(1, Number(course.daily_release_interval_days || 1) || 1);
+  const lessonsPerRelease = Math.max(
+    1,
+    Number(unlockLessonsPerRelease ?? (course as any).unlock_lessons_per_release ?? 1) || 1
+  );
   const effectiveStartDate: Date | string =
     course.course_start_date || studentStartDate || course.created_at || new Date();
   const effectiveCurrentDate: Date | string =
@@ -222,6 +235,17 @@ export function computeCourseRoadmap(options: DailyReleaseCalculationOptions): {
 
   const todayStr = getDateStringInTimezone(effectiveCurrentDate, timeZone);
   const todayUtcMs = ymdToUtcMs(todayStr);
+
+  const rawAvailableFrom =
+    availableFrom !== undefined ? availableFrom : ((course as any).available_from ?? null);
+  const availableFromStr = rawAvailableFrom
+    ? getDateStringInTimezone(rawAvailableFrom, timeZone)
+    : null;
+  const availableFromUtcMs = availableFromStr ? ymdToUtcMs(availableFromStr) : null;
+  const isBeforeAvailableFrom = Boolean(availableFromUtcMs !== null && todayUtcMs < availableFromUtcMs);
+  const availableFromLabel =
+    availableFromUtcMs !== null ? formatUnlockDateLabel(availableFromUtcMs) : undefined;
+
   const startDateStr = course.course_start_date
     ? getDateStringInTimezone(course.course_start_date, timeZone)
     : null;
@@ -252,10 +276,22 @@ export function computeCourseRoadmap(options: DailyReleaseCalculationOptions): {
   // Identify the index of the first uncompleted lesson in the sequence
   const firstUncompletedIndex = rawEpisodes.findIndex(item => !completedSet.has(item.ep.id));
 
+  // Precompute completions within the current interval window (for multi-lesson release pacing)
+  const recentCompletionDays = Object.values(completedEpisodesMap || {})
+    .map(c => c?.completed_at)
+    .filter(Boolean)
+    .map(dt => ymdToUtcMs(getDateStringInTimezone(dt as string, timeZone)))
+    .filter(ms => {
+      const diffDays = Math.floor((todayUtcMs - ms) / 86400000);
+      return diffDays < intervalDays;
+    })
+    .sort((a, b) => a - b);
+
   const items: RoadmapLessonItem[] = rawEpisodes.map((item, index) => {
     const ep = item.ep;
     const position = ep.position || globalPosition++;
-    const releaseDay = 1 + index * intervalDays;
+    const batchIdx = Math.floor(index / lessonsPerRelease);
+    const releaseDay = 1 + batchIdx * intervalDays;
     const isCompleted = completedSet.has(ep.id);
 
     let isLocked = false;
@@ -264,9 +300,9 @@ export function computeCourseRoadmap(options: DailyReleaseCalculationOptions): {
     let releaseDateStr: string | undefined;
     let nextUnlockCountdown: string | undefined;
 
-    // Compute scheduled release date if course_start_date is configured
+    // Compute scheduled release date based on batch index when unlock_start_date is configured
     const scheduledUnlockMs = startDateUtcMs !== null
-      ? startDateUtcMs + index * intervalDays * 86400000
+      ? startDateUtcMs + batchIdx * intervalDays * 86400000
       : null;
 
     if (isCompleted) {
@@ -276,6 +312,15 @@ export function computeCourseRoadmap(options: DailyReleaseCalculationOptions): {
       isLocked = true;
       status = 'paused';
       unlockMessage = 'Student access is temporarily disabled by the teacher.';
+    } else if (isBeforeAvailableFrom && !isTeacher && !ep.is_manually_unlocked) {
+      isLocked = true;
+      status = 'locked';
+      releaseDateStr = availableFromLabel;
+      const daysUntilOpen = availableFromUtcMs !== null
+        ? Math.max(1, Math.round((availableFromUtcMs - todayUtcMs) / 86400000))
+        : 1;
+      nextUnlockCountdown = getCountdownInTimezone(effectiveCurrentDate, daysUntilOpen, timeZone);
+      unlockMessage = `Available from ${availableFromLabel}`;
     } else if (ep.is_manually_unlocked) {
       isLocked = false;
       status = (currentActiveEpisodeId === ep.id) ? 'in_progress' : 'available';
@@ -293,6 +338,41 @@ export function computeCourseRoadmap(options: DailyReleaseCalculationOptions): {
       } else if (firstUncompletedIndex === -1) {
         status = 'completed';
         isLocked = false;
+      } else if (lessonsPerRelease > 1) {
+        const remainingQuota = Math.max(0, lessonsPerRelease - recentCompletionDays.length);
+        const uncompletedBeforeCount = rawEpisodes
+          .slice(0, index)
+          .filter(it => !completedSet.has(it.ep.id)).length;
+
+        if (remainingQuota > 0 && uncompletedBeforeCount < remainingQuota) {
+          isLocked = false;
+          status = (currentActiveEpisodeId === ep.id) ? 'in_progress' : 'available';
+        } else if (remainingQuota === 0 && uncompletedBeforeCount < lessonsPerRelease && recentCompletionDays.length > 0) {
+          const nextAllowedMs = Math.max(
+            todayUtcMs + 86400000,
+            recentCompletionDays[0] + intervalDays * 86400000
+          );
+          const daysWait = Math.max(1, Math.round((nextAllowedMs - todayUtcMs) / 86400000));
+          releaseDateStr = formatUnlockDateLabel(nextAllowedMs);
+          nextUnlockCountdown = getCountdownInTimezone(effectiveCurrentDate, daysWait, timeZone);
+          isLocked = true;
+          status = 'locked';
+          unlockMessage = daysWait === 1
+            ? `Unlocks tomorrow (${releaseDateStr}) • ${nextUnlockCountdown}`
+            : `Unlocks ${releaseDateStr} • ${nextUnlockCountdown}`;
+        } else {
+          const stepsBlocks = Math.max(
+            1,
+            Math.floor(Math.max(0, uncompletedBeforeCount - remainingQuota) / lessonsPerRelease) + 1
+          );
+          const estimatedUnlockMs = scheduledUnlockMs !== null && scheduledUnlockMs > todayUtcMs
+            ? scheduledUnlockMs
+            : todayUtcMs + stepsBlocks * intervalDays * 86400000;
+          releaseDateStr = formatUnlockDateLabel(estimatedUnlockMs);
+          isLocked = true;
+          status = 'locked';
+          unlockMessage = `Unlocks ${releaseDateStr}`;
+        }
       } else if (index === firstUncompletedIndex) {
         if (index === 0) {
           isLocked = false;
@@ -381,6 +461,9 @@ export function computeCourseRoadmap(options: DailyReleaseCalculationOptions): {
     dailyReleaseEnabled,
     daysElapsed,
     timeZone,
-    isPaused
+    isPaused,
+    isBeforeAvailableFrom,
+    availableFromLabel,
+    unlockLessonsPerRelease: lessonsPerRelease
   };
 }

@@ -14,6 +14,279 @@ const CANDIDATE_GEMINI_MODELS = [
 ];
 
 // ----------------------------------------------------------------------------
+// 0. PER-CLASS ASSIGNMENT CONFIGURATION RESOLVER
+// Resolves all availability, deadline, unlock schedule, and experience settings
+// with STRICT assignment-first precedence so classes never overwrite or leak
+// configuration into one another.
+// ----------------------------------------------------------------------------
+
+export function resolveClassAssignmentConfig(assignment, courseRow = null) {
+  const s = assignment?.settings && typeof assignment.settings === 'object' ? assignment.settings : {};
+  const u = assignment?.unlock_configuration && typeof assignment.unlock_configuration === 'object'
+    ? assignment.unlock_configuration
+    : {};
+
+  const hasExplicitAssignmentDaily =
+    typeof assignment?.daily_unlock_enabled === 'boolean' ||
+    typeof s?.daily_release_enabled === 'boolean' ||
+    typeof u?.daily_unlock_enabled === 'boolean';
+
+  const dailyReleaseEnabled =
+    typeof assignment?.daily_unlock_enabled === 'boolean'
+      ? assignment.daily_unlock_enabled
+      : typeof s?.daily_release_enabled === 'boolean'
+        ? s.daily_release_enabled
+        : typeof u?.daily_unlock_enabled === 'boolean'
+          ? u.daily_unlock_enabled
+          : Boolean(courseRow?.daily_release_enabled);
+
+  const rawFrequencyDays =
+    u?.unlock_frequency_days ??
+    s?.daily_release_interval_days ??
+    s?.unlock_frequency_days ??
+    (hasExplicitAssignmentDaily ? undefined : courseRow?.daily_release_interval_days) ??
+    1;
+  const intervalDays = Math.max(1, Number(rawFrequencyDays) || 1);
+
+  const rawLessonsPerRelease =
+    u?.unlock_lessons_per_release ??
+    s?.unlock_lessons_per_release ??
+    1;
+  const lessonsPerRelease = Math.max(1, Number(rawLessonsPerRelease) || 1);
+
+  const availableFrom = assignment
+    ? (assignment.start_date ?? s?.available_from ?? null)
+    : (courseRow?.course_start_date ?? null);
+
+  const dueDate = assignment
+    ? (assignment.due_date ?? s?.due_date ?? null)
+    : null;
+
+  const unlockStartDate =
+    u?.unlock_start_date ??
+    s?.unlock_start_date ??
+    s?.course_start_date ??
+    availableFrom ??
+    (hasExplicitAssignmentDaily ? null : (courseRow?.course_start_date ?? null));
+
+  const courseTimezone =
+    u?.course_timezone ??
+    s?.course_timezone ??
+    courseRow?.course_timezone ??
+    'Asia/Colombo';
+
+  return {
+    assignment_id: assignment?.id || null,
+    course_id: assignment?.course_id || courseRow?.id || null,
+    classroom_id: assignment?.classroom_id || null,
+    assigned_by: assignment?.assigned_by || courseRow?.teacher_id || null,
+    status: assignment?.status || (courseRow?.status === 'published' ? 'active' : 'draft'),
+    created_at: assignment?.created_at || assignment?.assigned_at || null,
+    assigned_at: assignment?.assigned_at || null,
+    updated_at: assignment?.updated_at || null,
+    available_from: availableFrom,
+    start_date: assignment?.start_date ?? availableFrom,
+    due_date: dueDate,
+    daily_release_enabled: Boolean(dailyReleaseEnabled),
+    daily_unlock_enabled: Boolean(dailyReleaseEnabled),
+    daily_release_interval_days: intervalDays,
+    unlock_frequency_days: intervalDays,
+    unlock_lessons_per_release: lessonsPerRelease,
+    unlock_start_date: unlockStartDate,
+    course_start_date: unlockStartDate,
+    course_timezone: courseTimezone,
+    allow_retries: s?.allow_retries !== false,
+    award_points: s?.award_points !== false,
+    sequential_unlock: s?.sequential_unlock !== false,
+    track_mastery: s?.track_mastery !== false,
+    unlock_configuration: {
+      unlock_frequency_days: intervalDays,
+      unlock_lessons_per_release: lessonsPerRelease,
+      unlock_start_date: unlockStartDate,
+      course_timezone: courseTimezone
+    }
+  };
+}
+
+function normalizeStartTimestamp(val) {
+  if (!val) return null;
+  const s = String(val).trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s}T00:00:00.000Z`;
+  return s;
+}
+
+function normalizeYmdOrNull(val) {
+  if (!val) return null;
+  const s = String(val).trim();
+  if (!s) return null;
+  return s.slice(0, 10);
+}
+
+/**
+ * Upserts an individual class assignment row without disturbing any other
+ * classroom's assignment or writing per-class schedule config onto courses.
+ * Includes automatic fallback if pre-migration Supabase lacks the new columns.
+ */
+export async function upsertClassAssignmentSafe(
+  supabaseClient,
+  { courseId, classroomId, teacherId, config = {}, existingAssignment = null, courseRow = null }
+) {
+  const nowIso = new Date().toISOString();
+  const existingResolved = existingAssignment
+    ? resolveClassAssignmentConfig(existingAssignment, courseRow)
+    : null;
+
+  const startRaw =
+    config.available_from !== undefined
+      ? config.available_from
+      : config.start_date !== undefined
+        ? config.start_date
+        : existingAssignment
+          ? (existingAssignment.start_date ?? existingResolved?.available_from ?? null)
+          : nowIso;
+  const startDateIso = normalizeStartTimestamp(startRaw);
+
+  const dueDateIso =
+    config.due_date !== undefined
+      ? normalizeStartTimestamp(config.due_date)
+      : (existingAssignment?.due_date ?? null);
+
+  const rawDailyEnabled =
+    config.daily_unlock_enabled !== undefined
+      ? config.daily_unlock_enabled
+      : config.daily_release_enabled !== undefined
+        ? config.daily_release_enabled
+        : config.settings?.daily_release_enabled;
+
+  const dailyUnlockEnabled =
+    rawDailyEnabled !== undefined
+      ? Boolean(rawDailyEnabled)
+      : existingResolved
+        ? Boolean(existingResolved.daily_release_enabled)
+        : false;
+
+  const rawFreqDays =
+    config.unlock_configuration?.unlock_frequency_days ??
+    config.unlock_frequency_days ??
+    config.daily_release_interval_days ??
+    config.settings?.daily_release_interval_days ??
+    (existingResolved ? existingResolved.daily_release_interval_days : 1);
+  const frequencyDays = Math.max(1, Number(rawFreqDays) || 1);
+
+  const rawLessonsPerRelease =
+    config.unlock_configuration?.unlock_lessons_per_release ??
+    config.unlock_lessons_per_release ??
+    config.settings?.unlock_lessons_per_release ??
+    (existingResolved ? existingResolved.unlock_lessons_per_release : 1);
+  const lessonsPerRelease = Math.max(1, Number(rawLessonsPerRelease) || 1);
+
+  const hasExplicitUnlockStart =
+    config.unlock_configuration?.unlock_start_date !== undefined ||
+    config.unlock_start_date !== undefined ||
+    config.course_start_date !== undefined ||
+    config.settings?.unlock_start_date !== undefined ||
+    config.settings?.course_start_date !== undefined;
+
+  const rawUnlockStart = hasExplicitUnlockStart
+    ? (config.unlock_configuration?.unlock_start_date ??
+      config.unlock_start_date ??
+      config.course_start_date ??
+      config.settings?.unlock_start_date ??
+      config.settings?.course_start_date ??
+      null)
+    : existingResolved?.unlock_start_date ?? (startDateIso ? String(startDateIso).slice(0, 10) : null);
+
+  const unlockStartDate = normalizeYmdOrNull(rawUnlockStart);
+
+  const courseTimezone =
+    config.unlock_configuration?.course_timezone ??
+    config.course_timezone ??
+    config.settings?.course_timezone ??
+    existingResolved?.course_timezone ??
+    courseRow?.course_timezone ??
+    'Asia/Colombo';
+
+  const status =
+    config.status ||
+    (existingAssignment?.status && existingAssignment.status !== 'archived'
+      ? existingAssignment.status
+      : 'active');
+
+  const prevSettings =
+    existingAssignment?.settings && typeof existingAssignment.settings === 'object'
+      ? existingAssignment.settings
+      : {};
+  const inputSettings =
+    config.settings && typeof config.settings === 'object' ? config.settings : {};
+
+  const mergedSettings = {
+    sequential_unlock: false,
+    allow_retries: true,
+    track_mastery: true,
+    award_points: true,
+    ...prevSettings,
+    ...inputSettings,
+    daily_release_enabled: Boolean(dailyUnlockEnabled),
+    daily_release_interval_days: frequencyDays,
+    unlock_frequency_days: frequencyDays,
+    unlock_lessons_per_release: lessonsPerRelease,
+    unlock_start_date: unlockStartDate,
+    course_start_date: unlockStartDate,
+    course_timezone: courseTimezone,
+    available_from: startDateIso,
+    due_date: dueDateIso
+  };
+
+  const unlockConfigPayload = {
+    unlock_frequency_days: frequencyDays,
+    unlock_lessons_per_release: lessonsPerRelease,
+    unlock_start_date: unlockStartDate,
+    course_timezone: courseTimezone
+  };
+
+  const fullPayload = {
+    course_id: courseId,
+    classroom_id: classroomId,
+    assigned_by: existingAssignment?.assigned_by || teacherId,
+    start_date: startDateIso,
+    due_date: dueDateIso,
+    status,
+    daily_unlock_enabled: Boolean(dailyUnlockEnabled),
+    unlock_configuration: unlockConfigPayload,
+    settings: mergedSettings,
+    assigned_at: existingAssignment?.assigned_at || nowIso,
+    updated_at: nowIso
+  };
+
+  let { data: saved, error } = await supabaseClient
+    .from('course_classroom_assignments')
+    .upsert(fullPayload, { onConflict: 'course_id,classroom_id' })
+    .select()
+    .single();
+
+  if (
+    error &&
+    /daily_unlock_enabled|unlock_configuration|schema cache|column/i.test(String(error.message || ''))
+  ) {
+    const {
+      daily_unlock_enabled: _omitDaily,
+      unlock_configuration: _omitUnlockCfg,
+      ...legacyPayload
+    } = fullPayload;
+    const retry = await supabaseClient
+      .from('course_classroom_assignments')
+      .upsert(legacyPayload, { onConflict: 'course_id,classroom_id' })
+      .select()
+      .single();
+    saved = retry.data;
+    error = retry.error;
+  }
+
+  return { assignment: saved || null, error: error || null };
+}
+
+// ----------------------------------------------------------------------------
 // 1. AI LESSON STRUCTURE GENERATOR (From Raw Pasted Material)
 // ----------------------------------------------------------------------------
 
@@ -1454,7 +1727,7 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
     // 2. Resolve student enrollment and verify assignment status
     const { data: assignment } = await supabaseClient
       .from('course_classroom_assignments')
-      .select('id, status, settings, start_date')
+      .select('*')
       .eq('course_id', cleanCourseId)
       .eq('classroom_id', cleanClassroomId)
       .maybeSingle();
@@ -1472,13 +1745,31 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
       throw pauseErr;
     }
 
+    if (assignment.status === 'archived') {
+      const archivedErr = new Error('This course assignment is no longer active for this classroom.');
+      archivedErr.statusCode = 403;
+      throw archivedErr;
+    }
+
+    const resolvedConfig = resolveClassAssignmentConfig(assignment, courseRow);
+
     let { data: enrollment } = await supabaseClient
       .from('course_enrollments')
       .select('*')
-      .eq('course_id', cleanCourseId)
-      .eq('classroom_id', cleanClassroomId)
+      .eq('classroom_assignment_id', assignment.id)
       .eq('student_id', cleanStudentId)
       .maybeSingle();
+
+    if (!enrollment) {
+      const { data: legacyEnrollment } = await supabaseClient
+        .from('course_enrollments')
+        .select('*')
+        .eq('course_id', cleanCourseId)
+        .eq('classroom_id', cleanClassroomId)
+        .eq('student_id', cleanStudentId)
+        .maybeSingle();
+      enrollment = legacyEnrollment || null;
+    }
 
     if (!enrollment) {
       const { data: allEpisodes } = await supabaseClient
@@ -1577,55 +1868,77 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
     const hasExistingPointRow = Array.isArray(existingPointRows) && existingPointRows.length > 0;
     const previouslyCreditedPoints = hasExistingPointRow ? Number(existingPointRows[0].points || 0) : 0;
 
-    // Authoritative check: Enforce "Daily Lesson Unlock" locking rule in course timezone
-    const dailyReleaseActive = Boolean(
-      courseRow?.daily_release_enabled ?? assignment?.settings?.daily_release_enabled
-    );
+    // Authoritative check: Enforce per-class assignment availability & Daily Lesson Unlock rules
+    const timeZone = resolvedConfig.course_timezone || 'Asia/Colombo';
+    const formatTzDate = (dt) => {
+      try {
+        return new Intl.DateTimeFormat('en-CA', {
+          timeZone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        }).format(dt);
+      } catch (_e) {
+        return dt.toISOString().split('T')[0];
+      }
+    };
+    const normalizeYmd = (rawVal) => {
+      if (!rawVal) return null;
+      const str = String(rawVal).trim();
+      if (/^\d{4}-\d{2}-\d{2}(T00:00:00(\.\d+)?Z)?$/.test(str)) {
+        return str.slice(0, 10);
+      }
+      if (str.includes('T')) {
+        return formatTzDate(new Date(str));
+      }
+      return str.slice(0, 10);
+    };
+    const toUtcDayMs = (ymd) => {
+      const [y, m, d] = String(ymd || '').split('-').map(Number);
+      return Date.UTC(y || 1970, (m || 1) - 1, d || 1);
+    };
+
+    const todayStr = formatTzDate(new Date());
+    const todayDayMs = toUtcDayMs(todayStr);
+
+    // Check 0: Class-specific Available From date
+    if (existingProgress?.status !== 'completed' && resolvedConfig.available_from) {
+      const availDateStr = normalizeYmd(resolvedConfig.available_from);
+      if (availDateStr) {
+        const availDayMs = toUtcDayMs(availDateStr);
+        if (todayDayMs < availDayMs) {
+          const availErr = new Error(
+            `This course assignment is not yet available for your class. It opens on ${availDateStr}.`
+          );
+          availErr.statusCode = 403;
+          availErr.availableFromLocked = true;
+          availErr.available_from = availDateStr;
+          throw availErr;
+        }
+      }
+    }
+
+    const dailyReleaseActive = Boolean(resolvedConfig.daily_release_enabled);
     const isManuallyUnlocked = Boolean(episodeRow?.manual_unlock);
     if (dailyReleaseActive && !isManuallyUnlocked && existingProgress?.status !== 'completed') {
-      const timeZone =
-        courseRow?.course_timezone || assignment?.settings?.course_timezone || 'Asia/Colombo';
-      const intervalDays = Math.max(
-        1,
-        Number(courseRow?.daily_release_interval_days ?? assignment?.settings?.daily_release_interval_days ?? 1) || 1
-      );
-      const formatTzDate = (dt) => {
-        try {
-          return new Intl.DateTimeFormat('en-CA', {
-            timeZone,
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-          }).format(dt);
-        } catch (_e) {
-          return dt.toISOString().split('T')[0];
-        }
-      };
+      const intervalDays = Math.max(1, Number(resolvedConfig.daily_release_interval_days || 1) || 1);
+      const lessonsPerRelease = Math.max(1, Number(resolvedConfig.unlock_lessons_per_release || 1) || 1);
 
-      const todayStr = formatTzDate(new Date());
-      const toUtcDayMs = (ymd) => {
-        const [y, m, d] = String(ymd || '').split('-').map(Number);
-        return Date.UTC(y || 1970, (m || 1) - 1, d || 1);
-      };
-      const todayDayMs = toUtcDayMs(todayStr);
-
-      // Check 1: Scheduled release date based on course_start_date + lesson index * intervalDays
-      const rawStartDate =
-        courseRow?.course_start_date || assignment?.settings?.course_start_date || assignment?.start_date || null;
+      // Check 1: Scheduled release date based on class unlock_start_date + batchIdx * intervalDays
+      const rawStartDate = resolvedConfig.unlock_start_date || resolvedConfig.available_from || null;
       if (rawStartDate) {
-        const startDateStr = String(rawStartDate).includes('T')
-          ? formatTzDate(new Date(rawStartDate))
-          : String(rawStartDate).slice(0, 10);
+        const startDateStr = normalizeYmd(rawStartDate);
         const startDayMs = toUtcDayMs(startDateStr);
         const lessonIdx = Math.max(
           0,
           Number(episodeRow?.order_index ?? (episodeRow?.position ? episodeRow.position - 1 : 0)) || 0
         );
-        const scheduledUnlockDayMs = startDayMs + lessonIdx * intervalDays * 86400000;
+        const batchIdx = Math.floor(lessonIdx / lessonsPerRelease);
+        const scheduledUnlockDayMs = startDayMs + batchIdx * intervalDays * 86400000;
         if (todayDayMs < scheduledUnlockDayMs) {
           const unlockDateFormatted = new Date(scheduledUnlockDayMs).toISOString().split('T')[0];
           const lockErr = new Error(
-            `Daily Lesson Unlock is active for this course. This lesson is scheduled to unlock on ${unlockDateFormatted}.`
+            `Daily Lesson Unlock is active for this class. This lesson is scheduled to unlock on ${unlockDateFormatted}.`
           );
           lockErr.statusCode = 403;
           lockErr.dailyReleaseLocked = true;
@@ -1633,7 +1946,7 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
         }
       }
 
-      // Check 2: Student completion pacing (at most 1 new micro lesson per release interval)
+      // Check 2: Student completion pacing (at most lessonsPerRelease new micro lessons per release interval)
       const { data: todayCompletions } = await supabaseClient
         .from('course_episode_progress')
         .select('id, episode_id, completed_at')
@@ -1641,17 +1954,19 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
         .eq('status', 'completed')
         .neq('episode_id', cleanEpisodeId);
 
-      const hasCompletedWithinInterval = (todayCompletions || []).some(c => {
+      const completionsInCurrentInterval = (todayCompletions || []).filter(c => {
         if (!c.completed_at) return false;
         const compDateStr = formatTzDate(new Date(c.completed_at));
         const compDayMs = toUtcDayMs(compDateStr);
         const diffDays = Math.floor((todayDayMs - compDayMs) / 86400000);
         return diffDays < intervalDays;
-      });
+      }).length;
 
-      if (hasCompletedWithinInterval) {
+      if (completionsInCurrentInterval >= lessonsPerRelease) {
         const lockErr = new Error(
-          'Daily Lesson Unlock is active for this course. You have already completed today\'s micro lesson. Your next lesson will unlock tomorrow.'
+          lessonsPerRelease > 1
+            ? `Daily Lesson Unlock is active for this class. You have reached the limit of ${lessonsPerRelease} lessons for this release period.`
+            : 'Daily Lesson Unlock is active for this class. You have already completed today\'s micro lesson. Your next lesson will unlock tomorrow.'
         );
         lockErr.statusCode = 403;
         lockErr.dailyReleaseLocked = true;
@@ -1753,7 +2068,7 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
             });
           }
         } else if (
-          assignment?.settings?.allow_retries !== false &&
+          resolvedConfig.allow_retries !== false &&
           clampedPts > Number(existingAtt.points_awarded || 0)
         ) {
           existingAtt.points_awarded = clampedPts;
@@ -1907,7 +2222,7 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
       ? `Learn with Shorts XP: ${episodeTitle} (${numScore}/${numMaxScore} Marks • ${targetRewardPoints} XP)`
       : `Course Lesson Score: ${episodeTitle} (${numScore}/${numMaxScore})`;
 
-    if (!isClassroomOwner && targetRewardPoints > 0) {
+    if (!isClassroomOwner && resolvedConfig.award_points !== false && targetRewardPoints > 0) {
       if (!lessonPointRowId) {
         const { data: insertedPoint, error: ptErr } = await supabaseClient
           .from('classroom_points')

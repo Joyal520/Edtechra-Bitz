@@ -21,7 +21,8 @@ import {
   Map,
   Lock,
   Pause,
-  Edit3
+  Edit3,
+  Calendar
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Course, CourseEpisode, CourseEnrollment, RoadmapLessonItem } from '@/types/courseStudio';
@@ -32,7 +33,13 @@ import { LessonCompletionModal } from '@/components/course-studio/LessonCompleti
 import { TextScale } from '@/utils/courseTextFormatting';
 import { getThemePreset, DEFAULT_THEME_ID } from '@/utils/courseThemes';
 import { ThemeSelectorPopover } from '@/components/course-studio/ThemeSelectorPopover';
-import { computeCourseRoadmap, getNextDailyUnlockSummary } from '@/utils/dailyReleaseEngine';
+import {
+  computeCourseRoadmap,
+  formatUnlockDateLabel,
+  getDateStringInTimezone,
+  getNextDailyUnlockSummary,
+  ymdToUtcMs
+} from '@/utils/dailyReleaseEngine';
 import { LiquidButton } from '@/components/course-studio/liquid';
 import { CourseHeroBanner } from '@/components/course-studio/CourseHeroBanner';
 import { AnnabelleCinematicHeader } from '@/components/course-studio/AnnabelleCinematicHeader';
@@ -73,6 +80,9 @@ export const StudentCoursePlayerPage: React.FC = () => {
   const [completedEpisodesMap, setCompletedEpisodesMap] = useState<Record<string, { completed_at?: string }>>({});
   const [isTeacherPreview, setIsTeacherPreview] = useState(false);
   const [isCoursePaused, setIsCoursePaused] = useState(false);
+  const [assignmentAvailableFrom, setAssignmentAvailableFrom] = useState<string | null>(null);
+  const [assignmentDueDate, setAssignmentDueDate] = useState<string | null>(null);
+  const [unlockLessonsPerRelease, setUnlockLessonsPerRelease] = useState<number>(1);
   const [allowQuestionRetries, setAllowQuestionRetries] = useState(true);
   const [completingEpisode, setCompletingEpisode] = useState(false);
 
@@ -239,6 +249,16 @@ export const StudentCoursePlayerPage: React.FC = () => {
         resolveProfileName()
       ]);
 
+      const resolvedAvailableFrom = (progressData as any)?.available_from ?? null;
+      const resolvedDueDate = (progressData as any)?.due_date ?? null;
+      const resolvedLessonsPerRelease = Math.max(
+        1,
+        Number((progressData as any)?.unlock_lessons_per_release ?? 1) || 1
+      );
+      setAssignmentAvailableFrom(resolvedAvailableFrom);
+      setAssignmentDueDate(resolvedDueDate);
+      setUnlockLessonsPerRelease(resolvedLessonsPerRelease);
+
       const mergedCourseData: Course = {
         ...courseData,
         daily_release_enabled:
@@ -250,11 +270,16 @@ export const StudentCoursePlayerPage: React.FC = () => {
           courseData.daily_release_interval_days ||
           1,
         course_start_date:
-          (progressData as any)?.course_start_date || courseData.course_start_date || null,
+          (progressData as any)?.course_start_date !== undefined
+            ? ((progressData as any).course_start_date || null)
+            : (courseData.course_start_date || null),
         course_timezone:
           (progressData as any)?.course_timezone || courseData.course_timezone || 'Asia/Colombo',
         server_time: (progressData as any)?.server_time || courseData.server_time
       };
+      (mergedCourseData as any).available_from = resolvedAvailableFrom;
+      (mergedCourseData as any).due_date = resolvedDueDate;
+      (mergedCourseData as any).unlock_lessons_per_release = resolvedLessonsPerRelease;
 
       setCourse(mergedCourseData);
 
@@ -288,12 +313,15 @@ export const StudentCoursePlayerPage: React.FC = () => {
         setEnrollment(progressData.enrollment as CourseEnrollment);
       }
 
-      // Compute initial roadmap with actual completed lessons & exact daily release state
+      // Compute initial roadmap with actual completed lessons & exact class-specific release state
       const roadmap = computeCourseRoadmap({
         course: mergedCourseData,
         completedEpisodeIds: completedSet,
         completedEpisodesMap: (progressData as any)?.completedEpisodesMap,
         studentStartDate: progressData.enrollment?.created_at || null,
+        availableFrom: resolvedAvailableFrom,
+        dueDate: resolvedDueDate,
+        unlockLessonsPerRelease: resolvedLessonsPerRelease,
         isPaused,
         isTeacher
       });
@@ -372,12 +400,15 @@ export const StudentCoursePlayerPage: React.FC = () => {
   const prevItem = currentIndex > 0 ? allEpisodes[currentIndex - 1] : null;
   const nextItem = currentIndex < allEpisodes.length - 1 ? allEpisodes[currentIndex + 1] : null;
 
-  // Compute live roadmap with strict daily lock state
+  // Compute live roadmap with strict class-specific availability & unlock state
   const roadmapData = course ? computeCourseRoadmap({
     course,
     completedEpisodeIds,
     completedEpisodesMap,
     studentStartDate: enrollment?.created_at || null,
+    availableFrom: assignmentAvailableFrom,
+    dueDate: assignmentDueDate,
+    unlockLessonsPerRelease,
     currentActiveEpisodeId: selectedEpisode?.id || null,
     isPaused: isCoursePaused,
     isTeacher: isTeacherPreview
@@ -530,6 +561,17 @@ export const StudentCoursePlayerPage: React.FC = () => {
     // Paused Course Guard: Prevent submissions while paused
     if (isCoursePaused) {
       setToastMessage('Course is currently paused by your teacher. Lesson submissions are temporarily on hold.');
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
+
+    // Class Available From Guard: Prevent completion before class opening date
+    if (roadmapData?.isBeforeAvailableFrom && !isTeacherPreview) {
+      setToastMessage(
+        roadmapData.availableFromLabel
+          ? `This course assignment opens on ${roadmapData.availableFromLabel}.`
+          : 'This course assignment is not yet available for your class.'
+      );
       setTimeout(() => setToastMessage(null), 4000);
       return;
     }
@@ -816,6 +858,17 @@ export const StudentCoursePlayerPage: React.FC = () => {
           </span>
         </aside>
       )}
+
+      {/* 0C. SCHEDULED OPENING BANNER */}
+      {!isCoursePaused && !isTeacherPreview && roadmapData?.isBeforeAvailableFrom && (
+        <aside aria-label="Course opens soon" className="bg-indigo-500/15 border-b border-indigo-500/30 text-indigo-900 dark:text-indigo-200 px-3 sm:px-6 py-2.5 text-xs font-bold flex items-center gap-2 shrink-0 z-30">
+          <Calendar className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+          <span>
+            <strong>Scheduled Assignment:</strong> This course opens for your class on{' '}
+            <strong>{roadmapData.availableFromLabel}</strong>.
+          </span>
+        </aside>
+      )}
       
       {/* 1. TOP READING PROGRESS LINE */}
       <div className="w-full h-1 bg-current/5 relative shrink-0">
@@ -876,6 +929,26 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
         {/* Right: XP, Progress %, Font Controls (Desktop), Theme Popover, Bookmark */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          {/* Class Deadline Pill */}
+          {assignmentDueDate && (() => {
+            const tz = course.course_timezone || 'Asia/Colombo';
+            const dueYmd = getDateStringInTimezone(assignmentDueDate, tz);
+            const todayYmd = getDateStringInTimezone(course.server_time || new Date(), tz);
+            const pastDue = ymdToUtcMs(todayYmd) > ymdToUtcMs(dueYmd) && (roadmapData?.progressPercent || 0) < 100;
+            return (
+              <div
+                className={`hidden sm:flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap ${
+                  pastDue
+                    ? 'bg-rose-500/15 text-rose-700 border-rose-400/35'
+                    : 'bg-sky-500/10 text-sky-800 border-sky-400/30'
+                }`}
+              >
+                <Clock className="w-3 h-3 shrink-0" />
+                <span>{pastDue ? `Past Due • ${formatUnlockDateLabel(dueYmd)}` : `Due ${formatUnlockDateLabel(dueYmd)}`}</span>
+              </div>
+            );
+          })()}
+
           {/* XP Pill */}
           <div
             className={`flex items-center gap-1 px-2 sm:px-2.5 py-0.5 rounded-full bg-amber-500/15 ${

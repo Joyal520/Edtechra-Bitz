@@ -108,7 +108,9 @@ import {
   calculateConceptMastery,
   completeCourseLessonAndAwardPoints,
   backfillMissingCourseLessonPoints,
-  clampQuestionPoints
+  clampQuestionPoints,
+  resolveClassAssignmentConfig,
+  upsertClassAssignmentSafe
 } from './server/courseStudioService.mjs';
 import {
   extractMaterialsContext,
@@ -6982,10 +6984,31 @@ app.get('/api/course-studio/courses/:id', async (req, res) => {
       episodes: episodesByUnit.get(u.id) || []
     }));
 
-    const activeAssignmentSettings = (assignments || []).find(a => a.status === 'active')?.settings || (assignments || [])[0]?.settings || {};
+    const enrichedAssignments = (assignments || []).map(a => {
+      const resolvedCfg = resolveClassAssignmentConfig(a, course);
+      return {
+        ...a,
+        daily_unlock_enabled: resolvedCfg.daily_release_enabled,
+        unlock_configuration: resolvedCfg.unlock_configuration,
+        resolved_config: resolvedCfg
+      };
+    });
+
+    const requestedClassroomId = req.query?.classroom_id ? String(req.query.classroom_id) : null;
+    const requestedAssignment = requestedClassroomId
+      ? enrichedAssignments.find(a => a.classroom_id === requestedClassroomId) || null
+      : null;
+    const requestedResolvedConfig = requestedAssignment
+      ? requestedAssignment.resolved_config
+      : null;
+
     const resolvedIntervalDays = Math.max(
       1,
-      Number(course.daily_release_interval_days ?? activeAssignmentSettings.daily_release_interval_days ?? 1) || 1
+      Number(
+        requestedResolvedConfig?.daily_release_interval_days ??
+        course.daily_release_interval_days ??
+        1
+      ) || 1
     );
     const serverTimeIso = new Date().toISOString();
 
@@ -6994,15 +7017,29 @@ app.get('/api/course-studio/courses/:id', async (req, res) => {
       server_time: serverTimeIso,
       course: {
         ...course,
-        daily_release_interval_days: resolvedIntervalDays,
-        allow_retries: activeAssignmentSettings?.allow_retries !== false,
+        ...(requestedResolvedConfig
+          ? {
+              daily_release_enabled: requestedResolvedConfig.daily_release_enabled,
+              daily_release_interval_days: requestedResolvedConfig.daily_release_interval_days,
+              unlock_lessons_per_release: requestedResolvedConfig.unlock_lessons_per_release,
+              course_start_date: requestedResolvedConfig.course_start_date,
+              course_timezone: requestedResolvedConfig.course_timezone,
+              allow_retries: requestedResolvedConfig.allow_retries,
+              available_from: requestedResolvedConfig.available_from,
+              due_date: requestedResolvedConfig.due_date
+            }
+          : {
+              daily_release_interval_days: resolvedIntervalDays,
+              allow_retries: true
+            }),
+        resolved_assignment_config: requestedResolvedConfig,
         server_time: serverTimeIso,
         units: enrichedUnits,
-        assignments: assignments || [],
+        assignments: enrichedAssignments,
         // Alias kept for frontend components that read this key
-        course_classroom_assignments: assignments || [],
-        assigned_classrooms_count: (assignments || []).filter(a => a.status === 'active').length,
-        is_paused: (assignments || []).length > 0 && (assignments || []).every(a => a.status === 'paused')
+        course_classroom_assignments: enrichedAssignments,
+        assigned_classrooms_count: enrichedAssignments.filter(a => a.status === 'active').length,
+        is_paused: enrichedAssignments.length > 0 && enrichedAssignments.every(a => a.status === 'paused')
       }
     });
   } catch (err) {
@@ -7076,37 +7113,8 @@ app.put('/api/course-studio/courses/:id', async (req, res) => {
 
     if (error) throw error;
 
-    // Sync daily unlock settings into existing classroom assignments if present
-    if (
-      daily_release_enabled !== undefined ||
-      daily_release_interval_days !== undefined ||
-      course_start_date !== undefined ||
-      course_timezone !== undefined
-    ) {
-      try {
-        const { data: existingAssigns } = await serverSupabase
-          .from('course_classroom_assignments')
-          .select('id, settings')
-          .eq('course_id', courseId);
-        for (const assign of existingAssigns || []) {
-          const nextSettings = {
-            ...(assign.settings || {}),
-            ...(daily_release_enabled !== undefined ? { daily_release_enabled: Boolean(daily_release_enabled) } : {}),
-            ...(daily_release_interval_days !== undefined
-              ? { daily_release_interval_days: Math.max(1, Number(daily_release_interval_days) || 1) }
-              : {}),
-            ...(course_start_date !== undefined ? { course_start_date } : {}),
-            ...(course_timezone !== undefined ? { course_timezone } : {})
-          };
-          await serverSupabase
-            .from('course_classroom_assignments')
-            .update({ settings: nextSettings, updated_at: new Date().toISOString() })
-            .eq('id', assign.id);
-        }
-      } catch (_syncAssignErr) {
-        // Non-blocking sync
-      }
-    }
+    // Class-specific assignment settings are stored independently per classroom in
+    // course_classroom_assignments; updating course metadata must never overwrite classes.
 
     res.json({
       success: true,
@@ -7939,7 +7947,7 @@ app.post('/api/course-studio/ai/evaluate-answer', async (req, res) => {
   }
 });
 
-// 15. POST /api/course-studio/courses/:id/publish-and-assign - Publish course & assign to classrooms
+// 15. POST /api/course-studio/courses/:id/publish-and-assign - Publish course & assign per-class configs
 app.post('/api/course-studio/courses/:id/publish-and-assign', async (req, res) => {
   try {
     const authData = await verifyAuthUser(req);
@@ -7948,63 +7956,45 @@ app.post('/api/course-studio/courses/:id/publish-and-assign', async (req, res) =
     const courseId = req.params.id;
     const {
       classroom_ids = [],
-      start_date = new Date().toISOString(),
-      due_date = null,
-      settings = {
-        sequential_unlock: false,
-        allow_retries: true,
-        track_mastery: true,
-        award_points: true
-      },
+      class_assignments,
+      start_date,
+      available_from,
+      due_date,
+      settings,
       daily_release_enabled,
+      daily_unlock_enabled,
       course_start_date,
+      unlock_start_date,
       course_timezone,
-      daily_release_interval_days
+      daily_release_interval_days,
+      unlock_lessons_per_release
     } = req.body;
 
     const isAdmin = authData.profile?.role === 'admin' || authData.user.email === 'roshanjoyal520@gmail.com';
     const courseUpdates = { status: 'published', updated_at: new Date().toISOString() };
-    if (daily_release_enabled !== undefined) {
-      courseUpdates.daily_release_enabled = Boolean(daily_release_enabled);
-    }
-    if (course_start_date !== undefined) {
-      courseUpdates.course_start_date = course_start_date;
-    } else if (start_date) {
-      courseUpdates.course_start_date = String(start_date).split('T')[0];
-    }
-    if (course_timezone !== undefined) {
-      courseUpdates.course_timezone = course_timezone;
-    }
-    if (daily_release_interval_days !== undefined) {
-      courseUpdates.daily_release_interval_days = Math.max(1, Number(daily_release_interval_days) || 1);
-    }
 
-    const executePublishUpdate = async (payload) => {
-      let courseQuery = serverSupabase
-        .from('courses')
-        .update(payload)
-        .eq('id', courseId);
-      if (!isAdmin) {
-        courseQuery = courseQuery.eq('teacher_id', authData.user.id);
-      }
-      return courseQuery.select().single();
-    };
-
-    let { data: updatedCourse, error: cErr } = await executePublishUpdate(courseUpdates);
-    if (cErr && courseUpdates.daily_release_interval_days !== undefined && String(cErr.message || '').includes('daily_release_interval_days')) {
-      const { daily_release_interval_days: _omit, ...fallbackUpdates } = courseUpdates;
-      const retryRes = await executePublishUpdate(fallbackUpdates);
-      updatedCourse = retryRes.data;
-      cErr = retryRes.error;
+    let courseQuery = serverSupabase
+      .from('courses')
+      .update(courseUpdates)
+      .eq('id', courseId);
+    if (!isAdmin) {
+      courseQuery = courseQuery.eq('teacher_id', authData.user.id);
     }
-
+    const { data: updatedCourse, error: cErr } = await courseQuery.select().single();
     if (cErr) throw cErr;
 
-    const { data: allEpisodes } = await serverSupabase
-      .from('course_episodes')
-      .select('id')
-      .eq('course_id', courseId);
+    const [{ data: allEpisodes }, { data: existingAssignmentsRows }] = await Promise.all([
+      serverSupabase
+        .from('course_episodes')
+        .select('id')
+        .eq('course_id', courseId),
+      serverSupabase
+        .from('course_classroom_assignments')
+        .select('*')
+        .eq('course_id', courseId)
+    ]);
     const totalEpisodesCount = (allEpisodes || []).length;
+    const existingByClassroom = new Map((existingAssignmentsRows || []).map(a => [a.classroom_id, a]));
 
     // Fetch all classrooms managed by this teacher (or all if admin) to safely determine active vs removed assignments
     let teacherClassroomsQuery = serverSupabase
@@ -8016,9 +8006,50 @@ app.post('/api/course-studio/courses/:id/publish-and-assign', async (req, res) =
     const { data: teacherClassrooms } = await teacherClassroomsQuery;
     const manageableClassroomIds = new Set((teacherClassrooms || []).map(c => c.id));
 
-    // For any classroom this teacher manages that is NOT in classroom_ids, set existing assignment status to 'archived'
-    // This removes student access without deleting historical progress or enrollments (avoids cascade deletion).
-    const unselectedClassIds = [...manageableClassroomIds].filter(cid => !classroom_ids.includes(cid));
+    const hasPerClassPayload = Array.isArray(class_assignments);
+    const normalizedEntries = hasPerClassPayload
+      ? class_assignments
+          .filter(entry => entry && entry.classroom_id)
+          .map(entry => ({
+            classroom_id: String(entry.classroom_id),
+            config: entry
+          }))
+      : (Array.isArray(classroom_ids) ? classroom_ids : [])
+          .filter(Boolean)
+          .map(cid => {
+            const existing = existingByClassroom.get(String(cid));
+            if (existing) {
+              // Legacy classroom_ids-only call must NEVER overwrite an already-configured class
+              return {
+                classroom_id: String(cid),
+                config: { status: 'active' }
+              };
+            }
+            return {
+              classroom_id: String(cid),
+              config: {
+                status: 'active',
+                available_from: available_from !== undefined ? available_from : (start_date || new Date().toISOString()),
+                due_date: due_date !== undefined ? due_date : null,
+                daily_unlock_enabled:
+                  daily_unlock_enabled !== undefined
+                    ? Boolean(daily_unlock_enabled)
+                    : daily_release_enabled !== undefined
+                      ? Boolean(daily_release_enabled)
+                      : undefined,
+                daily_release_interval_days,
+                unlock_lessons_per_release,
+                unlock_start_date: unlock_start_date !== undefined ? unlock_start_date : course_start_date,
+                course_timezone,
+                settings
+              }
+            };
+          });
+
+    const selectedClassroomIds = normalizedEntries.map(e => e.classroom_id);
+
+    // For any classroom this teacher manages that is NOT selected, archive without deleting history or settings
+    const unselectedClassIds = [...manageableClassroomIds].filter(cid => !selectedClassroomIds.includes(cid));
     if (unselectedClassIds.length > 0) {
       await serverSupabase
         .from('course_classroom_assignments')
@@ -8028,40 +8059,31 @@ app.post('/api/course-studio/courses/:id/publish-and-assign', async (req, res) =
     }
 
     const assignmentResults = [];
-    for (const classId of classroom_ids) {
+    for (const entry of normalizedEntries) {
+      const classId = entry.classroom_id;
       // Security check: teacher can only assign classrooms they are authorized to manage
       if (!isAdmin && !manageableClassroomIds.has(classId)) {
         continue;
       }
 
-      const { data: assignment, error: aErr } = await serverSupabase
-        .from('course_classroom_assignments')
-        .upsert(
-          {
-            course_id: courseId,
-            classroom_id: classId,
-            assigned_by: authData.user.id,
-            start_date,
-            due_date,
-            status: 'active',
-            settings: {
-              ...settings,
-              ...(daily_release_enabled !== undefined ? { daily_release_enabled: Boolean(daily_release_enabled) } : {}),
-              ...(daily_release_interval_days !== undefined
-                ? { daily_release_interval_days: Math.max(1, Number(daily_release_interval_days) || 1) }
-                : {}),
-              ...(courseUpdates.course_start_date ? { course_start_date: courseUpdates.course_start_date } : {}),
-              ...(course_timezone ? { course_timezone } : {})
-            },
-            assigned_at: new Date().toISOString()
-          },
-          { onConflict: 'course_id,classroom_id' }
-        )
-        .select()
-        .single();
+      const existingAssignment = existingByClassroom.get(classId) || null;
+      const { assignment, error: aErr } = await upsertClassAssignmentSafe(serverSupabase, {
+        courseId,
+        classroomId: classId,
+        teacherId: authData.user.id,
+        config: { status: 'active', ...entry.config },
+        existingAssignment,
+        courseRow: updatedCourse
+      });
 
       if (aErr || !assignment) continue;
-      assignmentResults.push(assignment);
+      const resolvedCfg = resolveClassAssignmentConfig(assignment, updatedCourse);
+      assignmentResults.push({
+        ...assignment,
+        daily_unlock_enabled: resolvedCfg.daily_release_enabled,
+        unlock_configuration: resolvedCfg.unlock_configuration,
+        resolved_config: resolvedCfg
+      });
 
       const { data: members } = await serverSupabase
         .from('classroom_members')
@@ -8082,7 +8104,7 @@ app.post('/api/course-studio/courses/:id/publish-and-assign', async (req, res) =
 
         await serverSupabase
           .from('course_enrollments')
-          .upsert(enrollmentsToUpsert, { onConflict: 'classroom_assignment_id,student_id' });
+          .upsert(enrollmentsToUpsert, { onConflict: 'classroom_assignment_id,student_id', ignoreDuplicates: true });
       }
     }
 
@@ -8095,6 +8117,131 @@ app.post('/api/course-studio/courses/:id/publish-and-assign', async (req, res) =
   } catch (err) {
     console.error('Error in publish-and-assign:', err);
     res.status(500).json({ success: false, error: err.message || 'Failed to publish and assign course.' });
+  }
+});
+
+// 15B. PUT /api/course-studio/courses/:id/assignments/:classroomId - Create or update a SINGLE class assignment
+app.put('/api/course-studio/courses/:id/assignments/:classroomId', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { id: courseId, classroomId } = req.params;
+    const isAdmin = authData.profile?.role === 'admin' || authData.user.email === 'roshanjoyal520@gmail.com';
+
+    const [{ data: courseRow }, { data: classroomRow }, { data: existingAssignment }] = await Promise.all([
+      serverSupabase.from('courses').select('*').eq('id', courseId).maybeSingle(),
+      serverSupabase.from('classrooms').select('id, teacher_id').eq('id', classroomId).maybeSingle(),
+      serverSupabase
+        .from('course_classroom_assignments')
+        .select('*')
+        .eq('course_id', courseId)
+        .eq('classroom_id', classroomId)
+        .maybeSingle()
+    ]);
+
+    if (!courseRow) {
+      return res.status(404).json({ success: false, error: 'Course not found.' });
+    }
+    if (!classroomRow) {
+      return res.status(404).json({ success: false, error: 'Classroom not found.' });
+    }
+    if (!isAdmin && courseRow.teacher_id !== authData.user.id && classroomRow.teacher_id !== authData.user.id) {
+      return res.status(403).json({ success: false, error: 'Not authorized to manage this class assignment.' });
+    }
+
+    if (courseRow.status !== 'published') {
+      await serverSupabase
+        .from('courses')
+        .update({ status: 'published', updated_at: new Date().toISOString() })
+        .eq('id', courseId);
+    }
+
+    const { assignment, error: aErr } = await upsertClassAssignmentSafe(serverSupabase, {
+      courseId,
+      classroomId,
+      teacherId: authData.user.id,
+      config: req.body || {},
+      existingAssignment,
+      courseRow
+    });
+
+    if (aErr || !assignment) {
+      throw aErr || new Error('Failed to save class assignment.');
+    }
+
+    // Auto-enroll active classroom students under this assignment if active
+    if (assignment.status === 'active') {
+      const [{ data: allEpisodes }, { data: members }] = await Promise.all([
+        serverSupabase.from('course_episodes').select('id').eq('course_id', courseId),
+        serverSupabase
+          .from('classroom_members')
+          .select('profile_id')
+          .eq('classroom_id', classroomId)
+          .eq('role', 'student')
+          .eq('status', 'active')
+      ]);
+      const totalEpisodesCount = (allEpisodes || []).length;
+      if (members && members.length > 0) {
+        const enrollmentsToUpsert = members.map(m => ({
+          course_id: courseId,
+          classroom_id: classroomId,
+          classroom_assignment_id: assignment.id,
+          student_id: m.profile_id,
+          status: 'enrolled',
+          total_episodes_count: totalEpisodesCount
+        }));
+        await serverSupabase
+          .from('course_enrollments')
+          .upsert(enrollmentsToUpsert, { onConflict: 'classroom_assignment_id,student_id', ignoreDuplicates: true });
+      }
+    }
+
+    const resolvedCfg = resolveClassAssignmentConfig(assignment, courseRow);
+    res.json({
+      success: true,
+      assignment: {
+        ...assignment,
+        daily_unlock_enabled: resolvedCfg.daily_release_enabled,
+        unlock_configuration: resolvedCfg.unlock_configuration,
+        resolved_config: resolvedCfg
+      },
+      resolved_config: resolvedCfg
+    });
+  } catch (err) {
+    console.error('Error in PUT class assignment:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to save class assignment.' });
+  }
+});
+
+// 15C. DELETE /api/course-studio/courses/:id/assignments/:classroomId - Archive a SINGLE class assignment
+app.delete('/api/course-studio/courses/:id/assignments/:classroomId', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { id: courseId, classroomId } = req.params;
+    const isAdmin = authData.profile?.role === 'admin' || authData.user.email === 'roshanjoyal520@gmail.com';
+
+    const [{ data: courseRow }, { data: classroomRow }] = await Promise.all([
+      serverSupabase.from('courses').select('id, teacher_id').eq('id', courseId).maybeSingle(),
+      serverSupabase.from('classrooms').select('id, teacher_id').eq('id', classroomId).maybeSingle()
+    ]);
+
+    if (!isAdmin && courseRow?.teacher_id !== authData.user.id && classroomRow?.teacher_id !== authData.user.id) {
+      return res.status(403).json({ success: false, error: 'Not authorized to remove this class assignment.' });
+    }
+
+    await serverSupabase
+      .from('course_classroom_assignments')
+      .update({ status: 'archived', updated_at: new Date().toISOString() })
+      .eq('course_id', courseId)
+      .eq('classroom_id', classroomId);
+
+    res.json({ success: true, removed_classroom_id: classroomId });
+  } catch (err) {
+    console.error('Error in DELETE class assignment:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to remove class assignment.' });
   }
 });
 
@@ -8476,6 +8623,9 @@ app.get('/api/classes/:classroomId/courses', async (req, res) => {
           cover_aspect_ratio,
           course_type,
           status,
+          daily_release_enabled,
+          course_start_date,
+          course_timezone,
           updated_at,
           course_units(id, course_episodes(id))
         )
@@ -8498,10 +8648,16 @@ app.get('/api/classes/:classroomId/courses', async (req, res) => {
       .eq('classroom_id', classroomId)
       .eq('student_id', studentId);
 
-    const enrollmentMap = new Map();
-    (enrollments || []).forEach(e => enrollmentMap.set(e.course_id, e));
+    const enrollmentByAssignment = new Map();
+    const enrollmentByCourse = new Map();
+    (enrollments || []).forEach(e => {
+      if (e.classroom_assignment_id) enrollmentByAssignment.set(e.classroom_assignment_id, e);
+      enrollmentByCourse.set(e.course_id, e);
+    });
 
+    const serverTimeIso = new Date().toISOString();
     const enriched = await Promise.all(eligibleAssignments.map(async (a) => {
+      const resolvedCfg = resolveClassAssignmentConfig(a, a.course);
       const units = a.course?.course_units || [];
       const episodesCount = units.reduce((sum, u) => sum + (u.course_episodes?.length || 0), 0);
       const cleanCourse = {
@@ -8511,7 +8667,7 @@ app.get('/api/classes/:classroomId/courses', async (req, res) => {
       };
       delete cleanCourse.course_units;
 
-      let enrollment = enrollmentMap.get(a.course_id) || null;
+      let enrollment = enrollmentByAssignment.get(a.id) || enrollmentByCourse.get(a.course_id) || null;
 
       // Auto-enroll student if enrolled in this classroom but record does not exist yet
       if (!enrollment && !isTeacherOrAdmin) {
@@ -8560,6 +8716,12 @@ app.get('/api/classes/:classroomId/courses', async (req, res) => {
 
       return {
         ...a,
+        available_from: resolvedCfg.available_from,
+        due_date: resolvedCfg.due_date,
+        daily_unlock_enabled: resolvedCfg.daily_release_enabled,
+        unlock_configuration: resolvedCfg.unlock_configuration,
+        resolved_config: resolvedCfg,
+        server_time: serverTimeIso,
         course: cleanCourse,
         enrollment
       };
@@ -8609,7 +8771,7 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
         .maybeSingle(),
       serverSupabase
         .from('course_classroom_assignments')
-        .select('id, status, settings, start_date')
+        .select('*')
         .eq('course_id', course_id)
         .eq('classroom_id', classroom_id)
         .maybeSingle(),
@@ -8633,18 +8795,17 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
         .eq('student_id', student_id)
     ]);
 
-    const resolvedDailyReleaseEnabled = Boolean(
-      courseRow?.daily_release_enabled ?? assignment?.settings?.daily_release_enabled
-    );
-    const resolvedIntervalDays = Math.max(
-      1,
-      Number(courseRow?.daily_release_interval_days ?? assignment?.settings?.daily_release_interval_days ?? 1) || 1
-    );
-    const resolvedStartDate =
-      courseRow?.course_start_date || assignment?.settings?.course_start_date || assignment?.start_date || null;
-    const resolvedTimezone =
-      courseRow?.course_timezone || assignment?.settings?.course_timezone || 'Asia/Colombo';
-    const resolvedAllowRetries = assignment?.settings?.allow_retries !== false;
+    const resolvedConfig = resolveClassAssignmentConfig(assignment, courseRow);
+    const resolvedDailyReleaseEnabled = resolvedConfig.daily_release_enabled;
+    const resolvedIntervalDays = resolvedConfig.daily_release_interval_days;
+    const resolvedLessonsPerRelease = resolvedConfig.unlock_lessons_per_release;
+    const resolvedUnlockStartDate = resolvedConfig.unlock_start_date;
+    const resolvedStartDate = resolvedConfig.course_start_date;
+    const resolvedAvailableFrom = resolvedConfig.available_from;
+    const resolvedDueDate = resolvedConfig.due_date;
+    const resolvedTimezone = resolvedConfig.course_timezone;
+    const resolvedAllowRetries = resolvedConfig.allow_retries;
+    const resolvedAwardPoints = resolvedConfig.award_points;
     const serverTimeIso = new Date().toISOString();
 
     const isTeacher =
@@ -8662,6 +8823,10 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
         is_teacher: true,
         is_preview: true,
         is_paused: assignment?.status === 'paused',
+        assignment_id: assignment?.id || null,
+        assignment_status: resolvedConfig.status,
+        available_from: resolvedAvailableFrom,
+        due_date: resolvedDueDate,
         enrollment: null,
         completedEpisodeIds: [],
         completedEpisodesMap: {},
@@ -8670,9 +8835,13 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
         attempts: [],
         daily_release_enabled: resolvedDailyReleaseEnabled,
         daily_release_interval_days: resolvedIntervalDays,
+        unlock_lessons_per_release: resolvedLessonsPerRelease,
+        unlock_start_date: resolvedUnlockStartDate,
         course_start_date: resolvedStartDate,
         course_timezone: resolvedTimezone,
-        allow_retries: resolvedAllowRetries
+        allow_retries: resolvedAllowRetries,
+        award_points: resolvedAwardPoints,
+        resolved_config: resolvedConfig
       });
     }
 
@@ -8681,7 +8850,7 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
     // Retrieve or auto-create student enrollment (only when active)
     let enrollment = existingEnrollment;
 
-    if (!enrollment && !isPaused && assignment) {
+    if (!enrollment && !isPaused && assignment && assignment.status === 'active') {
       const { data: allEpisodes } = await serverSupabase
         .from('course_episodes')
         .select('id')
@@ -8738,6 +8907,10 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
       is_teacher: false,
       is_preview: false,
       is_paused: isPaused,
+      assignment_id: assignment?.id || null,
+      assignment_status: resolvedConfig.status,
+      available_from: resolvedAvailableFrom,
+      due_date: resolvedDueDate,
       enrollment: enrollment || null,
       completedEpisodeIds,
       completedEpisodesMap,
@@ -8746,9 +8919,13 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
       attempts: studentAttempts || [],
       daily_release_enabled: resolvedDailyReleaseEnabled,
       daily_release_interval_days: resolvedIntervalDays,
+      unlock_lessons_per_release: resolvedLessonsPerRelease,
+      unlock_start_date: resolvedUnlockStartDate,
       course_start_date: resolvedStartDate,
       course_timezone: resolvedTimezone,
-      allow_retries: resolvedAllowRetries
+      allow_retries: resolvedAllowRetries,
+      award_points: resolvedAwardPoints,
+      resolved_config: resolvedConfig
     });
   } catch (err) {
     console.error('Error in GET student progress:', err);
