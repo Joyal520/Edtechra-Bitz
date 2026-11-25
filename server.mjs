@@ -120,11 +120,15 @@ import {
 } from './server/courseGamesService.mjs';
 import {
   CAMPAIGN_GAMES_META,
+  DIFFICULTY_ORDER,
   isCampaignGameId,
   resolveCampaignRelease,
   computeCampaignProgress,
   validateCampaignLevelAccess,
-  applyReleaseAction
+  applyReleaseAction,
+  resolveDifficultyReleases,
+  computeDifficultyCampaignProgress,
+  validateDifficultyLevelAccess
 } from './server/campaignGamesService.mjs';
 import {
   getPriorityAppPreference,
@@ -25335,17 +25339,21 @@ app.get('/api/teacher/games/dashboard', async (req, res) => {
       const groupTitle = savedLib?.title || a.title || gameName;
 
       const isCampaign = Boolean(a.settings?.is_campaign_game) || isCampaignGameId(gameId);
-      const campaignRel = isCampaign ? resolveCampaignRelease(a) : null;
+      const isDiffPathCampaign = Boolean(a.settings?.has_difficulty_paths) || gameId === 'image-recognition';
+      const diffRel = isDiffPathCampaign ? resolveDifficultyReleases(a) : null;
+      const campaignRel = isCampaign && !isDiffPathCampaign ? resolveCampaignRelease(a) : null;
       const rawLevels = Array.isArray(a.settings?.levels) && a.settings.levels.length > 0 ? a.settings.levels : [];
-      const releasedCount = campaignRel
-        ? Math.max(0, campaignRel.releasedEnd >= campaignRel.releasedStart ? (campaignRel.releasedEnd - campaignRel.releasedStart + 1) : 0)
-        : 0;
+      const releasedCount = isDiffPathCampaign && diffRel
+        ? DIFFICULTY_ORDER.reduce((s, d) => s + (diffRel.paths[d]?.releasedCount || 0), 0)
+        : campaignRel
+          ? Math.max(0, campaignRel.releasedEnd >= campaignRel.releasedStart ? (campaignRel.releasedEnd - campaignRel.releasedStart + 1) : 0)
+          : 0;
       const totalLevels = isCampaign ? Math.max(1, releasedCount) : Math.max(1, rawLevels.length || 1);
       const isNonScoring = a.settings?.supports_scoring === false;
       const maxPoints = isNonScoring
         ? 0
         : isCampaign
-          ? Math.max(0, releasedCount * (campaignRel?.pointsPerLevel || 10))
+          ? Math.max(0, releasedCount * ((isDiffPathCampaign ? diffRel?.pointsPerLevel : campaignRel?.pointsPerLevel) || 10))
           : rawLevels.length > 0
             ? rawLevels.reduce((sum, l) => sum + Math.max(0, Number(l.points ?? 20)), 0)
             : Math.max(0, Number(a.points ?? 100));
@@ -25470,15 +25478,24 @@ app.get('/api/teacher/games/dashboard', async (req, res) => {
         points: maxPoints,
         totalLevels,
         isCampaignGame: isCampaign,
-        campaignRelease: campaignRel
+        hasDifficultyPaths: isDiffPathCampaign,
+        campaignRelease: isDiffPathCampaign && diffRel
           ? {
-              totalLevels: campaignRel.totalLevels,
-              releasedStart: campaignRel.releasedStart,
-              releasedEnd: campaignRel.releasedEnd,
-              pointsPerLevel: campaignRel.pointsPerLevel,
-              releaseHistory: campaignRel.releaseHistory
+              totalLevels: 200,
+              releasedStart: 1,
+              releasedEnd: releasedCount,
+              pointsPerLevel: diffRel.pointsPerLevel,
+              difficultyPaths: diffRel.paths
             }
-          : null,
+          : campaignRel
+            ? {
+                totalLevels: campaignRel.totalLevels,
+                releasedStart: campaignRel.releasedStart,
+                releasedEnd: campaignRel.releasedEnd,
+                pointsPerLevel: campaignRel.pointsPerLevel,
+                releaseHistory: campaignRel.releaseHistory
+              }
+            : null,
         submissionsCount: completedCount + inProgressCount,
         completedCount,
         inProgressCount,
@@ -25676,7 +25693,10 @@ app.get('/api/games/campaign/state', async (req, res) => {
       .eq('student_id', auth.user.id)
       .maybeSingle();
 
-    const campaignState = computeCampaignProgress(assignment, submission);
+    const isDiffPaths = Boolean(assignment.settings?.has_difficulty_paths) || String(assignment.settings?.game_id) === 'image-recognition';
+    const campaignState = isDiffPaths
+      ? computeDifficultyCampaignProgress(assignment, submission)
+      : computeCampaignProgress(assignment, submission);
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, campaignState });
   } catch (err) {
@@ -25696,6 +25716,7 @@ app.post('/api/games/campaign/complete-level', async (req, res) => {
       assignmentId,
       classroomId,
       gameId,
+      difficulty,
       levelNumber,
       scoreEarned,
       maxPoints,
@@ -25758,8 +25779,13 @@ app.post('/api/games/campaign/complete-level', async (req, res) => {
       .eq('student_id', studentId)
       .maybeSingle();
 
-    const currentProgress = computeCampaignProgress(assignment, existingSubmission);
-    const accessCheck = validateCampaignLevelAccess(currentProgress, levelNumber);
+    const isDiffPaths = Boolean(assignment.settings?.has_difficulty_paths) || String(gameId) === 'image-recognition';
+    const currentProgress = isDiffPaths
+      ? computeDifficultyCampaignProgress(assignment, existingSubmission)
+      : computeCampaignProgress(assignment, existingSubmission);
+    const accessCheck = isDiffPaths
+      ? validateDifficultyLevelAccess(currentProgress, difficulty, levelNumber)
+      : validateCampaignLevelAccess(currentProgress, levelNumber);
     if (!accessCheck.allowed) {
       return res.status(accessCheck.status).json({
         success: false,
@@ -25770,8 +25796,9 @@ app.post('/api/games/campaign/complete-level', async (req, res) => {
     }
 
     const lvlNum = accessCheck.levelNumber;
-    const lvlKey = String(lvlNum);
-    const levelMax = currentProgress.pointsPerLevel > 0 ? currentProgress.pointsPerLevel : 10;
+    const diffKey = isDiffPaths ? accessCheck.difficulty : null;
+    const lvlKey = isDiffPaths ? `${diffKey}:${lvlNum}` : String(lvlNum);
+    const levelMax = currentProgress.pointsPerLevel > 0 ? currentProgress.pointsPerLevel : (isDiffPaths ? 25 : 10);
     const reportedMax = Math.max(1, Number(maxPoints || levelMax));
     const ratio = Math.min(1, Math.max(0, Number(scoreEarned || 0) / reportedMax));
     const pointsForAttempt = Math.min(levelMax, Math.max(0, Math.round(ratio * levelMax)));
@@ -25790,7 +25817,8 @@ app.post('/api/games/campaign/complete-level', async (req, res) => {
       [lvlKey]: {
         levelId: lvlKey,
         levelNumber: lvlNum,
-        title: `Level ${lvlNum}`,
+        ...(diffKey ? { difficulty: diffKey } : {}),
+        title: diffKey ? `${diffKey.charAt(0).toUpperCase() + diffKey.slice(1)} Level ${lvlNum}` : `Level ${lvlNum}`,
         scoreEarned: bestLevelScore,
         maxPoints: levelMax,
         percentage: Math.round((bestLevelScore / levelMax) * 100),
@@ -25803,30 +25831,42 @@ app.post('/api/games/campaign/complete-level', async (req, res) => {
       }
     };
 
-    const nextProgress = computeCampaignProgress(assignment, {
-      text_response: JSON.stringify({ levels_completed: updatedLevelsCompleted })
-    });
+    const nextProgress = isDiffPaths
+      ? computeDifficultyCampaignProgress(assignment, {
+          text_response: JSON.stringify({ levels_completed: updatedLevelsCompleted })
+        })
+      : computeCampaignProgress(assignment, {
+          text_response: JSON.stringify({ levels_completed: updatedLevelsCompleted })
+        });
 
     const summaryText = JSON.stringify({
       game_id: gameId,
       game_name: assignment.settings?.game_name || CAMPAIGN_GAMES_META[gameId]?.name || gameId,
       is_campaign_game: true,
+      has_difficulty_paths: isDiffPaths,
       supports_scoring: true,
       student_id: studentId,
       classroom_id: classroomId,
       assignment_id: assignmentId,
       total_levels: nextProgress.totalLevels,
-      released_start: nextProgress.releasedStart,
-      released_end: nextProgress.releasedEnd,
-      highest_unlocked_level: nextProgress.highestUnlockedLevel,
-      completed_levels_count: nextProgress.completedCount,
-      total_points_earned: nextProgress.totalScore,
+      ...(isDiffPaths
+        ? {
+            completed_levels_count: nextProgress.completedCount,
+            total_points_earned: nextProgress.totalScore
+          }
+        : {
+            released_start: nextProgress.releasedStart,
+            released_end: nextProgress.releasedEnd,
+            highest_unlocked_level: nextProgress.highestUnlockedLevel,
+            completed_levels_count: nextProgress.completedCount,
+            total_points_earned: nextProgress.totalScore
+          }),
       levels_completed: updatedLevelsCompleted
     });
 
     const allTotalCompleted = nextProgress.completedCount >= nextProgress.totalLevels;
     const newStatus = allTotalCompleted ? 'graded' : 'submitted';
-    const feedbackText = `${nextProgress.completedInReleased}/${nextProgress.releasedCount} released levels completed (${nextProgress.totalScore} pts)`;
+    const feedbackText = `${nextProgress.completedInReleased}/${isDiffPaths ? nextProgress.releasedCount : nextProgress.releasedCount} released levels completed (${nextProgress.totalScore} pts)`;
 
     if (existingSubmission) {
       const { error: updErr } = await serverSupabase
@@ -25889,16 +25929,17 @@ app.post('/api/games/campaign/complete-level', async (req, res) => {
       }
     }
 
+    const activeDiffPath = isDiffPaths ? nextProgress.paths?.[diffKey] : null;
     return res.json({
       success: true,
       alreadySubmitted: Boolean(prevRec) && incrementalPoints === 0,
       pointsAwarded: incrementalPoints,
       totalPointsEarned: nextProgress.totalScore,
       completedCount: nextProgress.completedCount,
-      highestUnlockedLevel: nextProgress.highestUnlockedLevel,
-      releasedStart: nextProgress.releasedStart,
-      releasedEnd: nextProgress.releasedEnd,
-      completedAllReleased: nextProgress.completedAllReleased,
+      highestUnlockedLevel: isDiffPaths ? (activeDiffPath?.highestUnlockedLevel || 0) : nextProgress.highestUnlockedLevel,
+      releasedStart: isDiffPaths ? (activeDiffPath?.releasedStart || 1) : nextProgress.releasedStart,
+      releasedEnd: isDiffPaths ? (activeDiffPath?.releasedEnd || 0) : nextProgress.releasedEnd,
+      completedAllReleased: isDiffPaths ? Boolean(activeDiffPath?.completedAllReleased) : nextProgress.completedAllReleased,
       campaignState: nextProgress
     });
   } catch (err) {
@@ -25917,6 +25958,7 @@ app.post('/api/games/campaign/release-levels', async (req, res) => {
     const {
       assignmentId,
       action,
+      difficulty,
       batchSize,
       startLevel,
       endLevel,
@@ -25940,6 +25982,85 @@ app.post('/api/games/campaign/release-levels', async (req, res) => {
     const isTeach = await isUserClassroomTeacher(teacherId, assignment.classroom_id);
     if (!isTeach) {
       return res.status(403).json({ success: false, error: 'Only teachers of this classroom can manage level releases.' });
+    }
+
+    const isDiffPaths = Boolean(assignment.settings?.has_difficulty_paths) || String(assignment.settings?.game_id) === 'image-recognition';
+
+    if (isDiffPaths) {
+      const targetDiff = DIFFICULTY_ORDER.includes(String(difficulty || '').toLowerCase())
+        ? String(difficulty).toLowerCase()
+        : 'easy';
+      const diffRel = resolveDifficultyReleases(assignment);
+      const pathRel = diffRel.paths[targetDiff];
+      const { nextRelease, newlyUnlockedRange } = applyReleaseAction({
+        currentRelease: {
+          totalLevels: pathRel.totalLevels,
+          releasedStart: pathRel.releasedStart,
+          releasedEnd: pathRel.releasedEnd,
+          releaseHistory: pathRel.releaseHistory
+        },
+        action,
+        batchSize,
+        startLevel,
+        endLevel,
+        teacherId
+      });
+
+      const prevAllowed = new Set(diffRel.allowedDifficulties);
+      if (nextRelease.released_end >= nextRelease.released_start && nextRelease.released_end > 0) {
+        prevAllowed.add(targetDiff);
+      }
+      const nextAllowed = DIFFICULTY_ORDER.filter((d) => prevAllowed.has(d));
+      const existingDr = { ...(assignment.settings?.difficulty_releases || {}) };
+      existingDr[targetDiff] = nextRelease;
+
+      const updatedSettings = {
+        ...(assignment.settings || {}),
+        is_campaign_game: true,
+        has_difficulty_paths: true,
+        allowed_difficulties: nextAllowed.length > 0 ? nextAllowed : ['easy'],
+        points_per_level: diffRel.pointsPerLevel,
+        difficulty_releases: existingDr
+      };
+
+      const updatedDiffRel = resolveDifficultyReleases({ settings: updatedSettings });
+      const totalRelCount = DIFFICULTY_ORDER.reduce((s, d) => s + (updatedDiffRel.paths[d]?.releasedCount || 0), 0);
+      const nextMaxPoints = Math.max(0, totalRelCount * diffRel.pointsPerLevel);
+
+      const { data: updatedAssignment, error: updErr } = await serverSupabase
+        .from('assignments')
+        .update({ settings: updatedSettings, points: nextMaxPoints })
+        .eq('id', assignmentId)
+        .select()
+        .single();
+      if (updErr) throw updErr;
+
+      let notified = false;
+      if (notifyStudents && newlyUnlockedRange && newlyUnlockedRange.end >= newlyUnlockedRange.start) {
+        const diffLabel = targetDiff.charAt(0).toUpperCase() + targetDiff.slice(1);
+        const rangeLabel = newlyUnlockedRange.start === newlyUnlockedRange.end
+          ? `Level ${newlyUnlockedRange.start}`
+          : `Levels ${newlyUnlockedRange.start}–${newlyUnlockedRange.end}`;
+        try {
+          await serverSupabase.from('classroom_messages').insert({
+            classroom_id: assignment.classroom_id,
+            teacher_id: teacherId,
+            message: `🎉 New Challenge Unlocked!\nYour teacher has released ${diffLabel} ${rangeLabel} in Image Recognition Challenge (${assignment.title}). Your next challenge is ready!`,
+            is_pinned: false
+          });
+          notified = true;
+        } catch {}
+      }
+
+      return res.json({
+        success: true,
+        difficulty: targetDiff,
+        levelRelease: nextRelease,
+        difficultyPaths: updatedDiffRel.paths,
+        newlyUnlockedRange,
+        notified,
+        assignment: updatedAssignment
+      });
     }
 
     const currentRelease = resolveCampaignRelease(assignment);
@@ -26037,10 +26158,23 @@ app.get('/api/games/campaign/analytics', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Only teachers of this classroom can view game analytics.' });
     }
 
-    const release = resolveCampaignRelease(assignment);
-    const releasedCount = release.releasedEnd >= release.releasedStart
-      ? (release.releasedEnd - release.releasedStart + 1)
-      : 0;
+    const isDiffPaths = Boolean(assignment.settings?.has_difficulty_paths) || String(assignment.settings?.game_id) === 'image-recognition';
+    const diffRel = isDiffPaths ? resolveDifficultyReleases(assignment) : null;
+    const release = isDiffPaths
+      ? {
+          gameId: diffRel.gameId,
+          totalLevels: 200,
+          releasedStart: 1,
+          releasedEnd: DIFFICULTY_ORDER.reduce((s, d) => s + (diffRel.paths[d]?.releasedCount || 0), 0),
+          pointsPerLevel: diffRel.pointsPerLevel,
+          releaseHistory: []
+        }
+      : resolveCampaignRelease(assignment);
+    const releasedCount = isDiffPaths
+      ? release.releasedEnd
+      : release.releasedEnd >= release.releasedStart
+        ? (release.releasedEnd - release.releasedStart + 1)
+        : 0;
     const maxReleasedScore = releasedCount * release.pointsPerLevel;
 
     const [{ data: memberStudents }, { data: legacyStudents }, { data: subs }] = await Promise.all([
@@ -26104,7 +26238,9 @@ app.get('/api/games/campaign/analytics', async (req, res) => {
     const students = targetIds.map((sid) => {
       const prof = rosterMap.get(sid) || { id: sid, full_name: 'Student', email: '', avatar_url: null };
       const sub = subMap.get(sid) || null;
-      const prog = computeCampaignProgress(assignment, sub);
+      const prog = isDiffPaths
+        ? computeDifficultyCampaignProgress(assignment, sub)
+        : computeCampaignProgress(assignment, sub);
       const completedInRel = prog.completedInReleased;
       const progressPct = releasedCount > 0 ? Math.min(100, Math.round((completedInRel / releasedCount) * 100)) : 0;
 
@@ -26130,6 +26266,10 @@ app.get('/api/games/campaign/analytics', async (req, res) => {
         return !latest || new Date(rec.completedAt) > new Date(latest) ? rec.completedAt : latest;
       }, sub?.submitted_at || null);
 
+      const activeDiffLabel = isDiffPaths
+        ? (diffRel.allowedDifficulties.map((d) => `${d.charAt(0).toUpperCase() + d.slice(1)} (${prog.paths[d]?.completedInReleased || 0}/${prog.paths[d]?.releasedCount || 0})`).join(' · '))
+        : undefined;
+
       return {
         studentId: sid,
         studentName: prof.full_name || 'Student',
@@ -26138,13 +26278,14 @@ app.get('/api/games/campaign/analytics', async (req, res) => {
         completedCount: completedInRel,
         totalCompletedAllTime: prog.completedCount,
         releasedCount,
-        highestLevel: prog.highestUnlockedLevel,
+        highestLevel: isDiffPaths ? (prog.paths[prog.defaultDifficulty]?.highestUnlockedLevel || 0) : prog.highestUnlockedLevel,
         scoreEarned: prog.totalScore,
         maxReleasedScore,
         progressPct,
         totalTimeSeconds: prog.totalTimeSeconds,
         lastPlayedAt: latestAt,
-        status
+        status,
+        ...(activeDiffLabel ? { difficultySummary: activeDiffLabel } : {})
       };
     }).sort((a, b) => b.scoreEarned - a.scoreEarned || b.completedCount - a.completedCount || a.studentName.localeCompare(b.studentName));
 
@@ -26152,6 +26293,8 @@ app.get('/api/games/campaign/analytics', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     return res.json({
       success: true,
+      hasDifficultyPaths: isDiffPaths,
+      ...(isDiffPaths && diffRel ? { difficultyPaths: diffRel.paths } : {}),
       assignment: {
         id: assignment.id,
         classroomId: assignment.classroom_id,

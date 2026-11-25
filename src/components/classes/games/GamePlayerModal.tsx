@@ -245,6 +245,7 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
           assignmentId,
           classroomId,
           gameId,
+          difficulty: data.difficulty ? (String(data.difficulty) as 'easy' | 'intermediate' | 'hard') : undefined,
           levelNumber: lvlNum,
           scoreEarned: Number(data.scoreEarned ?? 0),
           maxPoints: Number(data.maxPoints ?? maxPoints ?? 10),

@@ -45,6 +45,7 @@ export const CampaignReleaseModal: React.FC<CampaignReleaseModalProps> = ({
   const [customBatchSize, setCustomBatchSize] = useState<number>(15);
   const [lockCutoff, setLockCutoff] = useState<number>(10);
   const [notifyStudents, setNotifyStudents] = useState<boolean>(true);
+  const [selectedDiff, setSelectedDiff] = useState<'easy' | 'intermediate' | 'hard'>('easy');
   const [studentSearch, setStudentSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'Completed' | 'In Progress' | 'Not Started'>('all');
 
@@ -72,9 +73,11 @@ export const CampaignReleaseModal: React.FC<CampaignReleaseModalProps> = ({
 
   if (!isOpen) return null;
 
-  const totalLevels = data?.levelRelease.totalLevels || 1000;
-  const relStart = data?.levelRelease.releasedStart || 1;
-  const relEnd = data?.levelRelease.releasedEnd ?? 0;
+  const isDiffPaths = Boolean(data?.hasDifficultyPaths && data?.difficultyPaths);
+  const activePath = isDiffPaths ? data?.difficultyPaths?.[selectedDiff] : null;
+  const totalLevels = activePath ? activePath.totalLevels : (data?.levelRelease.totalLevels || 1000);
+  const relStart = activePath ? activePath.releasedStart : (data?.levelRelease.releasedStart || 1);
+  const relEnd = activePath ? (activePath.isAllowed ? activePath.releasedEnd : 0) : (data?.levelRelease.releasedEnd ?? 0);
   const releasedCount = relEnd >= relStart ? relEnd - relStart + 1 : 0;
   const releasedPct = totalLevels > 0 ? Math.min(100, Math.round((releasedCount / totalLevels) * 1000) / 10) : 0;
   const catItem = data ? getGameCatalogItem(data.assignment.gameId as GameId) : null;
@@ -91,6 +94,7 @@ export const CampaignReleaseModal: React.FC<CampaignReleaseModalProps> = ({
     setFeedback(null);
     const res = await gameLibraryService.releaseCampaignLevels({
       assignmentId,
+      ...(isDiffPaths ? { difficulty: selectedDiff } : {}),
       ...params,
       notifyStudents
     });
@@ -226,6 +230,42 @@ export const CampaignReleaseModal: React.FC<CampaignReleaseModalProps> = ({
             </div>
           ) : data && activeTab === 'release' ? (
             <div className="space-y-5">
+              {isDiffPaths && data.difficultyPaths && (
+                <div className="p-3 rounded-2xl bg-slate-100 border border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-black text-slate-700 px-1">Difficulty Path:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {([
+                      { id: 'easy' as const, label: '🟢 Easy' },
+                      { id: 'intermediate' as const, label: '🟡 Intermediate' },
+                      { id: 'hard' as const, label: '🔴 Hard' }
+                    ]).map((d) => {
+                      const dp = data.difficultyPaths![d.id];
+                      const active = selectedDiff === d.id;
+                      const relText = dp?.isAllowed && dp.releasedEnd >= dp.releasedStart
+                        ? `${dp.releasedStart}–${dp.releasedEnd}`
+                        : 'Locked';
+                      return (
+                        <button
+                          key={d.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedDiff(d.id);
+                            setCustomStart(dp?.releasedStart || 1);
+                            setCustomEnd(dp?.releasedEnd || 10);
+                          }}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-extrabold border transition cursor-pointer ${
+                            active
+                              ? 'bg-sky-600 text-white border-sky-600 shadow-2xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          {d.label} ({relText})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               {/* Summary Metrics */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200">
@@ -522,6 +562,9 @@ export const CampaignReleaseModal: React.FC<CampaignReleaseModalProps> = ({
                                 </div>
                                 <div className="min-w-0">
                                   <div className="font-bold text-slate-900 truncate">{s.studentName}</div>
+                                  {s.difficultySummary && (
+                                    <div className="text-[10px] font-bold text-indigo-700 truncate">{s.difficultySummary}</div>
+                                  )}
                                   {s.lastPlayedAt && (
                                     <div className="text-[10px] text-slate-400 flex items-center gap-1">
                                       <Clock className="w-2.5 h-2.5" />

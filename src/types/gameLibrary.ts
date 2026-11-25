@@ -17,7 +17,8 @@ export type GameId =
   | 'game-of-words'
   | 'neon-flow'
   | 'arrow-escape'
-  | 'game-of-words-2000';
+  | 'game-of-words-2000'
+  | 'image-recognition';
 
 export type ActivityCategory =
   | 'brain-memory'
@@ -274,6 +275,7 @@ export interface GameCatalogItem {
   defaultPoints: number;
   isStandaloneBuiltIn?: boolean;
   isCampaignGame?: boolean;
+  hasDifficultyPaths?: boolean;
   totalLevels?: number;
   defaultInitialReleaseEnd?: number;
   supportsScoring?: boolean;
@@ -296,10 +298,30 @@ export interface CampaignReleaseConfig {
   release_history?: CampaignReleaseHistoryEntry[];
 }
 
+export interface CampaignDifficultyPathState {
+  difficulty: 'easy' | 'intermediate' | 'hard';
+  totalLevels: number;
+  isAllowed: boolean;
+  releasedStart: number;
+  releasedEnd: number;
+  releasedCount: number;
+  releaseHistory?: CampaignReleaseHistoryEntry[];
+  highestUnlockedLevel: number;
+  currentLevel: number;
+  completedInReleased: number;
+  completedAllReleased: boolean;
+  score: number;
+  completedLevels: Record<string, CompletedLevelRecord & { stars?: number; difficulty?: string }>;
+}
+
 export interface CampaignProgressState {
   assignmentId: string;
   classroomId: string;
   gameId: GameId;
+  hasDifficultyPaths?: boolean;
+  allowedDifficulties?: Array<'easy' | 'intermediate' | 'hard'>;
+  defaultDifficulty?: 'easy' | 'intermediate' | 'hard';
+  paths?: Record<'easy' | 'intermediate' | 'hard', CampaignDifficultyPathState>;
   totalLevels: number;
   releasedStart: number;
   releasedEnd: number;
@@ -331,9 +353,12 @@ export interface CampaignAnalyticsStudentRow {
   totalTimeSeconds: number;
   lastPlayedAt: string | null;
   status: 'Completed' | 'In Progress' | 'Not Started';
+  difficultySummary?: string;
 }
 
 export interface CampaignAnalyticsData {
+  hasDifficultyPaths?: boolean;
+  difficultyPaths?: Record<'easy' | 'intermediate' | 'hard', CampaignDifficultyPathState>;
   assignment: {
     id: string;
     classroomId: string;
@@ -385,6 +410,9 @@ export interface GameAssignmentSettings {
   levels?: GameLevelDefinition[];
   game_config?: GameConfig;
   is_campaign_game?: boolean;
+  has_difficulty_paths?: boolean;
+  allowed_difficulties?: Array<'easy' | 'intermediate' | 'hard'>;
+  difficulty_releases?: Record<string, CampaignReleaseConfig>;
   total_levels?: number;
   points_per_level?: number;
   level_release?: CampaignReleaseConfig;

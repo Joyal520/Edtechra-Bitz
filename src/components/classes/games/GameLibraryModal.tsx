@@ -367,6 +367,7 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
   const [campaignReleaseStart, setCampaignReleaseStart] = useState<number>(1);
   const [campaignReleaseEnd, setCampaignReleaseEnd] = useState<number>(10);
   const [campaignPointsPerLevel, setCampaignPointsPerLevel] = useState<number>(10);
+  const [campaignAllowedDiffs, setCampaignAllowedDiffs] = useState<Array<'easy' | 'intermediate' | 'hard'>>(['easy']);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -412,7 +413,8 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
       if (item.isCampaignGame) {
         setCampaignReleaseStart(1);
         setCampaignReleaseEnd(item.defaultInitialReleaseEnd || 10);
-        setCampaignPointsPerLevel(10);
+        setCampaignPointsPerLevel(item.hasDifficultyPaths ? 25 : 10);
+        setCampaignAllowedDiffs(['easy']);
         setStep('assign');
       } else {
         setStep('configure');
@@ -564,7 +566,8 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
     if (item.isCampaignGame) {
       setCampaignReleaseStart(1);
       setCampaignReleaseEnd(item.defaultInitialReleaseEnd || 10);
-      setCampaignPointsPerLevel(10);
+      setCampaignPointsPerLevel(item.hasDifficultyPaths ? 25 : 10);
+      setCampaignAllowedDiffs(['easy']);
       setStep('assign');
     } else {
       setStep('configure');
@@ -716,7 +719,8 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
             campaignRelease: {
               releasedStart: campaignReleaseStart,
               releasedEnd: Math.max(campaignReleaseStart, campaignReleaseEnd),
-              pointsPerLevel: campaignPointsPerLevel
+              pointsPerLevel: campaignPointsPerLevel,
+              ...(item.hasDifficultyPaths ? { allowedDifficulties: campaignAllowedDiffs } : {})
             }
           }
         : {})
@@ -982,6 +986,42 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
                       </button>
                     ))}
                   </div>
+
+                  {currentCatalog.hasDifficultyPaths && (
+                    <div className="pt-1 space-y-1.5">
+                      <label className="block text-[11px] font-bold text-slate-700">
+                        Allowed Difficulty Paths for Students
+                      </label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {([
+                          { id: 'easy' as const, label: '🟢 Easy (80 Lv)' },
+                          { id: 'intermediate' as const, label: '🟡 Intermediate (70 Lv)' },
+                          { id: 'hard' as const, label: '🔴 Hard (50 Lv)' }
+                        ]).map((d) => {
+                          const active = campaignAllowedDiffs.includes(d.id);
+                          return (
+                            <button
+                              key={d.id}
+                              type="button"
+                              onClick={() => {
+                                setCampaignAllowedDiffs((prev) => {
+                                  if (active && prev.length === 1) return prev;
+                                  return active ? prev.filter((x) => x !== d.id) : [...prev, d.id];
+                                });
+                              }}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                                active
+                                  ? 'bg-emerald-600 text-white border-emerald-600'
+                                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              {d.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-3 gap-2.5">
                     <div>

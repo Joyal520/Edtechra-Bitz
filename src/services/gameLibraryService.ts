@@ -429,6 +429,30 @@ export const GAME_CATALOG: GameCatalogItem[] = [
     supportsScoring: true,
     defaultLeaderboardEnabled: true,
     resultMetrics: ['Levels Completed', 'Words Discovered', 'Bonus Words']
+  },
+  {
+    id: 'image-recognition',
+    name: 'Image Recognition Challenge',
+    shortDescription:
+      'Identify images, recognize famous places, objects, animals, landmarks, symbols, and other visual information across Easy, Intermediate, and Hard paths.',
+    category: 'Visual Intelligence & General Knowledge',
+    categoryId: 'knowledge',
+    activityType: 'knowledge_challenge',
+    estimatedDuration: '3–8 min',
+    difficulty: 'Adaptive',
+    thumbnailUrl: '/games/thumbnails/image-recognition.jpg',
+    accentColor: 'from-sky-500 to-emerald-500',
+    badgeLabel: '1,000 Images · 3 Tiers',
+    htmlPath: '/games/image-recognition.html',
+    defaultPoints: 250,
+    isStandaloneBuiltIn: true,
+    isCampaignGame: true,
+    hasDifficultyPaths: true,
+    totalLevels: 200,
+    defaultInitialReleaseEnd: 10,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true,
+    resultMetrics: ['Levels Completed', 'Accuracy', 'Best Streak']
   }
 ];
 
@@ -802,6 +826,7 @@ class GameLibraryService {
       releasedStart: number;
       releasedEnd: number;
       pointsPerLevel?: number;
+      allowedDifficulties?: Array<'easy' | 'intermediate' | 'hard'>;
     };
   }): Promise<{ data?: Assignment; createdAssignments?: Assignment[]; error?: string }> {
     if (!supabase) return { error: 'Supabase is not configured' };
@@ -915,11 +940,41 @@ class GameLibraryService {
           : null;
 
       const isCampaign = Boolean(catalogItem.isCampaignGame);
+      const isDiffPaths = Boolean(catalogItem.hasDifficultyPaths);
       const campaignTotal = catalogItem.totalLevels || 1000;
       const campaignStart = Math.max(1, Math.min(campaignTotal, Number(params.campaignRelease?.releasedStart ?? 1)));
       const campaignEnd = Math.max(0, Math.min(campaignTotal, Number(params.campaignRelease?.releasedEnd ?? catalogItem.defaultInitialReleaseEnd ?? 10)));
-      const campaignPtsPerLevel = Math.max(1, Number(params.campaignRelease?.pointsPerLevel ?? 10));
-      const campaignReleasedCount = campaignEnd >= campaignStart ? (campaignEnd - campaignStart + 1) : 0;
+      const campaignPtsPerLevel = Math.max(1, Number(params.campaignRelease?.pointsPerLevel ?? (isDiffPaths ? 25 : 10)));
+      const allowedDiffs = isDiffPaths
+        ? (params.campaignRelease?.allowedDifficulties && params.campaignRelease.allowedDifficulties.length > 0
+            ? params.campaignRelease.allowedDifficulties
+            : (['easy'] as Array<'easy' | 'intermediate' | 'hard'>))
+        : [];
+      const diffTotals: Record<'easy' | 'intermediate' | 'hard', number> = { easy: 80, intermediate: 70, hard: 50 };
+      const diffReleasesObj: Record<string, any> = {};
+      let diffReleasedTotal = 0;
+      if (isDiffPaths) {
+        for (const d of ['easy', 'intermediate', 'hard'] as const) {
+          const dTotal = diffTotals[d];
+          const isAllowed = allowedDiffs.includes(d);
+          const dEnd = isAllowed ? Math.min(dTotal, campaignEnd) : 0;
+          const dStart = Math.min(dTotal, campaignStart);
+          if (isAllowed && dEnd >= dStart) diffReleasedTotal += (dEnd - dStart + 1);
+          diffReleasesObj[d] = {
+            total_levels: dTotal,
+            released_start: dStart,
+            released_end: dEnd,
+            release_history: isAllowed && dEnd >= dStart
+              ? [{ start: dStart, end: dEnd, action: 'initial', releasedAt: new Date().toISOString(), releasedBy: user.id }]
+              : []
+          };
+        }
+      }
+      const campaignReleasedCount = isDiffPaths
+        ? diffReleasedTotal
+        : campaignEnd >= campaignStart
+          ? (campaignEnd - campaignStart + 1)
+          : 0;
       const effectivePoints = isCampaign ? campaignReleasedCount * campaignPtsPerLevel : totalPoints;
 
       const settings: GameAssignmentSettings & { jigsaw_sealed_keys?: string } = {
@@ -931,7 +986,7 @@ class GameLibraryService {
         category_id: catalogItem.categoryId,
         supports_scoring: supportsScoring,
         teacher_instructions: isCampaign
-          ? (params.instructions || '').trim() || `Complete Levels ${campaignStart}–${campaignEnd} in ${catalogItem.name} (${catalogItem.badgeLabel}).`
+          ? (params.instructions || '').trim() || `Complete released Levels ${campaignStart}–${campaignEnd} in ${catalogItem.name}.`
           : cleanInstructions,
         start_date: params.startDate || null,
         max_attempts: params.maxAttempts ?? 1,
@@ -946,6 +1001,8 @@ class GameLibraryService {
         ...(isCampaign
           ? {
               is_campaign_game: true,
+              has_difficulty_paths: isDiffPaths,
+              ...(isDiffPaths ? { allowed_difficulties: allowedDiffs, difficulty_releases: diffReleasesObj } : {}),
               total_levels: campaignTotal,
               points_per_level: campaignPtsPerLevel,
               level_release: {
@@ -1317,6 +1374,7 @@ class GameLibraryService {
     assignmentId: string;
     classroomId: string;
     gameId: GameId;
+    difficulty?: 'easy' | 'intermediate' | 'hard';
     levelNumber: number;
     scoreEarned: number;
     maxPoints: number;
@@ -1350,6 +1408,7 @@ class GameLibraryService {
   async releaseCampaignLevels(params: {
     assignmentId: string;
     action: 'batch' | 'range' | 'lock' | 'release_all';
+    difficulty?: 'easy' | 'intermediate' | 'hard';
     batchSize?: number;
     startLevel?: number;
     endLevel?: number;

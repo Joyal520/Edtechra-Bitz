@@ -31,8 +31,22 @@ export const CAMPAIGN_GAMES_META = {
     totalLevels: 2000,
     defaultInitialEnd: 20,
     defaultPointsPerLevel: 10
+  },
+  'image-recognition': {
+    gameId: 'image-recognition',
+    name: 'Image Recognition Challenge',
+    subtitle: 'Visual Intelligence & General Knowledge',
+    category: 'Visual Intelligence & General Knowledge',
+    totalLevels: 200,
+    hasDifficultyPaths: true,
+    difficultyTotals: { easy: 80, intermediate: 70, hard: 50 },
+    defaultInitialEnd: 10,
+    defaultPointsPerLevel: 25
   }
 };
+
+export const DIFFICULTY_ORDER = ['easy', 'intermediate', 'hard'];
+export const DIFFICULTY_TOTALS = { easy: 80, intermediate: 70, hard: 50 };
 
 export function isCampaignGameId(gameId) {
   return Boolean(gameId && CAMPAIGN_GAMES_META[String(gameId)]);
@@ -213,4 +227,161 @@ export function applyReleaseAction({ currentRelease, action, batchSize, startLev
     },
     newlyUnlockedRange
   };
+}
+
+export function resolveDifficultyReleases(assignment) {
+  const settings = assignment?.settings || {};
+  const meta = CAMPAIGN_GAMES_META[String(settings.game_id || 'image-recognition')] || CAMPAIGN_GAMES_META['image-recognition'];
+  const totals = meta.difficultyTotals || DIFFICULTY_TOTALS;
+  const allowedList = Array.isArray(settings.allowed_difficulties) && settings.allowed_difficulties.length > 0
+    ? settings.allowed_difficulties.map((d) => String(d).toLowerCase())
+    : ['easy'];
+  const rawDr = settings.difficulty_releases || {};
+  const pointsPerLevel = Math.max(1, Number(settings.points_per_level ?? meta.defaultPointsPerLevel ?? 25));
+
+  const paths = {};
+  for (const diff of DIFFICULTY_ORDER) {
+    const totalLevels = totals[diff] || 50;
+    const isAllowed = allowedList.includes(diff);
+    const entry = rawDr[diff] || {};
+    const releasedStart = Math.max(1, Math.min(totalLevels, Number(entry.released_start ?? 1)));
+    const defaultEnd = isAllowed ? (diff === allowedList[0] ? Math.min(totalLevels, 10) : 0) : 0;
+    const rawEnd = entry.released_end !== undefined && entry.released_end !== null ? Number(entry.released_end) : defaultEnd;
+    const releasedEnd = isAllowed ? Math.max(0, Math.min(totalLevels, rawEnd)) : 0;
+    paths[diff] = {
+      difficulty: diff,
+      totalLevels,
+      isAllowed,
+      releasedStart,
+      releasedEnd,
+      releasedCount: isAllowed && releasedEnd >= releasedStart ? (releasedEnd - releasedStart + 1) : 0,
+      releaseHistory: Array.isArray(entry.release_history) ? entry.release_history : []
+    };
+  }
+  return {
+    gameId: String(settings.game_id || 'image-recognition'),
+    allowedDifficulties: allowedList,
+    pointsPerLevel,
+    paths
+  };
+}
+
+export function computeDifficultyCampaignProgress(assignment, submissionRow) {
+  const rel = resolveDifficultyReleases(assignment);
+  const completedLevels = parseCampaignLevelsCompleted(submissionRow?.text_response);
+
+  const paths = {};
+  let totalReleasedCount = 0;
+  let totalCompletedInReleased = 0;
+
+  for (const diff of DIFFICULTY_ORDER) {
+    const p = rel.paths[diff];
+    const diffCompletedMap = {};
+    for (const [k, rec] of Object.entries(completedLevels)) {
+      const recDiff = String(rec?.difficulty || (k.includes(':') ? k.split(':')[0] : 'easy')).toLowerCase();
+      if (recDiff === diff) {
+        const lvlNum = Number(rec?.levelNumber || (k.includes(':') ? k.split(':')[1] : k));
+        if (Number.isInteger(lvlNum) && lvlNum >= 1) {
+          diffCompletedMap[String(lvlNum)] = rec;
+        }
+      }
+    }
+
+    const highestUnlockedLevel = p.isAllowed
+      ? computeHighestUnlockedLevel(diffCompletedMap, p.releasedStart, p.releasedEnd)
+      : 0;
+
+    let completedInReleased = 0;
+    if (p.isAllowed && p.releasedEnd >= p.releasedStart) {
+      for (let l = p.releasedStart; l <= p.releasedEnd; l++) {
+        if (diffCompletedMap[String(l)]) completedInReleased++;
+      }
+    }
+
+    const completedAllReleased = p.isAllowed && p.releasedCount > 0 && completedInReleased >= p.releasedCount;
+    const currentLevel = p.isAllowed && p.releasedEnd >= p.releasedStart
+      ? Math.max(p.releasedStart, Math.min(p.releasedEnd, highestUnlockedLevel || p.releasedStart))
+      : 1;
+    const diffScore = Object.values(diffCompletedMap).reduce((s, r) => s + Math.max(0, Number(r?.scoreEarned || 0)), 0);
+
+    totalReleasedCount += p.releasedCount;
+    totalCompletedInReleased += completedInReleased;
+
+    paths[diff] = {
+      ...p,
+      highestUnlockedLevel,
+      currentLevel,
+      completedInReleased,
+      completedAllReleased,
+      score: diffScore,
+      completedLevels: diffCompletedMap
+    };
+  }
+
+  const allEntries = Object.values(completedLevels);
+  const completedCount = allEntries.length;
+  const totalScore = allEntries.reduce((s, r) => s + Math.max(0, Number(r?.scoreEarned || 0)), 0);
+  const totalTimeSeconds = allEntries.reduce((s, r) => s + Math.max(0, Number(r?.timeTakenSeconds || 0)), 0);
+  const defaultDiff = rel.allowedDifficulties.find((d) => paths[d]?.releasedCount > 0) || rel.allowedDifficulties[0] || 'easy';
+
+  return {
+    assignmentId: assignment.id,
+    classroomId: assignment.classroom_id,
+    gameId: rel.gameId,
+    hasDifficultyPaths: true,
+    allowedDifficulties: rel.allowedDifficulties,
+    defaultDifficulty: defaultDiff,
+    pointsPerLevel: rel.pointsPerLevel,
+    totalLevels: DIFFICULTY_ORDER.reduce((s, d) => s + paths[d].totalLevels, 0),
+    releasedCount: totalReleasedCount,
+    completedInReleased: totalCompletedInReleased,
+    completedAllReleased: totalReleasedCount > 0 && totalCompletedInReleased >= totalReleasedCount,
+    completedCount,
+    totalScore,
+    totalTimeSeconds,
+    paths,
+    completedLevels
+  };
+}
+
+export function validateDifficultyLevelAccess(diffProgress, difficulty, requestedLevel) {
+  const diff = String(difficulty || '').toLowerCase();
+  if (!DIFFICULTY_ORDER.includes(diff)) {
+    return { allowed: false, status: 400, code: 'INVALID_DIFFICULTY', error: 'Invalid difficulty mode.' };
+  }
+  const pathInfo = diffProgress?.paths?.[diff];
+  if (!pathInfo || !pathInfo.isAllowed || pathInfo.releasedEnd < pathInfo.releasedStart) {
+    return {
+      allowed: false,
+      status: 403,
+      code: 'DIFFICULTY_NOT_RELEASED',
+      error: `The ${diff} difficulty mode has not been released by your teacher.`
+    };
+  }
+  const lvl = Number(requestedLevel);
+  if (!Number.isInteger(lvl) || lvl < 1 || lvl > pathInfo.totalLevels) {
+    return {
+      allowed: false,
+      status: 400,
+      code: 'INVALID_LEVEL',
+      error: `Level must be between 1 and ${pathInfo.totalLevels}.`
+    };
+  }
+  if (lvl < pathInfo.releasedStart || lvl > pathInfo.releasedEnd) {
+    return {
+      allowed: false,
+      status: 403,
+      code: 'LEVEL_NOT_RELEASED',
+      error: `Level ${lvl} (${diff}) has not been released by your teacher yet.`
+    };
+  }
+  if (lvl > pathInfo.highestUnlockedLevel) {
+    return {
+      allowed: false,
+      status: 403,
+      code: 'LEVEL_PROGRESSION_LOCKED',
+      error: `Complete Level ${Math.max(pathInfo.releasedStart, pathInfo.highestUnlockedLevel)} (${diff}) first.`
+    };
+  }
+  return { allowed: true, difficulty: diff, levelNumber: lvl };
 }

@@ -277,7 +277,7 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
             </div>
           ) : campaignDisplay ? (
             <div className="space-y-4">
-              {campaignDisplay.completedAllReleased && (
+              {campaignDisplay.completedAllReleased && !campaignState?.hasDifficultyPaths && (
                 <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 to-sky-50 border border-emerald-200 text-center space-y-1.5">
                   <div className="text-sm font-black text-emerald-900">
                     🎉 You&apos;ve completed all the available levels!
@@ -287,6 +287,63 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
                   </p>
                 </div>
               )}
+
+              {campaignState?.hasDifficultyPaths && campaignState.paths ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {([
+                    { id: 'easy' as const, title: 'EASY', icon: '🟢', sub: 'Discover familiar images', tone: 'border-emerald-200 bg-emerald-50/50' },
+                    { id: 'intermediate' as const, title: 'INTERMEDIATE', icon: '🟡', sub: 'Challenge your knowledge', tone: 'border-amber-200 bg-amber-50/50' },
+                    { id: 'hard' as const, title: 'HARD', icon: '🔴', sub: 'Test your visual intelligence', tone: 'border-rose-200 bg-rose-50/50' }
+                  ]).map((meta) => {
+                    const dp = campaignState.paths![meta.id];
+                    const isLocked = !dp || !dp.isAllowed || dp.releasedCount === 0;
+                    const pct = dp && dp.releasedCount > 0 ? Math.round((dp.completedInReleased / dp.releasedCount) * 100) : 0;
+                    return (
+                      <div key={meta.id} className={`p-4 rounded-2xl border flex flex-col justify-between gap-3 ${isLocked ? 'border-slate-200 bg-slate-50 opacity-75' : meta.tone}`}>
+                        <div className="space-y-1.5">
+                          <div className="text-xs font-black tracking-wide text-slate-900">
+                            {meta.icon} {meta.title}
+                          </div>
+                          <div className="text-[11px] font-semibold text-slate-600">{meta.sub}</div>
+                          <div className="h-2 w-full rounded-full bg-slate-200 overflow-hidden">
+                            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
+                          </div>
+                          <div className="text-[11px] font-bold text-slate-700">
+                            {isLocked ? '🔒 Locked by Teacher' : `${dp.completedInReleased} / ${dp.releasedCount} Levels Completed`}
+                          </div>
+                          {!isLocked && dp && (
+                            <div className="text-[10px] font-semibold text-slate-600 space-y-0.5">
+                              {dp.completedInReleased > 0 && <div>🟢 {dp.releasedStart}–{Math.min(dp.releasedEnd, dp.releasedStart + dp.completedInReleased - 1)} Completed</div>}
+                              {!dp.completedAllReleased && <div>🔵 Level {dp.highestUnlockedLevel} Available</div>}
+                              {dp.releasedEnd < dp.totalLevels && <div>🔒 Levels {dp.releasedEnd + 1}+ Not Yet Released</div>}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={isLocked || !started}
+                          onClick={() => {
+                            if (!dp) return;
+                            onPlayLevel({
+                              id: String(dp.highestUnlockedLevel || dp.releasedStart || 1),
+                              levelNumber: dp.highestUnlockedLevel || dp.releasedStart || 1,
+                              title: `${meta.title} Level ${dp.highestUnlockedLevel || dp.releasedStart || 1}`,
+                              points: campaignState.pointsPerLevel || 25,
+                              isManuallyLocked: false,
+                              unlockAt: null,
+                              config: { title: assignment.title, difficulty: meta.id } as any
+                            });
+                          }}
+                          className="w-full py-2 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:bg-slate-200 disabled:text-slate-500 text-white text-xs font-extrabold cursor-pointer"
+                        >
+                          {isLocked ? '🔒 Locked' : `Play ${meta.title.charAt(0) + meta.title.slice(1).toLowerCase()}`}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <>
 
               {/* Breakdown pills */}
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
@@ -372,6 +429,8 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
                     </p>
                   )}
                 </div>
+              )}
+                </>
               )}
             </div>
           ) : evaluated.map(({ level, status, lockReason, completionRecord }) => {

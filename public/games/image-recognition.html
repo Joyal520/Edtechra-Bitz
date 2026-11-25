@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Image Recognition Challenge — EdTechra</title>
+  <style>
+    :root {
+      --bg: linear-gradient(155deg, #e0f2fe 0%, #f0fdf4 52%, #fef9c3 100%);
+      --card: rgba(255, 255, 255, 0.96);
+      --ink: #0f172a;
+      --muted: #64748b;
+      --sky: #0ea5e9;
+      --sky-dark: #0284c7;
+      --green: #10b981;
+      --green-dark: #059669;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      min-height: 100%;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      overflow-x: hidden;
+    }
+    .app {
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 12px 14px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .hidden { display: none !important; }
+
+    /* Header */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: var(--card);
+      border: 1.5px solid #bae6fd;
+      border-radius: 20px;
+      padding: 8px 12px;
+      box-shadow: 0 8px 24px -12px rgba(14, 165, 233, 0.28);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+    .brand-icon {
+      width: 38px; height: 38px; border-radius: 12px;
+      background: linear-gradient(135deg, #0ea5e9, #10b981);
+      color: #fff; font-size: 20px; display: grid; place-items: center;
+      box-shadow: 0 4px 0 #0369a1; flex-shrink: 0;
+    }
+    .brand-title { font-size: 15px; font-weight: 800; line-height: 1.15; }
+    .brand-sub { font-size: 11px; font-weight: 700; color: var(--sky-dark); }
+    .hud-pills { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .pill {
+      padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 800;
+      border: 1.5px solid var(--border); background: #f8fafc;
+    }
+    .pill.score { background: #fef3c7; border-color: #fde68a; color: #92400e; }
+    .pill.streak { background: #ffe4e6; border-color: #fecdd3; color: #9f1239; }
+    .icon-btn {
+      width: 36px; height: 36px; border-radius: 12px; border: 1.5px solid var(--border);
+      background: #fff; cursor: pointer; font-size: 16px; display: grid; place-items: center;
+    }
+    @media (max-width: 440px) {
+      .topbar { padding: 7px 10px; gap: 6px; }
+      .brand-icon { width: 32px; height: 32px; font-size: 16px; }
+      .brand-title { font-size: 13px; }
+      .brand-sub { font-size: 10px; }
+      .pill { padding: 4px 7px; font-size: 11px; }
+      .icon-btn { width: 32px; height: 32px; font-size: 14px; }
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 24px;
+      border: 1.5px solid #dbeafe;
+      box-shadow: 0 16px 36px -14px rgba(15, 23, 42, 0.14);
+      padding: 18px;
+    }
+
+    /* Hub / Difficulty Cards */
+    .hero {
+      border-radius: 22px;
+      padding: 18px;
+      background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 52%, #10b981 100%);
+      color: #fff;
+      box-shadow: 0 12px 26px -10px rgba(14, 165, 233, 0.45);
+    }
+    .hero h1 { font-size: clamp(20px, 4.6vw, 26px); font-weight: 900; margin-bottom: 4px; }
+    .hero p { font-size: 13px; opacity: 0.94; font-weight: 600; line-height: 1.4; }
+
+    .diff-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    @media (min-width: 680px) {
+      .diff-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    .diff-card {
+      background: #fff;
+      border: 2px solid var(--border);
+      border-radius: 22px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 12px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .diff-card:not(.locked):hover { transform: translateY(-2px); box-shadow: 0 12px 24px -10px rgba(15, 23, 42, 0.15); }
+    .diff-card.easy { border-color: #a7f3d0; background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 42%); }
+    .diff-card.intermediate { border-color: #fde68a; background: linear-gradient(180deg, #fffbeb 0%, #ffffff 42%); }
+    .diff-card.hard { border-color: #fecdd3; background: linear-gradient(180deg, #fff1f2 0%, #ffffff 42%); }
+    .diff-card.locked { opacity: 0.68; filter: grayscale(0.25); }
+
+    .diff-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 4px 10px; border-radius: 999px;
+    }
+    .diff-badge.easy { background: #d1fae5; color: #065f46; }
+    .diff-badge.intermediate { background: #fef3c7; color: #92400e; }
+    .diff-badge.hard { background: #ffe4e6; color: #9f1239; }
+
+    .diff-title { font-size: 17px; font-weight: 900; margin-top: 6px; }
+    .diff-desc { font-size: 12px; color: var(--muted); font-weight: 600; margin-top: 2px; }
+    .prog-track { height: 8px; border-radius: 999px; background: #e2e8f0; overflow: hidden; margin-top: 8px; }
+    .prog-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #10b981, #0ea5e9); transition: width 0.3s ease; }
+    .status-list { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 700; color: #334155; }
+
+    .btn-primary {
+      width: 100%; padding: 11px 14px; border: none; border-radius: 14px;
+      font-size: 13px; font-weight: 800; color: #fff; cursor: pointer;
+      background: linear-gradient(180deg, #0ea5e9, #0284c7);
+      box-shadow: 0 4px 0 #0369a1;
+      transition: transform 0.1s ease;
+    }
+    .btn-primary:active { transform: translateY(2px); box-shadow: 0 2px 0 #0369a1; }
+    .btn-primary.green { background: linear-gradient(180deg, #10b981, #059669); box-shadow: 0 4px 0 #047857; }
+    .btn-primary.amber { background: linear-gradient(180deg, #f59e0b, #d97706); box-shadow: 0 4px 0 #b45309; }
+    .btn-primary.rose { background: linear-gradient(180deg, #f43f5e, #e11d48); box-shadow: 0 4px 0 #be123c; }
+    .btn-primary:disabled { background: #cbd5e1; color: #64748b; box-shadow: none; cursor: not-allowed; }
+    .btn-secondary {
+      padding: 8px 12px; border-radius: 12px; border: 1.5px solid var(--border);
+      background: #fff; font-size: 12px; font-weight: 800; color: #334155; cursor: pointer;
+    }
+
+    /* Level Picker Modal */
+    .modal-backdrop {
+      position: fixed; inset: 0; z-index: 40;
+      background: rgba(15, 23, 42, 0.58); backdrop-filter: blur(4px);
+      display: none; align-items: center; justify-content: center; padding: 14px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-card {
+      width: 100%; max-width: 560px; max-height: 85vh; overflow-y: auto;
+      background: #fff; border-radius: 24px; padding: 18px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.25);
+    }
+    .lvl-grid {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 12px;
+    }
+    @media (min-width: 500px) { .lvl-grid { grid-template-columns: repeat(8, 1fr); } }
+    .lvl-btn {
+      padding: 8px 4px; border-radius: 12px; border: 1.5px solid var(--border);
+      background: #fff; font-size: 12px; font-weight: 800; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+    }
+    .lvl-btn.done { background: #ecfdf5; border-color: #6ee7b7; color: #065f46; }
+    .lvl-btn.next { background: #0ea5e9; border-color: #0284c7; color: #fff; }
+    .lvl-btn.locked { background: #f1f5f9; color: #94a3b8; cursor: not-allowed; }
+
+    /* Play View */
+    .play-meta {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .q-progress { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 160px; }
+    .q-track { flex: 1; height: 8px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+    .q-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #0ea5e9, #10b981); transition: width 0.25s ease; }
+
+    .game-layout {
+      display: grid; grid-template-columns: 1fr; gap: 14px; align-items: start;
+    }
+    @media (min-width: 680px) {
+      .game-layout { grid-template-columns: 1.05fr 0.95fr; gap: 18px; }
+    }
+    .img-wrap {
+      position: relative;
+      border-radius: 20px;
+      background: #f8fafc;
+      border: 2px solid #e2e8f0;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 4 / 3;
+      max-height: 360px;
+      width: 100%;
+    }
+    .img-wrap img {
+      width: 100%; height: 100%; object-fit: contain; display: block;
+    }
+    .cat-chip {
+      position: absolute; top: 10px; left: 10px;
+      padding: 4px 10px; border-radius: 999px;
+      background: rgba(15, 23, 42, 0.78); color: #fff;
+      font-size: 11px; font-weight: 800; backdrop-filter: blur(4px);
+    }
+
+    .prompt-bar {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+      padding: 10px 12px; border-radius: 16px; background: #f0f9ff; border: 1.5px solid #bae6fd;
+    }
+    .prompt-text { font-size: 14px; font-weight: 800; color: #0c4a6e; flex: 1; }
+    .speak-btn {
+      width: 34px; height: 34px; border-radius: 10px; border: none;
+      background: #0ea5e9; color: #fff; cursor: pointer; font-size: 16px; flex-shrink: 0;
+    }
+
+    .options-col { display: flex; flex-direction: column; gap: 10px; }
+    .ans-btn {
+      width: 100%; padding: 13px 14px; border-radius: 16px;
+      border: 2px solid #e2e8f0; background: #fff;
+      display: flex; align-items: center; gap: 12px; text-align: left;
+      font-size: 15px; font-weight: 800; color: var(--ink); cursor: pointer;
+      transition: transform 0.1s ease, border-color 0.15s ease, background 0.15s ease;
+    }
+    .ans-btn:hover:not(:disabled) { border-color: #38bdf8; background: #f0f9ff; transform: translateY(-1px); }
+    .ans-btn:active:not(:disabled) { transform: scale(0.98); }
+    .ans-key {
+      width: 30px; height: 30px; border-radius: 10px; background: #eff6ff; color: #1d4ed8;
+      display: grid; place-items: center; font-size: 13px; font-weight: 900; flex-shrink: 0;
+    }
+    .ans-btn.correct { background: #ecfdf5; border-color: #10b981; color: #065f46; animation: pop 0.28s ease; }
+    .ans-btn.correct .ans-key { background: #10b981; color: #fff; }
+    .ans-btn.wrong { background: #fff1f2; border-color: #f43f5e; color: #9f1239; }
+    .ans-btn.wrong .ans-key { background: #f43f5e; color: #fff; }
+    .ans-btn:disabled { cursor: default; }
+
+    @keyframes pop {
+      0% { transform: scale(0.97); }
+      50% { transform: scale(1.02); }
+      100% { transform: scale(1); }
+    }
+
+    .fact-box {
+      margin-top: 10px; padding: 12px 14px; border-radius: 16px;
+      background: #fefce8; border: 1.5px solid #fde047; font-size: 12.5px; line-height: 1.45;
+      color: #713f12; display: none;
+    }
+    .fact-box.show { display: block; }
+    .feedback-pill {
+      margin-top: 8px; padding: 8px 12px; border-radius: 12px; font-size: 13px; font-weight: 800;
+      text-align: center; display: none;
+    }
+    .feedback-pill.ok { display: block; background: #d1fae5; color: #065f46; }
+    .feedback-pill.bad { display: block; background: #ffe4e6; color: #9f1239; }
+
+    .toast {
+      position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+      background: #0f172a; color: #fff; padding: 10px 18px; border-radius: 999px;
+      font-size: 12.5px; font-weight: 700; z-index: 60; opacity: 0; pointer-events: none;
+      transition: opacity 0.2s ease; max-width: 90vw; text-align: center;
+    }
+    .toast.show { opacity: 1; }
+    #confetti-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 50; }
+  </style>
+</head>
+<body>
+  <canvas id="confetti-canvas"></canvas>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-icon">🖼️</div>
+        <div>
+          <div class="brand-title">Image Recognition Challenge</div>
+          <div class="brand-sub" id="hdr-sub">Visual Intelligence &amp; General Knowledge</div>
+        </div>
+      </div>
+      <div class="hud-pills">
+        <div class="pill score">⭐ <span id="hud-score">0</span></div>
+        <div class="pill streak">🔥 <span id="hud-streak">0</span></div>
+        <button type="button" class="icon-btn" id="btn-sound" title="Toggle Sound">🔊</button>
+      </div>
+    </header>
+
+    <!-- Hub / Difficulty Selection -->
+    <section id="view-hub">
+      <div class="hero">
+        <h1>Choose Your Challenge</h1>
+        <p>Identify famous places, animals, objects, flags, science, and symbols across 1,000 visual challenges.</p>
+      </div>
+      <div class="diff-grid" id="diff-grid"></div>
+    </section>
+
+    <!-- Active Level View -->
+    <section id="view-play" class="card hidden">
+      <div class="play-meta">
+        <button type="button" class="btn-secondary" id="btn-back-hub">← Difficulties</button>
+        <span class="diff-badge easy" id="play-diff-badge">Easy · Level 1</span>
+        <div class="q-progress">
+          <div class="q-track"><div class="q-fill" id="q-fill" style="width: 20%"></div></div>
+          <span style="font-size:12px;font-weight:800;color:#475569;" id="q-counter">1 / 5</span>
+        </div>
+      </div>
+
+      <div class="game-layout">
+        <div class="img-wrap">
+          <span class="cat-chip" id="q-cat">Animals</span>
+          <img id="q-img" src="" alt="Visual challenge" />
+        </div>
+        <div>
+          <div class="prompt-bar">
+            <div class="prompt-text" id="q-prompt">Look at the picture and choose the correct name.</div>
+            <button type="button" class="speak-btn" id="btn-speak" title="Read Question">🔊</button>
+          </div>
+          <div class="options-col" id="options-col"></div>
+          <div class="feedback-pill" id="fb-pill"></div>
+          <div class="fact-box" id="fact-box"></div>
+          <button type="button" class="btn-primary hidden" id="btn-next" style="margin-top:12px;">Next Question →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Level Complete View -->
+    <section id="view-complete" class="card hidden" style="text-align:center;padding:28px 20px;">
+      <div style="font-size:46px;" id="done-emoji">🏆</div>
+      <h2 style="font-size:22px;font-weight:900;margin-top:6px;" id="done-title">Level Complete!</h2>
+      <p style="font-size:13px;color:var(--muted);font-weight:600;margin-top:6px;line-height:1.5;" id="done-sub"></p>
+      <div style="display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin:16px 0;" id="done-stats"></div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;max-width:420px;margin:0 auto;">
+        <button type="button" class="btn-secondary" id="btn-done-hub" style="flex:1;padding:12px;">Difficulty Hub</button>
+        <button type="button" class="btn-primary" id="btn-done-next" style="flex:1.4;">Next Level →</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- Level Picker Modal -->
+  <div class="modal-backdrop" id="modal-levels">
+    <div class="modal-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <h3 style="font-size:17px;font-weight:900;" id="modal-lvl-title">Select Level</h3>
+        <button type="button" class="btn-secondary" id="btn-close-levels">✕</button>
+      </div>
+      <p style="font-size:12px;color:var(--muted);font-weight:600;margin-top:4px;" id="modal-lvl-sub"></p>
+      <div class="lvl-grid" id="modal-lvl-grid"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    (function () {
+      const QUESTIONS_PER_LEVEL = 5;
+      const DIFF_META = {
+        easy: { label: 'Easy', icon: '🟢', desc: 'Discover familiar animals, foods & everyday objects', btnClass: 'green', totalLevels: 80 },
+        intermediate: { label: 'Intermediate', icon: '🟡', desc: 'Challenge your knowledge with landmarks, flags & science', btnClass: 'amber', totalLevels: 70 },
+        hard: { label: 'Hard', icon: '🔴', desc: 'Test your visual intelligence on artifacts & rare sights', btnClass: 'rose', totalLevels: 50 }
+      };
+
+      let bank = [];
+      let bankByDiff = { easy: [], intermediate: [], hard: [] };
+      let soundOn = true;
+      let audioCtx = null;
+
+      const campaign = {
+        active: false,
+        mode: 'standalone',
+        assignmentId: null,
+        pointsPerLevel: 25,
+        allowedDifficulties: ['easy', 'intermediate', 'hard'],
+        paths: {
+          easy: { isAllowed: true, totalLevels: 80, releasedStart: 1, releasedEnd: 80, highestUnlockedLevel: 80, completedLevels: {}, score: 0 },
+          intermediate: { isAllowed: true, totalLevels: 70, releasedStart: 1, releasedEnd: 70, highestUnlockedLevel: 70, completedLevels: {}, score: 0 },
+          hard: { isAllowed: true, totalLevels: 50, releasedStart: 1, releasedEnd: 50, highestUnlockedLevel: 50, completedLevels: {}, score: 0 }
+        }
+      };
+
+      const session = {
+        difficulty: 'easy',
+        levelNumber: 1,
+        questions: [],
+        qIdx: 0,
+        score: 0,
+        streak: 0,
+        bestStreak: 0,
+        correctCount: 0,
+        answered: false,
+        startMs: 0,
+        slotDeck: []
+      };
+
+      const $ = (id) => document.getElementById(id);
+
+      function randInt(max) {
+        if (max <= 1) return 0;
+        if (window.crypto && window.crypto.getRandomValues) {
+          const buf = new Uint32Array(1);
+          const limit = Math.floor(0x100000000 / max) * max;
+          let v;
+          do { window.crypto.getRandomValues(buf); v = buf[0]; } while (v >= limit);
+          return v % max;
+        }
+        return Math.floor(Math.random() * max);
+      }
+
+      function shuffle(arr) {
+        const a = arr.slice();
+        for (let i = a.length - 1; i > 0; i--) {
+          const j = randInt(i + 1);
+          [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+      }
+
+      function buildBalancedSlots(count) {
+        const base = [];
+        for (let i = 0; i < count; i++) base.push(i % 4);
+        for (let attempt = 0; attempt < 30; attempt++) {
+          const cand = shuffle(base);
+          let ok = true;
+          for (let i = 1; i < cand.length; i++) {
+            if (cand[i] === cand[i - 1]) { ok = false; break; }
+          }
+          if (ok) return cand;
+        }
+        return shuffle(base);
+      }
+
+      function showToast(msg) {
+        const el = $('toast');
+        el.textContent = msg;
+        el.classList.add('show');
+        clearTimeout(el._t);
+        el._t = setTimeout(() => el.classList.remove('show'), 2600);
+      }
+
+      function playTone(freq, dur = 0.12, type = 'sine') {
+        if (!soundOn) return;
+        try {
+          if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          if (audioCtx.state === 'suspended') audioCtx.resume();
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = type;
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.11, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + dur);
+        } catch (_) {}
+      }
+
+      function spawnConfetti() {
+        const canvas = $('confetti-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        const colors = ['#10b981', '#0ea5e9', '#f59e0b', '#f43f5e', '#8b5cf6'];
+        const parts = Array.from({ length: 42 }, () => ({
+          x: canvas.width * (0.25 + Math.random() * 0.5),
+          y: canvas.height * 0.35,
+          vx: (Math.random() - 0.5) * 9,
+          vy: -4 - Math.random() * 7,
+          r: 4 + Math.random() * 4,
+          c: colors[randInt(colors.length)],
+          a: 1
+        }));
+        let frame = 0;
+        function step() {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          for (const p of parts) {
+            p.x += p.vx; p.y += p.vy; p.vy += 0.32; p.a -= 0.02;
+            if (p.a > 0) {
+              ctx.globalAlpha = p.a;
+              ctx.fillStyle = p.c;
+              ctx.fillRect(p.x, p.y, p.r, p.r);
+            }
+          }
+          if (++frame < 55) requestAnimationFrame(step);
+          else ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        requestAnimationFrame(step);
+      }
+
+      function getLocalStorageKey() {
+        return campaign.assignmentId ? `edtechra_img_rec_${campaign.assignmentId}` : 'edtechra_img_rec_standalone';
+      }
+
+      function saveLocalProgress() {
+        if (campaign.active) return; // Authoritative progress comes from backend in EdTechra classroom mode
+        try {
+          localStorage.setItem(getLocalStorageKey(), JSON.stringify(campaign.paths));
+        } catch (_) {}
+      }
+
+      function loadLocalProgress() {
+        if (campaign.active) return;
+        try {
+          const raw = localStorage.getItem(getLocalStorageKey());
+          if (!raw) return;
+          const parsed = JSON.parse(raw);
+          for (const d of ['easy', 'intermediate', 'hard']) {
+            if (parsed[d]) campaign.paths[d] = { ...campaign.paths[d], ...parsed[d] };
+          }
+        } catch (_) {}
+      }
+
+      function applyCampaignState(cs, startDiff, startLevel) {
+        if (!cs || typeof cs !== 'object') return;
+        campaign.pointsPerLevel = Math.max(1, Number(cs.pointsPerLevel ?? 25));
+        if (Array.isArray(cs.allowedDifficulties)) {
+          campaign.allowedDifficulties = cs.allowedDifficulties;
+        }
+        if (cs.paths) {
+          for (const d of ['easy', 'intermediate', 'hard']) {
+            if (cs.paths[d]) {
+              const p = cs.paths[d];
+              campaign.paths[d] = {
+                isAllowed: Boolean(p.isAllowed),
+                totalLevels: Number(p.totalLevels || DIFF_META[d].totalLevels),
+                releasedStart: Number(p.releasedStart || 1),
+                releasedEnd: Number(p.releasedEnd ?? 0),
+                highestUnlockedLevel: Number(p.highestUnlockedLevel ?? 0),
+                completedLevels: p.completedLevels || {},
+                score: Number(p.score || 0)
+              };
+            }
+          }
+        }
+        updateHeaderScore();
+        renderHub();
+        if (startDiff && startLevel && bank.length > 0) {
+          startLevelPlay(startDiff, Number(startLevel));
+        }
+      }
+
+      function updateHeaderScore() {
+        const total = Object.values(campaign.paths).reduce((s, p) => s + Number(p.score || 0), 0);
+        $('hud-score').textContent = total + (session.score || 0);
+        $('hud-streak').textContent = session.streak || 0;
+      }
+
+      function showView(viewId) {
+        for (const id of ['view-hub', 'view-play', 'view-complete']) {
+          $(id).classList.toggle('hidden', id !== viewId);
+        }
+      }
+
+      function renderHub() {
+        const grid = $('diff-grid');
+        grid.innerHTML = '';
+
+        for (const diff of ['easy', 'intermediate', 'hard']) {
+          const meta = DIFF_META[diff];
+          const p = campaign.paths[diff];
+          const maxAvail = Math.min(p.totalLevels, Math.max(1, Math.ceil((bankByDiff[diff]?.length || 0) / QUESTIONS_PER_LEVEL)));
+          const totalLevels = maxAvail || meta.totalLevels;
+          const relStart = p.releasedStart || 1;
+          const relEnd = campaign.active && campaign.mode === 'student'
+            ? (p.isAllowed ? Math.min(totalLevels, p.releasedEnd) : 0)
+            : totalLevels;
+          const relCount = relEnd >= relStart ? relEnd - relStart + 1 : 0;
+
+          let completedInRel = 0;
+          for (let l = relStart; l <= relEnd; l++) {
+            if (p.completedLevels && p.completedLevels[String(l)]) completedInRel++;
+          }
+          const highestUnlocked = campaign.active && campaign.mode === 'student'
+            ? Math.min(relEnd, Math.max(0, p.highestUnlockedLevel || (relCount > 0 ? relStart : 0)))
+            : totalLevels;
+          const pct = relCount > 0 ? Math.round((completedInRel / relCount) * 100) : 0;
+          const isLocked = relCount === 0;
+
+          const card = document.createElement('div');
+          card.className = `diff-card ${diff}${isLocked ? ' locked' : ''}`;
+          card.innerHTML = `
+            <div>
+              <span class="diff-badge ${diff}">${meta.icon} ${meta.label}</span>
+              <div class="diff-title">${meta.label} Path</div>
+              <div class="diff-desc">${meta.desc}</div>
+              <div class="prog-track"><div class="prog-fill" style="width:${pct}%"></div></div>
+              <div style="font-size:11px;font-weight:800;color:#475569;margin-top:6px;">
+                ${isLocked ? 'Locked by Teacher' : `${completedInRel} / ${relCount} Released Levels Completed`}
+              </div>
+            </div>
+            <div class="status-list">
+              ${isLocked ? `<span>🔒 Not released for this class</span>` : `
+                ${completedInRel > 0 ? `<span>🟢 ${relStart}–${Math.min(relEnd, relStart + completedInRel - 1)} Completed</span>` : ''}
+                ${completedInRel < relCount ? `<span>🔵 Level ${Math.max(relStart, highestUnlocked)} Available</span>` : `<span>🎉 All ${relCount} Released Complete!</span>`}
+                ${relEnd < totalLevels ? `<span>🔒 ${relEnd + 1}–${totalLevels} Not Yet Released</span>` : ''}
+              `}
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button type="button" class="btn-primary ${meta.btnClass}" ${isLocked ? 'disabled' : ''} data-play="${diff}">
+                ${isLocked ? '🔒 Locked' : completedInRel >= relCount ? `Replay ${meta.label}` : `Play ${meta.label}`}
+              </button>
+              ${!isLocked ? `<button type="button" class="btn-secondary" data-levels="${diff}" title="Choose Level">Levels</button>` : ''}
+            </div>
+          `;
+          grid.appendChild(card);
+        }
+
+        grid.querySelectorAll('[data-play]').forEach((btn) => {
+          btn.onclick = () => {
+            const diff = btn.dataset.play;
+            const p = campaign.paths[diff];
+            const target = campaign.active && campaign.mode === 'student'
+              ? Math.max(p.releasedStart || 1, Math.min(p.releasedEnd || 1, p.highestUnlockedLevel || 1))
+              : 1;
+            startLevelPlay(diff, target);
+          };
+        });
+        grid.querySelectorAll('[data-levels]').forEach((btn) => {
+          btn.onclick = () => openLevelPicker(btn.dataset.levels);
+        });
+      }
+
+      function openLevelPicker(diff) {
+        const meta = DIFF_META[diff];
+        const p = campaign.paths[diff];
+        const total = p.totalLevels || meta.totalLevels;
+        const relEnd = campaign.active && campaign.mode === 'student' ? p.releasedEnd : total;
+        const high = campaign.active && campaign.mode === 'student' ? p.highestUnlockedLevel : total;
+
+        $('modal-lvl-title').textContent = `${meta.icon} ${meta.label} Levels`;
+        $('modal-lvl-sub').textContent = campaign.active && campaign.mode === 'student'
+          ? `Released: ${p.releasedStart}–${relEnd} of ${total} levels`
+          : `All ${total} levels unlocked`;
+
+        const grid = $('modal-lvl-grid');
+        grid.innerHTML = '';
+        for (let l = 1; l <= total; l++) {
+          const isDone = Boolean(p.completedLevels && p.completedLevels[String(l)]);
+          const tLocked = campaign.active && campaign.mode === 'student' && (l < p.releasedStart || l > relEnd);
+          const pLocked = campaign.active && campaign.mode === 'student' && !tLocked && l > high;
+          const isLocked = tLocked || pLocked;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `lvl-btn ${isDone ? 'done' : !isLocked && l === high ? 'next' : isLocked ? 'locked' : ''}`;
+          btn.innerHTML = `<span>${l}</span><span style="font-size:10px;">${isDone ? '✓' : isLocked ? '🔒' : '▶'}</span>`;
+          btn.onclick = () => {
+            if (tLocked) { showToast(`🔒 Level ${l} has not been released by your teacher yet.`); return; }
+            if (pLocked) { showToast(`🔒 Complete Level ${high} first to unlock Level ${l}.`); return; }
+            $('modal-levels').classList.remove('open');
+            startLevelPlay(diff, l);
+          };
+          grid.appendChild(btn);
+        }
+        $('modal-levels').classList.add('open');
+      }
+
+      function startLevelPlay(diff, levelNum) {
+        const p = campaign.paths[diff];
+        const items = bankByDiff[diff] || [];
+        const total = Math.max(1, Math.ceil(items.length / QUESTIONS_PER_LEVEL));
+        const lvl = Math.max(1, Math.min(total, Number(levelNum || 1)));
+
+        if (campaign.active && campaign.mode === 'student') {
+          if (!p.isAllowed || p.releasedEnd < p.releasedStart) {
+            showToast('🔒 This difficulty mode is not released by your teacher.');
+            return;
+          }
+          if (lvl < p.releasedStart || lvl > p.releasedEnd) {
+            showToast(`🔒 Level ${lvl} has not been released by your teacher yet.`);
+            return;
+          }
+          if (lvl > p.highestUnlockedLevel) {
+            showToast(`🔒 Complete Level ${Math.max(p.releasedStart, p.highestUnlockedLevel)} first.`);
+            return;
+          }
+        }
+
+        const startIdx = (lvl - 1) * QUESTIONS_PER_LEVEL;
+        const slice = items.slice(startIdx, startIdx + QUESTIONS_PER_LEVEL);
+        if (slice.length === 0) {
+          showToast('No questions found for this level.');
+          return;
+        }
+
+        session.difficulty = diff;
+        session.levelNumber = lvl;
+        session.questions = slice;
+        session.qIdx = 0;
+        session.score = 0;
+        session.streak = 0;
+        session.bestStreak = 0;
+        session.correctCount = 0;
+        session.startMs = performance.now();
+        session.slotDeck = buildBalancedSlots(slice.length);
+
+        const meta = DIFF_META[diff];
+        const badge = $('play-diff-badge');
+        badge.className = `diff-badge ${diff}`;
+        badge.textContent = `${meta.icon} ${meta.label} · Level ${lvl}`;
+
+        showView('view-play');
+        renderQuestion();
+      }
+
+      function renderQuestion() {
+        const q = session.questions[session.qIdx];
+        if (!q) return;
+        session.answered = false;
+
+        const total = session.questions.length;
+        $('q-counter').textContent = `${session.qIdx + 1} / ${total}`;
+        $('q-fill').style.width = `${((session.qIdx + 1) / total) * 100}%`;
+        $('q-cat').textContent = q.category;
+        $('q-prompt').textContent = q.question || 'Look at the picture and choose the correct name.';
+        $('q-img').src = q.imageUrl;
+        $('q-img').alt = q.category;
+
+        const nextQ = session.questions[session.qIdx + 1];
+        if (nextQ) { const pre = new Image(); pre.src = nextQ.imageUrl; }
+
+        $('fb-pill').className = 'feedback-pill';
+        $('fb-pill').textContent = '';
+        $('fact-box').className = 'fact-box';
+        $('fact-box').textContent = '';
+        $('btn-next').classList.add('hidden');
+
+        // Place correct answer in balanced slot
+        const wrong = shuffle((q.distractors || []).slice(0, 3));
+        const slot = session.slotDeck[session.qIdx] ?? randInt(wrong.length + 1);
+        const choices = wrong.slice();
+        choices.splice(Math.min(slot, choices.length), 0, q.correct);
+        const keys = ['A', 'B', 'C', 'D'];
+
+        const col = $('options-col');
+        col.innerHTML = '';
+        choices.forEach((choice, idx) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'ans-btn';
+          btn.innerHTML = `<span class="ans-key">${keys[idx]}</span><span>${choice}</span>`;
+          btn.onclick = () => handleAnswer(choice, btn, q);
+          col.appendChild(btn);
+        });
+
+        updateHeaderScore();
+      }
+
+      function handleAnswer(selected, clickedBtn, q) {
+        if (session.answered) return;
+        session.answered = true;
+        const ok = selected === q.correct;
+
+        document.querySelectorAll('#options-col .ans-btn').forEach((b) => {
+          b.disabled = true;
+          const txt = b.querySelector('span:last-child').textContent;
+          if (txt === q.correct) b.classList.add('correct');
+          else if (b === clickedBtn && !ok) b.classList.add('wrong');
+        });
+
+        if (ok) {
+          session.streak++;
+          session.bestStreak = Math.max(session.bestStreak, session.streak);
+          session.correctCount++;
+          session.score += 5 + Math.min(5, session.streak);
+          $('fb-pill').className = 'feedback-pill ok';
+          $('fb-pill').textContent = '✓ Correct! Great observation!';
+          playTone(660, 0.14);
+          setTimeout(() => playTone(880, 0.18), 90);
+          spawnConfetti();
+        } else {
+          session.streak = 0;
+          $('fb-pill').className = 'feedback-pill bad';
+          $('fb-pill').textContent = `✕ Not quite — Correct answer: ${q.correct}`;
+          playTone(220, 0.2, 'sawtooth');
+        }
+
+        if (q.fact) {
+          $('fact-box').innerHTML = `<strong>Did you know?</strong> ${q.fact}`;
+          $('fact-box').classList.add('show');
+        }
+
+        const nextBtn = $('btn-next');
+        nextBtn.textContent = session.qIdx + 1 >= session.questions.length ? 'Finish Level →' : 'Next Question →';
+        nextBtn.classList.remove('hidden');
+        updateHeaderScore();
+      }
+
+      function finishLevel() {
+        const diff = session.difficulty;
+        const lvl = session.levelNumber;
+        const p = campaign.paths[diff];
+        const totalQ = session.questions.length;
+        const ratio = totalQ > 0 ? session.correctCount / totalQ : 1;
+        const stars = ratio >= 0.9 ? 3 : ratio >= 0.6 ? 2 : 1;
+        const elapsedSec = Math.max(1, Math.round((performance.now() - session.startMs) / 1000));
+        const lvlMax = campaign.pointsPerLevel || 25;
+        const earned = Math.max(1, Math.round(ratio * lvlMax));
+
+        if (!campaign.active) {
+          p.completedLevels[String(lvl)] = { levelNumber: lvl, scoreEarned: earned, stars };
+          p.score = Object.values(p.completedLevels).reduce((s, r) => s + Number(r.scoreEarned || 0), 0);
+          if (lvl >= p.highestUnlockedLevel && lvl < p.totalLevels) p.highestUnlockedLevel = lvl + 1;
+          saveLocalProgress();
+        } else if (campaign.mode === 'student') {
+          p.completedLevels[String(lvl)] = { levelNumber: lvl, scoreEarned: earned, stars };
+          if (lvl >= p.highestUnlockedLevel && lvl < p.releasedEnd) p.highestUnlockedLevel = lvl + 1;
+          try {
+            window.parent.postMessage({
+              type: 'EDTECHRA_CAMPAIGN_LEVEL_COMPLETE',
+              gameId: 'image-recognition',
+              difficulty: diff,
+              levelNumber: lvl,
+              scoreEarned: earned,
+              maxPoints: lvlMax,
+              stars,
+              completed: true,
+              timeTakenSeconds: elapsedSec,
+              details: {
+                difficulty: diff,
+                correctAnswers: session.correctCount,
+                totalQuestions: totalQ,
+                bestStreak: session.bestStreak,
+                stars
+              }
+            }, window.location.origin);
+          } catch (_) {}
+        }
+
+        const relEnd = campaign.active && campaign.mode === 'student' ? p.releasedEnd : p.totalLevels;
+        const atTeacherCap = campaign.active && campaign.mode === 'student' && lvl >= relEnd && relEnd < p.totalLevels;
+
+        $('done-emoji').textContent = atTeacherCap ? '🎉' : '🏆';
+        $('done-title').textContent = atTeacherCap
+          ? 'You have completed all currently available levels!'
+          : `${DIFF_META[diff].label} Level ${lvl} Complete!`;
+        $('done-sub').textContent = atTeacherCap
+          ? 'Your teacher will unlock your next challenge soon.'
+          : 'Great visual observation! Ready for the next challenge?';
+
+        $('done-stats').innerHTML = `
+          <div class="pill">⭐ ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</div>
+          <div class="pill score">🎯 ${session.correctCount}/${totalQ} Correct</div>
+          <div class="pill streak">🔥 Best Streak: ${session.bestStreak}</div>
+          <div class="pill">⏱️ ${elapsedSec}s</div>
+        `;
+
+        const nextBtn = $('btn-done-next');
+        if (atTeacherCap || lvl >= p.totalLevels) {
+          nextBtn.textContent = campaign.active ? 'Back to Classroom' : 'Difficulty Hub';
+          nextBtn.onclick = () => {
+            if (campaign.active && campaign.mode === 'student') {
+              try { window.parent.postMessage({ type: 'EDTECHRA_GAME_EXIT', gameId: 'image-recognition' }, window.location.origin); } catch (_) {}
+            } else {
+              showView('view-hub');
+              renderHub();
+            }
+          };
+        } else {
+          nextBtn.textContent = `Next Level (${lvl + 1}) →`;
+          nextBtn.onclick = () => startLevelPlay(diff, lvl + 1);
+        }
+
+        showView('view-complete');
+        spawnConfetti();
+      }
+
+      // Wire events
+      $('btn-sound').onclick = () => {
+        soundOn = !soundOn;
+        $('btn-sound').textContent = soundOn ? '🔊' : '🔇';
+      };
+      $('btn-back-hub').onclick = () => { showView('view-hub'); renderHub(); };
+      $('btn-done-hub').onclick = () => { showView('view-hub'); renderHub(); };
+      $('btn-close-levels').onclick = () => $('modal-levels').classList.remove('open');
+      $('modal-levels').onclick = (e) => { if (e.target === $('modal-levels')) $('modal-levels').classList.remove('open'); };
+      $('btn-speak').onclick = () => {
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          const u = new SpeechSynthesisUtterance($('q-prompt').textContent);
+          u.lang = 'en-US';
+          window.speechSynthesis.speak(u);
+        }
+      };
+      $('btn-next').onclick = () => {
+        if (session.qIdx + 1 >= session.questions.length) finishLevel();
+        else { session.qIdx++; renderQuestion(); }
+      };
+
+      window.addEventListener('message', (ev) => {
+        if (ev.origin !== window.location.origin) return;
+        const msg = ev.data;
+        if (!msg || typeof msg !== 'object') return;
+        if (msg.type === 'EDTECHRA_INIT_GAME') {
+          const p = msg.payload || msg;
+          campaign.active = true;
+          campaign.mode = p.mode || 'student';
+          campaign.assignmentId = p.assignmentId || null;
+          if (p.campaignState) {
+            const reqDiff = p.difficulty || p.config?.difficulty || null;
+            const reqLvl = p.levelNumber || null;
+            applyCampaignState(p.campaignState, reqDiff, reqLvl);
+          } else {
+            renderHub();
+          }
+        } else if (msg.type === 'EDTECHRA_CAMPAIGN_STATE_SYNC' && msg.campaignState) {
+          applyCampaignState(msg.campaignState, null, null);
+        }
+      });
+
+      // Boot: fetch external lightweight bank JSON
+      fetch('/games/data/image-recognition-bank.json')
+        .then((r) => r.json())
+        .then((data) => {
+          bank = Array.isArray(data) ? data : [];
+          bankByDiff = { easy: [], intermediate: [], hard: [] };
+          for (const item of bank) {
+            const d = (item.difficulty || 'easy').toLowerCase();
+            if (bankByDiff[d]) bankByDiff[d].push(item);
+          }
+          loadLocalProgress();
+          renderHub();
+          try {
+            window.parent.postMessage({ type: 'EDTECHRA_GAME_READY', gameId: 'image-recognition' }, window.location.origin);
+          } catch (_) {}
+        })
+        .catch(() => {
+          showToast('Could not load image recognition dataset.');
+        });
+    })();
+  </script>
+</body>
+</html>
