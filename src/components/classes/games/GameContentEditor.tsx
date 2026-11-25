@@ -13,6 +13,7 @@ import type {
   ConnectionsConfig,
   GameConfig,
   GameId,
+  GameOfWordsConfig,
   LiquidSentencesConfig,
   LuminaWordsConfig,
   MemoryMatchConfig,
@@ -22,6 +23,7 @@ import type {
 } from '@/types/gameLibrary';
 import { BulkContentUploader, type ParsedBulkRow } from './BulkContentUploader';
 import { ConnectionsEditor } from './ConnectionsEditor';
+import { GameOfWordsEditor } from './GameOfWordsEditor';
 import { JigsawQuestionsEditor } from './JigsawQuestionsEditor';
 import { SnakeSpellEditor } from './SnakeSpellEditor';
 
@@ -682,6 +684,17 @@ export const GameContentEditor: React.FC<GameContentEditorProps> = ({
         config={config as ConnectionsConfig}
         onChange={(next) => onChange(next)}
         onBulkImport={handleBulkImport}
+      />
+    );
+  }
+
+  if (gameId === 'game-of-words') {
+    return (
+      <GameOfWordsEditor
+        config={config as GameOfWordsConfig}
+        onChange={(next) => onChange(next)}
+        compressImage={compressImageToDataUrl}
+        onError={onError}
       />
     );
   }

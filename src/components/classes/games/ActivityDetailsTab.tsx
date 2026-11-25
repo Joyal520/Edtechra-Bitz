@@ -44,6 +44,7 @@ interface ActivityDetailsTabProps {
     classroomId?: string;
     activityKey?: string;
   }) => void;
+  onManageCampaignRelease?: (assignment: TeacherActivityAssignmentItem) => void;
   onOpenGameLibrary: () => void;
   onCreateCompetition: () => void;
 }
@@ -60,6 +61,7 @@ export const ActivityDetailsTab: React.FC<ActivityDetailsTabProps> = ({
   onEditSavedGame,
   onEditAssignmentMeta,
   onViewSubmissions,
+  onManageCampaignRelease,
   onOpenGameLibrary,
   onCreateCompetition
 }) => {
@@ -408,6 +410,13 @@ export const ActivityDetailsTab: React.FC<ActivityDetailsTabProps> = ({
                                       <span className="font-bold text-indigo-700">
                                         {a.points} pts · {a.totalLevels} {a.totalLevels === 1 ? 'Level' : 'Levels'}
                                       </span>
+                                      {a.isCampaignGame && a.campaignRelease && (
+                                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
+                                          {a.campaignRelease.releasedEnd >= a.campaignRelease.releasedStart
+                                            ? `🟢 ${a.campaignRelease.releasedStart}–${a.campaignRelease.releasedEnd} / ${a.campaignRelease.totalLevels.toLocaleString()} Released`
+                                            : `🔒 Locked (0/${a.campaignRelease.totalLevels.toLocaleString()})`}
+                                        </span>
+                                      )}
                                     </div>
                                   </>
                                 )}
@@ -415,6 +424,15 @@ export const ActivityDetailsTab: React.FC<ActivityDetailsTabProps> = ({
 
                               {/* Row Actions */}
                               <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                                {a.isCampaignGame && onManageCampaignRelease && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onManageCampaignRelease(a)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-sky-600 text-white hover:bg-sky-700 text-xs font-extrabold transition-colors shadow-2xs"
+                                  >
+                                    Levels &amp; Release
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   onClick={() => onViewGame(a)}

@@ -13,7 +13,11 @@ export type GameId =
   | 'box-breathing'
   | 'missing-piece'
   | 'number-memory-challenge'
-  | 'stroop-challenge';
+  | 'stroop-challenge'
+  | 'game-of-words'
+  | 'neon-flow'
+  | 'arrow-escape'
+  | 'game-of-words-2000';
 
 export type ActivityCategory =
   | 'brain-memory'
@@ -190,6 +194,48 @@ export interface StandaloneTrainingConfig {
   focusGoal?: string;
 }
 
+export type VocabGameModeId =
+  | 'all'
+  | 'matching'
+  | 'multiple-choice'
+  | 'guess-word'
+  | 'word-scramble'
+  | 'missing-letters'
+  | 'picture-match'
+  | 'synonym'
+  | 'antonym'
+  | 'speed-vocab'
+  | 'memory-match'
+  | 'sentence-completion'
+  | 'word-hunt';
+
+export type VocabDifficultyFilter = 'all' | 'beginner' | 'intermediate' | 'advanced';
+
+export interface VocabWordEntry {
+  word: string;
+  definition: string;
+  example?: string;
+  category?: string;
+  difficulty?: 'beginner' | 'intermediate' | 'advanced';
+  synonyms?: string[];
+  antonym?: string;
+  imageUrl?: string;
+  emoji?: string;
+}
+
+export interface GameOfWordsConfig {
+  title?: string;
+  description?: string;
+  sourceMode: 'builtin' | 'custom' | 'hybrid';
+  category?: string;
+  difficulty?: VocabDifficultyFilter;
+  gameMode?: VocabGameModeId;
+  roundSize?: number;
+  timedChallenge?: boolean;
+  timeLimitSeconds?: number;
+  words: VocabWordEntry[];
+}
+
 export type GameConfig =
   | LiquidSentencesConfig
   | SaveTheBalloonConfig
@@ -198,7 +244,8 @@ export type GameConfig =
   | LuminaWordsConfig
   | SnakeSpellConfig
   | ConnectionsConfig
-  | StandaloneTrainingConfig;
+  | StandaloneTrainingConfig
+  | GameOfWordsConfig;
 
 export interface GameLevelDefinition {
   id: string;
@@ -226,9 +273,96 @@ export interface GameCatalogItem {
   htmlPath: string;
   defaultPoints: number;
   isStandaloneBuiltIn?: boolean;
+  isCampaignGame?: boolean;
+  totalLevels?: number;
+  defaultInitialReleaseEnd?: number;
   supportsScoring?: boolean;
   defaultLeaderboardEnabled?: boolean;
   resultMetrics?: string[];
+}
+
+export interface CampaignReleaseHistoryEntry {
+  start: number;
+  end: number;
+  action: string;
+  releasedAt: string;
+  releasedBy?: string | null;
+}
+
+export interface CampaignReleaseConfig {
+  total_levels: number;
+  released_start: number;
+  released_end: number;
+  release_history?: CampaignReleaseHistoryEntry[];
+}
+
+export interface CampaignProgressState {
+  assignmentId: string;
+  classroomId: string;
+  gameId: GameId;
+  totalLevels: number;
+  releasedStart: number;
+  releasedEnd: number;
+  releasedCount: number;
+  releaseHistory: CampaignReleaseHistoryEntry[];
+  pointsPerLevel: number;
+  highestUnlockedLevel: number;
+  currentLevel: number;
+  completedCount: number;
+  completedInReleased: number;
+  completedAllReleased: boolean;
+  totalScore: number;
+  totalTimeSeconds: number;
+  completedLevels: Record<string, CompletedLevelRecord & { stars?: number }>;
+}
+
+export interface CampaignAnalyticsStudentRow {
+  studentId: string;
+  studentName: string;
+  studentEmail?: string;
+  studentAvatar?: string | null;
+  completedCount: number;
+  totalCompletedAllTime: number;
+  releasedCount: number;
+  highestLevel: number;
+  scoreEarned: number;
+  maxReleasedScore: number;
+  progressPct: number;
+  totalTimeSeconds: number;
+  lastPlayedAt: string | null;
+  status: 'Completed' | 'In Progress' | 'Not Started';
+}
+
+export interface CampaignAnalyticsData {
+  assignment: {
+    id: string;
+    classroomId: string;
+    title: string;
+    dueDate: string | null;
+    gameId: GameId;
+    gameName: string;
+    category: string;
+  };
+  levelRelease: {
+    totalLevels: number;
+    releasedStart: number;
+    releasedEnd: number;
+    releasedCount: number;
+    pointsPerLevel: number;
+    releaseHistory: CampaignReleaseHistoryEntry[];
+  };
+  summary: {
+    totalStudents: number;
+    startedCount: number;
+    notStartedCount: number;
+    completedReleasedCount: number;
+    inProgressCount: number;
+    averageLevelCompleted: number;
+    averageScore: number;
+    highestScore: number;
+    completionPct: number;
+  };
+  students: CampaignAnalyticsStudentRow[];
 }
 
 export interface GameAssignmentSettings {
@@ -250,6 +384,10 @@ export interface GameAssignmentSettings {
   daily_limit?: number;
   levels?: GameLevelDefinition[];
   game_config?: GameConfig;
+  is_campaign_game?: boolean;
+  total_levels?: number;
+  points_per_level?: number;
+  level_release?: CampaignReleaseConfig;
 }
 
 export interface SavedLibraryGame {

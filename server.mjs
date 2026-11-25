@@ -119,6 +119,14 @@ import {
   gradeCourseGameSubmission
 } from './server/courseGamesService.mjs';
 import {
+  CAMPAIGN_GAMES_META,
+  isCampaignGameId,
+  resolveCampaignRelease,
+  computeCampaignProgress,
+  validateCampaignLevelAccess,
+  applyReleaseAction
+} from './server/campaignGamesService.mjs';
+import {
   getPriorityAppPreference,
   savePriorityAppPreference,
   removePriorityAppPreference,
@@ -25326,14 +25334,21 @@ app.get('/api/teacher/games/dashboard', async (req, res) => {
         : `adhoc::${gameId}::${String(a.title || gameName).trim().toLowerCase()}`;
       const groupTitle = savedLib?.title || a.title || gameName;
 
+      const isCampaign = Boolean(a.settings?.is_campaign_game) || isCampaignGameId(gameId);
+      const campaignRel = isCampaign ? resolveCampaignRelease(a) : null;
       const rawLevels = Array.isArray(a.settings?.levels) && a.settings.levels.length > 0 ? a.settings.levels : [];
-      const totalLevels = Math.max(1, rawLevels.length || 1);
+      const releasedCount = campaignRel
+        ? Math.max(0, campaignRel.releasedEnd >= campaignRel.releasedStart ? (campaignRel.releasedEnd - campaignRel.releasedStart + 1) : 0)
+        : 0;
+      const totalLevels = isCampaign ? Math.max(1, releasedCount) : Math.max(1, rawLevels.length || 1);
       const isNonScoring = a.settings?.supports_scoring === false;
       const maxPoints = isNonScoring
         ? 0
-        : rawLevels.length > 0
-          ? rawLevels.reduce((sum, l) => sum + Math.max(0, Number(l.points ?? 20)), 0)
-          : Math.max(0, Number(a.points ?? 100));
+        : isCampaign
+          ? Math.max(0, releasedCount * (campaignRel?.pointsPerLevel || 10))
+          : rawLevels.length > 0
+            ? rawLevels.reduce((sum, l) => sum + Math.max(0, Number(l.points ?? 20)), 0)
+            : Math.max(0, Number(a.points ?? 100));
 
       const subsForAssign = gameSubsByAssignment.get(a.id) || [];
       const subByStudent = new Map();
@@ -25454,6 +25469,16 @@ app.get('/api/teacher/games/dashboard', async (req, res) => {
         dueDate: a.due_date || null,
         points: maxPoints,
         totalLevels,
+        isCampaignGame: isCampaign,
+        campaignRelease: campaignRel
+          ? {
+              totalLevels: campaignRel.totalLevels,
+              releasedStart: campaignRel.releasedStart,
+              releasedEnd: campaignRel.releasedEnd,
+              pointsPerLevel: campaignRel.pointsPerLevel,
+              releaseHistory: campaignRel.releaseHistory
+            }
+          : null,
         submissionsCount: completedCount + inProgressCount,
         completedCount,
         inProgressCount,
@@ -25585,6 +25610,581 @@ app.get('/api/teacher/games/dashboard', async (req, res) => {
   } catch (err) {
     console.error('[teacher/games/dashboard] error:', err);
     return res.status(500).json({ success: false, error: err.message || 'Failed to load teacher games dashboard' });
+  }
+});
+
+// ============================================================================
+// Campaign Games (Neon Flow 1000, Arrow Escape 1000, Game of Words 2000)
+// Backend-enforced teacher level release, student progression, & analytics
+// ============================================================================
+
+app.get('/api/games/campaign/state', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth?.user) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const assignmentId = String(req.query?.assignmentId || '').trim();
+    if (!assignmentId) {
+      return res.status(400).json({ success: false, error: 'assignmentId is required' });
+    }
+
+    const { data: assignment, error: assignErr } = await serverSupabase
+      .from('assignments')
+      .select('id, classroom_id, title, points, due_date, status, is_deleted, settings')
+      .eq('id', assignmentId)
+      .single();
+
+    if (assignErr || !assignment || assignment.is_deleted) {
+      return res.status(404).json({ success: false, error: 'Game assignment not found' });
+    }
+    if (!assignment.settings?.is_game_library || (!assignment.settings?.is_campaign_game && !isCampaignGameId(assignment.settings?.game_id))) {
+      return res.status(400).json({ success: false, error: 'Assignment is not a campaign game' });
+    }
+
+    const [{ data: membership }, isTeach] = await Promise.all([
+      serverSupabase
+        .from('classroom_members')
+        .select('id, role, status')
+        .eq('classroom_id', assignment.classroom_id)
+        .eq('profile_id', auth.user.id)
+        .maybeSingle(),
+      isUserClassroomTeacher(auth.user.id, assignment.classroom_id)
+    ]);
+
+    if (!isTeach && (!membership || membership.status !== 'active')) {
+      return res.status(403).json({ success: false, error: 'You are not an active member of this classroom' });
+    }
+
+    if (!isTeach) {
+      if (assignment.status !== 'published' || assignment.settings?.is_unpublished) {
+        return res.status(403).json({ success: false, code: 'ASSIGNMENT_UNPUBLISHED', error: 'This game is currently unavailable.' });
+      }
+      if (
+        Array.isArray(assignment.settings?.assigned_student_ids) &&
+        assignment.settings.assigned_student_ids.length > 0 &&
+        !assignment.settings.assigned_student_ids.includes(auth.user.id)
+      ) {
+        return res.status(403).json({ success: false, error: 'You are not assigned to this activity.' });
+      }
+    }
+
+    const { data: submission } = await serverSupabase
+      .from('assignment_submissions')
+      .select('id, status, points_awarded, text_response, submitted_at, graded_at')
+      .eq('assignment_id', assignment.id)
+      .eq('student_id', auth.user.id)
+      .maybeSingle();
+
+    const campaignState = computeCampaignProgress(assignment, submission);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, campaignState });
+  } catch (err) {
+    console.error('[games/campaign/state] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to load campaign state' });
+  }
+});
+
+app.post('/api/games/campaign/complete-level', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth?.user) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const studentId = auth.user.id;
+    const {
+      assignmentId,
+      classroomId,
+      gameId,
+      levelNumber,
+      scoreEarned,
+      maxPoints,
+      stars,
+      timeTakenSeconds,
+      details
+    } = req.body || {};
+
+    if (!assignmentId || !classroomId || !gameId) {
+      return res.status(400).json({ success: false, error: 'assignmentId, classroomId, and gameId are required' });
+    }
+
+    const { data: assignment, error: assignErr } = await serverSupabase
+      .from('assignments')
+      .select('id, classroom_id, title, points, status, is_deleted, settings')
+      .eq('id', assignmentId)
+      .single();
+
+    if (assignErr || !assignment || assignment.is_deleted) {
+      return res.status(404).json({ success: false, error: 'Game assignment not found' });
+    }
+    if (assignment.status !== 'published' || assignment.settings?.is_unpublished) {
+      return res.status(403).json({ success: false, code: 'ASSIGNMENT_UNPUBLISHED', error: 'This game is currently unpublished.' });
+    }
+    if (assignment.classroom_id !== classroomId) {
+      return res.status(400).json({ success: false, error: 'Assignment does not belong to this classroom' });
+    }
+    if (String(assignment.settings?.game_id || '') !== String(gameId)) {
+      return res.status(400).json({ success: false, error: 'Game ID mismatch for this assignment' });
+    }
+    if (
+      Array.isArray(assignment.settings?.assigned_student_ids) &&
+      assignment.settings.assigned_student_ids.length > 0 &&
+      !assignment.settings.assigned_student_ids.includes(studentId)
+    ) {
+      return res.status(403).json({ success: false, error: 'You are not assigned to this activity.' });
+    }
+    if (assignment.settings?.start_date) {
+      const startMs = new Date(assignment.settings.start_date).getTime();
+      if (!isNaN(startMs) && Date.now() < startMs) {
+        return res.status(403).json({ success: false, error: `This activity starts on ${new Date(startMs).toLocaleString()}.` });
+      }
+    }
+
+    const { data: membership } = await serverSupabase
+      .from('classroom_members')
+      .select('id, role, status')
+      .eq('classroom_id', classroomId)
+      .eq('profile_id', studentId)
+      .maybeSingle();
+
+    if (!membership || membership.status !== 'active') {
+      return res.status(403).json({ success: false, error: 'You are not an active member of this classroom' });
+    }
+
+    const { data: existingSubmission } = await serverSupabase
+      .from('assignment_submissions')
+      .select('id, status, points_awarded, text_response, submitted_at, graded_at, teacher_feedback')
+      .eq('assignment_id', assignmentId)
+      .eq('student_id', studentId)
+      .maybeSingle();
+
+    const currentProgress = computeCampaignProgress(assignment, existingSubmission);
+    const accessCheck = validateCampaignLevelAccess(currentProgress, levelNumber);
+    if (!accessCheck.allowed) {
+      return res.status(accessCheck.status).json({
+        success: false,
+        code: accessCheck.code,
+        error: accessCheck.error,
+        campaignState: currentProgress
+      });
+    }
+
+    const lvlNum = accessCheck.levelNumber;
+    const lvlKey = String(lvlNum);
+    const levelMax = currentProgress.pointsPerLevel > 0 ? currentProgress.pointsPerLevel : 10;
+    const reportedMax = Math.max(1, Number(maxPoints || levelMax));
+    const ratio = Math.min(1, Math.max(0, Number(scoreEarned || 0) / reportedMax));
+    const pointsForAttempt = Math.min(levelMax, Math.max(0, Math.round(ratio * levelMax)));
+    const safeStars = Math.max(1, Math.min(3, Math.round(Number(stars || (ratio >= 0.9 ? 3 : ratio >= 0.6 ? 2 : 1)))));
+    const safeTimeSeconds = Math.max(0, Math.round(Number(timeTakenSeconds || 0)));
+    const nowIso = new Date().toISOString();
+
+    const prevRec = currentProgress.completedLevels[lvlKey] || null;
+    const prevBestScore = prevRec ? Math.max(0, Number(prevRec.scoreEarned || 0)) : 0;
+    const bestLevelScore = Math.max(prevBestScore, pointsForAttempt);
+    const incrementalPoints = Math.max(0, bestLevelScore - prevBestScore);
+    const bestStars = Math.max(prevRec ? Number(prevRec.stars || 1) : 0, safeStars);
+
+    const updatedLevelsCompleted = {
+      ...currentProgress.completedLevels,
+      [lvlKey]: {
+        levelId: lvlKey,
+        levelNumber: lvlNum,
+        title: `Level ${lvlNum}`,
+        scoreEarned: bestLevelScore,
+        maxPoints: levelMax,
+        percentage: Math.round((bestLevelScore / levelMax) * 100),
+        stars: bestStars,
+        timeTakenSeconds: safeTimeSeconds,
+        completedAt: nowIso,
+        attempts: (prevRec ? Number(prevRec.attempts || 1) : 0) + 1,
+        supportsScoring: true,
+        details: details && typeof details === 'object' && !Array.isArray(details) ? details : null
+      }
+    };
+
+    const nextProgress = computeCampaignProgress(assignment, {
+      text_response: JSON.stringify({ levels_completed: updatedLevelsCompleted })
+    });
+
+    const summaryText = JSON.stringify({
+      game_id: gameId,
+      game_name: assignment.settings?.game_name || CAMPAIGN_GAMES_META[gameId]?.name || gameId,
+      is_campaign_game: true,
+      supports_scoring: true,
+      student_id: studentId,
+      classroom_id: classroomId,
+      assignment_id: assignmentId,
+      total_levels: nextProgress.totalLevels,
+      released_start: nextProgress.releasedStart,
+      released_end: nextProgress.releasedEnd,
+      highest_unlocked_level: nextProgress.highestUnlockedLevel,
+      completed_levels_count: nextProgress.completedCount,
+      total_points_earned: nextProgress.totalScore,
+      levels_completed: updatedLevelsCompleted
+    });
+
+    const allTotalCompleted = nextProgress.completedCount >= nextProgress.totalLevels;
+    const newStatus = allTotalCompleted ? 'graded' : 'submitted';
+    const feedbackText = `${nextProgress.completedInReleased}/${nextProgress.releasedCount} released levels completed (${nextProgress.totalScore} pts)`;
+
+    if (existingSubmission) {
+      const { error: updErr } = await serverSupabase
+        .from('assignment_submissions')
+        .update({
+          status: newStatus,
+          submitted_at: existingSubmission.submitted_at || nowIso,
+          graded_at: allTotalCompleted ? nowIso : existingSubmission.graded_at,
+          text_response: summaryText,
+          points_awarded: nextProgress.totalScore,
+          teacher_feedback: feedbackText
+        })
+        .eq('id', existingSubmission.id);
+      if (updErr) throw updErr;
+    } else {
+      const { error: insErr } = await serverSupabase
+        .from('assignment_submissions')
+        .insert({
+          assignment_id: assignmentId,
+          classroom_id: classroomId,
+          student_id: studentId,
+          status: newStatus,
+          submitted_at: nowIso,
+          graded_at: allTotalCompleted ? nowIso : null,
+          text_response: summaryText,
+          points_awarded: nextProgress.totalScore,
+          teacher_feedback: feedbackText
+        });
+      if (insErr) throw insErr;
+    }
+
+    const leaderboardEnabled = assignment.settings?.leaderboard_enabled !== false;
+    if (leaderboardEnabled && nextProgress.totalScore > 0) {
+      const { data: existingPts } = await serverSupabase
+        .from('classroom_points')
+        .select('id, points')
+        .eq('classroom_id', classroomId)
+        .eq('student_id', studentId)
+        .eq('source_type', 'activity')
+        .eq('source_id', assignmentId)
+        .maybeSingle();
+
+      if (!existingPts) {
+        await serverSupabase
+          .from('classroom_points')
+          .insert({
+            classroom_id: classroomId,
+            student_id: studentId,
+            points: nextProgress.totalScore,
+            source_type: 'activity',
+            source_id: assignmentId,
+            reason: `Game Library: ${assignment.title || CAMPAIGN_GAMES_META[gameId]?.name || gameId}`,
+            awarded_by: studentId
+          });
+      } else if (nextProgress.totalScore > Number(existingPts.points || 0)) {
+        await serverSupabase
+          .from('classroom_points')
+          .update({ points: nextProgress.totalScore })
+          .eq('id', existingPts.id);
+      }
+    }
+
+    return res.json({
+      success: true,
+      alreadySubmitted: Boolean(prevRec) && incrementalPoints === 0,
+      pointsAwarded: incrementalPoints,
+      totalPointsEarned: nextProgress.totalScore,
+      completedCount: nextProgress.completedCount,
+      highestUnlockedLevel: nextProgress.highestUnlockedLevel,
+      releasedStart: nextProgress.releasedStart,
+      releasedEnd: nextProgress.releasedEnd,
+      completedAllReleased: nextProgress.completedAllReleased,
+      campaignState: nextProgress
+    });
+  } catch (err) {
+    console.error('[games/campaign/complete-level] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to save level progress' });
+  }
+});
+
+app.post('/api/games/campaign/release-levels', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth?.user) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const teacherId = auth.user.id;
+    const {
+      assignmentId,
+      action,
+      batchSize,
+      startLevel,
+      endLevel,
+      notifyStudents = true
+    } = req.body || {};
+
+    if (!assignmentId || !action) {
+      return res.status(400).json({ success: false, error: 'assignmentId and action are required' });
+    }
+
+    const { data: assignment, error: assignErr } = await serverSupabase
+      .from('assignments')
+      .select('*')
+      .eq('id', assignmentId)
+      .single();
+
+    if (assignErr || !assignment || assignment.is_deleted) {
+      return res.status(404).json({ success: false, error: 'Game assignment not found' });
+    }
+
+    const isTeach = await isUserClassroomTeacher(teacherId, assignment.classroom_id);
+    if (!isTeach) {
+      return res.status(403).json({ success: false, error: 'Only teachers of this classroom can manage level releases.' });
+    }
+
+    const currentRelease = resolveCampaignRelease(assignment);
+    const { nextRelease, newlyUnlockedRange } = applyReleaseAction({
+      currentRelease,
+      action,
+      batchSize,
+      startLevel,
+      endLevel,
+      teacherId
+    });
+
+    const releasedCount = nextRelease.released_end >= nextRelease.released_start
+      ? (nextRelease.released_end - nextRelease.released_start + 1)
+      : 0;
+    const nextMaxPoints = Math.max(0, releasedCount * currentRelease.pointsPerLevel);
+
+    const updatedSettings = {
+      ...(assignment.settings || {}),
+      is_campaign_game: true,
+      total_levels: nextRelease.total_levels,
+      points_per_level: currentRelease.pointsPerLevel,
+      level_release: nextRelease
+    };
+
+    const { data: updatedAssignment, error: updErr } = await serverSupabase
+      .from('assignments')
+      .update({
+        settings: updatedSettings,
+        points: nextMaxPoints
+      })
+      .eq('id', assignmentId)
+      .select()
+      .single();
+
+    if (updErr) throw updErr;
+
+    let notified = false;
+    if (notifyStudents && newlyUnlockedRange && newlyUnlockedRange.end >= newlyUnlockedRange.start) {
+      const gameName = assignment.settings?.game_name || CAMPAIGN_GAMES_META[currentRelease.gameId]?.name || assignment.title;
+      const rangeLabel = newlyUnlockedRange.start === newlyUnlockedRange.end
+        ? `Level ${newlyUnlockedRange.start}`
+        : `Levels ${newlyUnlockedRange.start}–${newlyUnlockedRange.end}`;
+      try {
+        await serverSupabase
+          .from('classroom_messages')
+          .insert({
+            classroom_id: assignment.classroom_id,
+            teacher_id: teacherId,
+            message: `🎉 New Levels Unlocked!\nYour teacher has released ${rangeLabel} in ${gameName} (${assignment.title}). Your next challenge is waiting!`,
+            is_pinned: false
+          });
+        notified = true;
+      } catch (msgErr) {
+        console.warn('[games/campaign/release-levels] notification insert warning:', msgErr?.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      levelRelease: nextRelease,
+      newlyUnlockedRange,
+      notified,
+      assignment: updatedAssignment
+    });
+  } catch (err) {
+    console.error('[games/campaign/release-levels] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to update level release' });
+  }
+});
+
+app.get('/api/games/campaign/analytics', async (req, res) => {
+  try {
+    const auth = await verifyAuthUser(req);
+    if (!auth?.user) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const assignmentId = String(req.query?.assignmentId || '').trim();
+    if (!assignmentId) {
+      return res.status(400).json({ success: false, error: 'assignmentId is required' });
+    }
+
+    const { data: assignment, error: assignErr } = await serverSupabase
+      .from('assignments')
+      .select('*')
+      .eq('id', assignmentId)
+      .single();
+
+    if (assignErr || !assignment || assignment.is_deleted) {
+      return res.status(404).json({ success: false, error: 'Game assignment not found' });
+    }
+
+    const isTeach = await isUserClassroomTeacher(auth.user.id, assignment.classroom_id);
+    if (!isTeach) {
+      return res.status(403).json({ success: false, error: 'Only teachers of this classroom can view game analytics.' });
+    }
+
+    const release = resolveCampaignRelease(assignment);
+    const releasedCount = release.releasedEnd >= release.releasedStart
+      ? (release.releasedEnd - release.releasedStart + 1)
+      : 0;
+    const maxReleasedScore = releasedCount * release.pointsPerLevel;
+
+    const [{ data: memberStudents }, { data: legacyStudents }, { data: subs }] = await Promise.all([
+      serverSupabase
+        .from('classroom_members')
+        .select('profile_id, profile:profiles!profile_id (id, full_name, email, avatar_url)')
+        .eq('classroom_id', assignment.classroom_id)
+        .eq('status', 'active')
+        .eq('role', 'student'),
+      serverSupabase
+        .from('classroom_students')
+        .select('student_id')
+        .eq('classroom_id', assignment.classroom_id),
+      serverSupabase
+        .from('assignment_submissions')
+        .select('student_id, points_awarded, submitted_at, graded_at, text_response')
+        .eq('assignment_id', assignmentId)
+    ]);
+
+    const subMap = new Map();
+    (subs || []).forEach((s) => subMap.set(s.student_id, s));
+
+    const rosterMap = new Map();
+    (memberStudents || []).forEach((m) => {
+      if (m?.profile_id) {
+        rosterMap.set(m.profile_id, m.profile || { id: m.profile_id, full_name: 'Student', email: '', avatar_url: null });
+      }
+    });
+
+    const missingIds = [...new Set([
+      ...(legacyStudents || []).map((l) => l.student_id),
+      ...(subs || []).map((s) => s.student_id)
+    ])].filter((id) => id && !rosterMap.has(id));
+
+    if (missingIds.length > 0) {
+      const { data: extraProfiles } = await serverSupabase
+        .from('profiles')
+        .select('id, full_name, email, avatar_url')
+        .in('id', missingIds);
+      (extraProfiles || []).forEach((p) => {
+        if (p?.id) rosterMap.set(p.id, p);
+      });
+    }
+
+    const assignedIds = Array.isArray(assignment.settings?.assigned_student_ids) && assignment.settings.assigned_student_ids.length > 0
+      ? assignment.settings.assigned_student_ids
+      : null;
+
+    const targetIds = assignedIds
+      ? Array.from(new Set([...assignedIds, ...subMap.keys()]))
+      : Array.from(new Set([...rosterMap.keys(), ...subMap.keys()]));
+
+    let startedCount = 0;
+    let notStartedCount = 0;
+    let completedReleasedCount = 0;
+    let inProgressCount = 0;
+    let sumCompletedLevels = 0;
+    let sumScore = 0;
+    let highestScore = 0;
+
+    const students = targetIds.map((sid) => {
+      const prof = rosterMap.get(sid) || { id: sid, full_name: 'Student', email: '', avatar_url: null };
+      const sub = subMap.get(sid) || null;
+      const prog = computeCampaignProgress(assignment, sub);
+      const completedInRel = prog.completedInReleased;
+      const progressPct = releasedCount > 0 ? Math.min(100, Math.round((completedInRel / releasedCount) * 100)) : 0;
+
+      let status = 'Not Started';
+      if (releasedCount > 0 && completedInRel >= releasedCount) {
+        status = 'Completed';
+        completedReleasedCount++;
+        startedCount++;
+      } else if (prog.completedCount > 0 || sub) {
+        status = 'In Progress';
+        inProgressCount++;
+        startedCount++;
+      } else {
+        notStartedCount++;
+      }
+
+      sumCompletedLevels += prog.completedCount;
+      sumScore += prog.totalScore;
+      if (prog.totalScore > highestScore) highestScore = prog.totalScore;
+
+      const latestAt = Object.values(prog.completedLevels).reduce((latest, rec) => {
+        if (!rec?.completedAt) return latest;
+        return !latest || new Date(rec.completedAt) > new Date(latest) ? rec.completedAt : latest;
+      }, sub?.submitted_at || null);
+
+      return {
+        studentId: sid,
+        studentName: prof.full_name || 'Student',
+        studentEmail: prof.email || '',
+        studentAvatar: prof.avatar_url || null,
+        completedCount: completedInRel,
+        totalCompletedAllTime: prog.completedCount,
+        releasedCount,
+        highestLevel: prog.highestUnlockedLevel,
+        scoreEarned: prog.totalScore,
+        maxReleasedScore,
+        progressPct,
+        totalTimeSeconds: prog.totalTimeSeconds,
+        lastPlayedAt: latestAt,
+        status
+      };
+    }).sort((a, b) => b.scoreEarned - a.scoreEarned || b.completedCount - a.completedCount || a.studentName.localeCompare(b.studentName));
+
+    const totalStudents = students.length;
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({
+      success: true,
+      assignment: {
+        id: assignment.id,
+        classroomId: assignment.classroom_id,
+        title: assignment.title,
+        dueDate: assignment.due_date,
+        gameId: release.gameId,
+        gameName: assignment.settings?.game_name || CAMPAIGN_GAMES_META[release.gameId]?.name || release.gameId,
+        category: CAMPAIGN_GAMES_META[release.gameId]?.category || 'Games & Training'
+      },
+      levelRelease: {
+        totalLevels: release.totalLevels,
+        releasedStart: release.releasedStart,
+        releasedEnd: release.releasedEnd,
+        releasedCount,
+        pointsPerLevel: release.pointsPerLevel,
+        releaseHistory: release.releaseHistory
+      },
+      summary: {
+        totalStudents,
+        startedCount,
+        notStartedCount,
+        completedReleasedCount,
+        inProgressCount,
+        averageLevelCompleted: totalStudents > 0 ? Number((sumCompletedLevels / totalStudents).toFixed(1)) : 0,
+        averageScore: totalStudents > 0 ? Math.round(sumScore / totalStudents) : 0,
+        highestScore,
+        completionPct: totalStudents > 0 ? Math.round((completedReleasedCount / totalStudents) * 100) : 0
+      },
+      students
+    });
+  } catch (err) {
+    console.error('[games/campaign/analytics] error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to load campaign analytics' });
   }
 });
 

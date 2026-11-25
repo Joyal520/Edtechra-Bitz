@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Award,
   CheckCircle2,
@@ -8,9 +8,9 @@ import {
   Trophy,
   X
 } from 'lucide-react';
-import { ACTIVITY_TYPE_LABELS, getGameCatalogItem } from '@/services/gameLibraryService';
+import { ACTIVITY_TYPE_LABELS, gameLibraryService, getGameCatalogItem } from '@/services/gameLibraryService';
 import type { Assignment } from '@/types/classroom';
-import type { ActivityType, GameId, GameLevelDefinition, LevelUnlockMode } from '@/types/gameLibrary';
+import type { ActivityType, CampaignProgressState, GameId, GameLevelDefinition, LevelUnlockMode } from '@/types/gameLibrary';
 import {
   evaluateLevelsForStudent,
   getLevelQuestionCount,
@@ -37,12 +37,32 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
   isUnavailable = false,
   onPlayLevel
 }) => {
+  const [campaignState, setCampaignState] = useState<CampaignProgressState | null>(null);
+
+  const gameId = (assignment?.settings?.game_id as GameId) || 'liquid-sentences';
+  const catalogItem = getGameCatalogItem(gameId);
+  const isCampaign = Boolean(assignment?.settings?.is_campaign_game) || Boolean(catalogItem.isCampaignGame);
+
+  useEffect(() => {
+    if (!isOpen || !isCampaign || !assignment?.id) {
+      setCampaignState(null);
+      return;
+    }
+    let cancelled = false;
+    gameLibraryService.getCampaignState(assignment.id).then((res) => {
+      if (!cancelled && res.campaignState) {
+        setCampaignState(res.campaignState);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, isCampaign, assignment?.id]);
+
   if (!isOpen) return null;
 
   const isPublished = !isUnavailable && isAssignmentPublished(assignment);
   const started = isAssignmentStarted(assignment);
-  const gameId = (assignment.settings?.game_id as GameId) || 'liquid-sentences';
-  const catalogItem = getGameCatalogItem(gameId);
   const levels = normalizeAssignmentLevels(assignment);
   const unlockMode: LevelUnlockMode = assignment.settings?.unlock_mode || 'sequential';
   const dailyLimit = Number(assignment.settings?.daily_limit || 1);
@@ -65,9 +85,75 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
     classroomTimezone
   );
 
-  const totalAvailablePoints = levels.reduce((sum, l) => sum + l.points, 0);
-  const progressPct =
-    levels.length > 0 ? Math.round((completedCount / levels.length) * 100) : 0;
+  const totalAvailablePoints = isCampaign
+    ? (() => {
+        const lr = assignment.settings?.level_release;
+        const rs = campaignState?.releasedStart ?? Number(lr?.released_start ?? 1);
+        const re = campaignState?.releasedEnd ?? Number(lr?.released_end ?? catalogItem.defaultInitialReleaseEnd ?? 10);
+        const ppl = campaignState?.pointsPerLevel ?? Number(assignment.settings?.points_per_level ?? 10);
+        return Math.max(0, re >= rs ? (re - rs + 1) * ppl : 0);
+      })()
+    : levels.reduce((sum, l) => sum + l.points, 0);
+
+  const campaignDisplay = (() => {
+    if (!isCampaign) return null;
+    const lr = assignment.settings?.level_release;
+    const totalLevels = campaignState?.totalLevels ?? Number(lr?.total_levels || assignment.settings?.total_levels || catalogItem.totalLevels || 1000);
+    const relStart = campaignState?.releasedStart ?? Number(lr?.released_start ?? 1);
+    const relEnd = campaignState?.releasedEnd ?? Number(lr?.released_end ?? catalogItem.defaultInitialReleaseEnd ?? 10);
+    const ppl = campaignState?.pointsPerLevel ?? Number(assignment.settings?.points_per_level ?? 10);
+    const completedLvls = campaignState?.completedLevels || completedMap;
+    const releasedCount = relEnd >= relStart ? relEnd - relStart + 1 : 0;
+
+    let completedInRel = 0;
+    let highestUnlocked = relEnd >= relStart ? relStart : 0;
+    for (let l = relStart; l <= relEnd; l++) {
+      if (completedLvls[String(l)]) {
+        completedInRel++;
+        if (l === highestUnlocked && l < relEnd) highestUnlocked = l + 1;
+      }
+    }
+    if (campaignState?.highestUnlockedLevel !== undefined) {
+      highestUnlocked = campaignState.highestUnlockedLevel;
+    }
+
+    const completedAllReleased = releasedCount > 0 && completedInRel >= releasedCount;
+    const pct = releasedCount > 0 ? Math.round((completedInRel / releasedCount) * 100) : 0;
+    const earnedPts = campaignState?.totalScore ?? totalPointsEarned;
+
+    const launchLevel = (lvlNum: number) => {
+      onPlayLevel({
+        id: String(lvlNum),
+        levelNumber: lvlNum,
+        title: `Level ${lvlNum}`,
+        points: ppl,
+        isManuallyLocked: false,
+        unlockAt: null,
+        config: { title: assignment.title }
+      });
+    };
+
+    return {
+      totalLevels,
+      relStart,
+      relEnd,
+      releasedCount,
+      completedInRel,
+      highestUnlocked,
+      completedAllReleased,
+      pct,
+      earnedPts,
+      completedLvls,
+      ppl,
+      launchLevel
+    };
+  })();
+
+  const progressPct = campaignDisplay
+    ? campaignDisplay.pct
+    : levels.length > 0
+      ? Math.round((completedCount / levels.length) * 100)
+      : 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/65 backdrop-blur-sm">
@@ -111,8 +197,11 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
                 {assignment.title}
               </h2>
               <p className="text-xs font-semibold text-slate-600">
-                Your Progress: {completedCount} of {levels.length}{' '}
-                {levels.length === 1 ? (supportsScoring ? 'Level' : 'Session') : 'Levels'} Completed
+                Your Progress: {campaignDisplay ? campaignDisplay.completedInRel : completedCount} of{' '}
+                {campaignDisplay ? campaignDisplay.releasedCount : levels.length}{' '}
+                {campaignDisplay
+                  ? 'Released Levels Completed'
+                  : `${levels.length === 1 ? (supportsScoring ? 'Level' : 'Session') : 'Levels'} Completed`}
                 {assignment.due_date ? ` • Due ${new Date(assignment.due_date).toLocaleString()}` : ''}
               </p>
             </div>
@@ -147,7 +236,9 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
             <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-200 shadow-2xs">
               <Trophy className="w-4 h-4 text-amber-500" />
               <div className="text-xs">
-                <span className="font-black text-slate-900">{totalPointsEarned}</span>
+                <span className="font-black text-slate-900">
+                  {campaignDisplay ? campaignDisplay.earnedPts : totalPointsEarned}
+                </span>
                 <span className="text-slate-500 font-semibold"> / {totalAvailablePoints} pts</span>
               </div>
             </div>
@@ -183,6 +274,105 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
               >
                 Back to Classroom
               </button>
+            </div>
+          ) : campaignDisplay ? (
+            <div className="space-y-4">
+              {campaignDisplay.completedAllReleased && (
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 to-sky-50 border border-emerald-200 text-center space-y-1.5">
+                  <div className="text-sm font-black text-emerald-900">
+                    🎉 You&apos;ve completed all the available levels!
+                  </div>
+                  <p className="text-xs font-semibold text-emerald-800">
+                    Wait for your teacher to unlock the next challenge.
+                  </p>
+                </div>
+              )}
+
+              {/* Breakdown pills */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
+                <div className="flex flex-wrap gap-2 text-xs font-bold">
+                  {campaignDisplay.completedInRel > 0 && (
+                    <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      🟢 Levels {campaignDisplay.relStart}–{Math.min(campaignDisplay.relEnd, campaignDisplay.relStart + campaignDisplay.completedInRel - 1)} Completed
+                    </span>
+                  )}
+                  {!campaignDisplay.completedAllReleased && campaignDisplay.highestUnlocked >= campaignDisplay.relStart && (
+                    <span className="px-3 py-1 rounded-full bg-sky-100 text-sky-800 border border-sky-200">
+                      🔵 Level {campaignDisplay.highestUnlocked} Available
+                    </span>
+                  )}
+                  {campaignDisplay.highestUnlocked < campaignDisplay.relEnd && (
+                    <span className="px-3 py-1 rounded-full bg-slate-200 text-slate-700">
+                      🔒 Levels {campaignDisplay.highestUnlocked + 1}–{campaignDisplay.relEnd} Available after progression
+                    </span>
+                  )}
+                  {campaignDisplay.relEnd < campaignDisplay.totalLevels && (
+                    <span className="px-3 py-1 rounded-full bg-slate-200/80 text-slate-600">
+                      🔒 Levels {campaignDisplay.relEnd + 1}–{campaignDisplay.totalLevels.toLocaleString()} Not Released by Teacher
+                    </span>
+                  )}
+                </div>
+
+                {started && campaignDisplay.releasedCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => campaignDisplay.launchLevel(campaignDisplay.highestUnlocked || campaignDisplay.relStart)}
+                    className="w-full py-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-black inline-flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
+                  >
+                    <Play className="w-4 h-4 fill-current" />
+                    <span>
+                      {campaignDisplay.completedAllReleased
+                        ? `Replay Level ${campaignDisplay.relEnd}`
+                        : campaignDisplay.completedInRel > 0
+                          ? `Continue Playing (Level ${campaignDisplay.highestUnlocked})`
+                          : `Start Level ${campaignDisplay.relStart}`}
+                    </span>
+                  </button>
+                )}
+              </div>
+
+              {/* Released Levels Grid */}
+              {campaignDisplay.releasedCount > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
+                    Released Levels ({campaignDisplay.relStart}–{campaignDisplay.relEnd})
+                  </div>
+                  <div className="grid grid-cols-5 sm:grid-cols-8 gap-2">
+                    {Array.from({ length: Math.min(200, campaignDisplay.releasedCount) }, (_, idx) => {
+                      const lvlNum = campaignDisplay.relStart + idx;
+                      const rec = campaignDisplay.completedLvls[String(lvlNum)];
+                      const isDone = Boolean(rec);
+                      const isNext = !isDone && lvlNum === campaignDisplay.highestUnlocked;
+                      const isLocked = !isDone && lvlNum > campaignDisplay.highestUnlocked;
+                      return (
+                        <button
+                          key={lvlNum}
+                          type="button"
+                          disabled={isLocked || !started}
+                          onClick={() => campaignDisplay.launchLevel(lvlNum)}
+                          className={`p-2 rounded-xl border text-center transition flex flex-col items-center justify-center ${
+                            isDone
+                              ? 'bg-emerald-50 border-emerald-300 text-emerald-900 hover:bg-emerald-100 cursor-pointer'
+                              : isNext
+                                ? 'bg-sky-600 border-sky-600 text-white shadow-sm hover:bg-sky-700 cursor-pointer'
+                                : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                          }`}
+                        >
+                          <span className="text-xs font-black">{lvlNum}</span>
+                          <span className="text-[10px] mt-0.5">
+                            {isDone ? '✓' : isNext ? '▶' : '🔒'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {campaignDisplay.releasedCount > 200 && (
+                    <p className="text-[11px] text-slate-500 font-semibold">
+                      Showing first 200 released levels above. Use the in-game level selector to jump to any unlocked level up to {campaignDisplay.relEnd}.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           ) : evaluated.map(({ level, status, lockReason, completionRecord }) => {
             const isCompleted = status === 'completed';

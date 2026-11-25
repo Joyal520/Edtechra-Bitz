@@ -54,6 +54,7 @@ import { ChallengeDashboardModal } from './ChallengeDashboardModal';
 import { UnpublishConfirmModal } from '../games/UnpublishConfirmModal';
 import { ActivityDetailsTab } from '../games/ActivityDetailsTab';
 import { StudentSubmissionsTab } from '../games/StudentSubmissionsTab';
+import { CampaignReleaseModal } from '../games/CampaignReleaseModal';
 
 interface ChallengeListModalProps {
   isOpen: boolean;
@@ -116,6 +117,10 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
   const [submissionsInitialFilter, setSubmissionsInitialFilter] = useState<{
     classroomId?: string;
     activityKey?: string;
+  } | null>(null);
+  const [campaignManageTarget, setCampaignManageTarget] = useState<{
+    assignmentId: string;
+    classroomTitle?: string;
   } | null>(null);
 
   // Teacher Game Library state
@@ -727,6 +732,12 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
                 setActiveTab('submissions');
                 loadTeacherDashboard();
               }}
+              onManageCampaignRelease={(a) =>
+                setCampaignManageTarget({
+                  assignmentId: a.assignmentId,
+                  classroomTitle: a.classroomTitle
+                })
+              }
               onOpenGameLibrary={() => setActiveTab('library')}
               onCreateCompetition={() => setIsCreateOpen(true)}
             />
@@ -947,8 +958,23 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
                   const sub = a.my_submission;
                   const levels = normalizeAssignmentLevels(a);
                   const prog = parseStudentLevelProgress(sub);
-                  const completed = levels.length > 0 && prog.completedCount >= levels.length;
                   const cat = getGameCatalogItem((a.settings?.game_id as GameId) || 'liquid-sentences');
+                  const isCampaign = Boolean(a.settings?.is_campaign_game) || Boolean(cat.isCampaignGame);
+                  const lr = a.settings?.level_release;
+                  const totalCampaignLevels = Number(lr?.total_levels || a.settings?.total_levels || cat.totalLevels || 1000);
+                  const relStart = Number(lr?.released_start ?? 1);
+                  const relEnd = Number(lr?.released_end ?? cat.defaultInitialReleaseEnd ?? 10);
+                  const releasedCount = isCampaign ? Math.max(0, relEnd >= relStart ? relEnd - relStart + 1 : 0) : levels.length;
+                  let completedInRel = 0;
+                  if (isCampaign && releasedCount > 0) {
+                    for (let l = relStart; l <= relEnd; l++) {
+                      if (prog.completedMap[String(l)]) completedInRel++;
+                    }
+                  }
+                  const completed = isCampaign
+                    ? releasedCount > 0 && completedInRel >= releasedCount
+                    : levels.length > 0 && prog.completedCount >= levels.length;
+                  const campaignPct = releasedCount > 0 ? Math.min(100, Math.round((completedInRel / releasedCount) * 100)) : 0;
                   const supportsScoring = a.settings?.supports_scoring !== false && cat.supportsScoring !== false;
                   const showScores = a.settings?.show_scores_to_students !== false;
                   const isCompulsory = a.settings?.is_compulsory !== false;
@@ -1004,6 +1030,13 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
                             </p>
                           )}
                           <div className="flex items-center gap-2 flex-wrap text-[11px] text-slate-500">
+                            {isCampaign && (
+                              <span className="font-bold text-sky-700">
+                                Progress: {completedInRel}/{releasedCount} Levels Completed ({campaignPct}%) •{' '}
+                                {releasedCount > 0 ? `🟢 ${relStart}–${relEnd} Released` : '🔒 Locked'}{' '}
+                                {relEnd < totalCampaignLevels ? `• 🔒 ${relEnd + 1}–${totalCampaignLevels.toLocaleString()} Not Released` : ''}
+                              </span>
+                            )}
                             {!started && a.settings?.start_date && (
                               <span className="text-amber-700 font-semibold">
                                 Starts {new Date(a.settings.start_date).toLocaleString()}
@@ -1013,6 +1046,14 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
                               <span>Due {new Date(a.due_date).toLocaleString()}</span>
                             )}
                           </div>
+                          {isCampaign && (
+                            <div className="h-2 w-full max-w-xs rounded-full bg-slate-100 overflow-hidden mt-1">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-sky-500 to-emerald-500 transition-all"
+                                style={{ width: `${campaignPct}%` }}
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
                       {completed ? (
@@ -1038,7 +1079,7 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
                           className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:bg-slate-200 disabled:text-slate-500 text-white text-xs font-bold shadow-sm transition shrink-0 cursor-pointer"
                         >
                           <Play className="w-3.5 h-3.5 fill-current" />
-                          <span>{started ? 'Start' : 'Scheduled'}</span>
+                          <span>{started ? (isCampaign && completedInRel > 0 ? 'Continue Playing' : 'Start') : 'Scheduled'}</span>
                         </button>
                       )}
                     </div>
@@ -1405,6 +1446,19 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
           setConfirmUnpublishTarget(null);
         }}
       />
+
+      {campaignManageTarget && (
+        <CampaignReleaseModal
+          isOpen={Boolean(campaignManageTarget)}
+          onClose={() => setCampaignManageTarget(null)}
+          assignmentId={campaignManageTarget.assignmentId}
+          classroomTitle={campaignManageTarget.classroomTitle}
+          onUpdated={() => {
+            loadTeacherDashboard();
+            onUpdated?.();
+          }}
+        />
+      )}
     </div>
   );
 };

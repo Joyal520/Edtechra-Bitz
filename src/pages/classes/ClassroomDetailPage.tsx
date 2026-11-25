@@ -3138,14 +3138,15 @@ export const ClassroomDetailPage: React.FC = () => {
             onContinueToNextLevel={openNextLevel}
             onSubmitted={(result) => {
               if (result.success) {
-                if (activeGamePlay.assignmentId && activeGamePlay.levelId) {
+                const completedLevelKey = result.levelId || activeGamePlay.levelId;
+                if (activeGamePlay.assignmentId && completedLevelKey) {
                   const earnedVal = result.alreadySubmitted
                     ? result.existingScore ?? activeGamePlay.alreadyCompletedScore ?? 0
                     : result.pointsAwarded;
                   const newRec: CompletedLevelRecord = {
-                    levelId: activeGamePlay.levelId,
-                    levelNumber: activeGamePlay.levelNumber || 1,
-                    title: activeGamePlay.levelTitle || activeGamePlay.title,
+                    levelId: completedLevelKey,
+                    levelNumber: Number(result.levelId || activeGamePlay.levelNumber || 1),
+                    title: result.levelId ? `Level ${result.levelId}` : (activeGamePlay.levelTitle || activeGamePlay.title),
                     scoreEarned: earnedVal,
                     maxPoints: activeGamePlay.maxPoints,
                     percentage: result.percentage ?? 100,
@@ -3156,7 +3157,7 @@ export const ClassroomDetailPage: React.FC = () => {
                     ...prev,
                     [activeGamePlay.assignmentId!]: {
                       ...(prev[activeGamePlay.assignmentId!] || {}),
-                      [activeGamePlay.levelId!]: newRec
+                      [completedLevelKey]: newRec
                     }
                   }));
                 }

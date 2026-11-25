@@ -4,6 +4,8 @@ import type { Assignment } from '@/types/classroom';
 import type {
   ActivityCategory,
   ActivityType,
+  CampaignAnalyticsData,
+  CampaignProgressState,
   ClassroomJigsawConfig,
   ConnectionsConfig,
   GameAssignmentSettings,
@@ -12,6 +14,7 @@ import type {
   GameConfig,
   GameId,
   GameLevelDefinition,
+  GameOfWordsConfig,
   GameSubmissionResponse,
   LevelUnlockMode,
   LiquidSentencesConfig,
@@ -337,6 +340,95 @@ export const GAME_CATALOG: GameCatalogItem[] = [
     supportsScoring: false,
     defaultLeaderboardEnabled: false,
     resultMetrics: ['Session Completed', 'Duration', 'Breathing Cycles']
+  },
+  {
+    id: 'game-of-words',
+    name: 'Game of Words',
+    shortDescription:
+      'Master the 2,000 most common English words or custom teacher word lists across 12 interactive vocabulary modes.',
+    category: 'Language & Vocabulary',
+    categoryId: 'language',
+    activityType: 'game',
+    estimatedDuration: '3–6 min',
+    difficulty: 'Adaptive',
+    thumbnailUrl: '/games/thumbnails/game-of-words.jpg',
+    accentColor: 'from-sky-500 to-emerald-500',
+    badgeLabel: 'Vocab Studio',
+    htmlPath: '/games/game-of-words.html',
+    defaultPoints: 100,
+    isStandaloneBuiltIn: false,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true,
+    resultMetrics: ['Score', 'Accuracy', 'Best Streak', 'XP Earned']
+  },
+  {
+    id: 'neon-flow',
+    name: 'Neon Flow',
+    shortDescription:
+      'Connect the Pipes across 1,000 spatial logic grids with teacher-controlled batch level releases.',
+    category: 'Logic & Puzzle Training',
+    categoryId: 'problem-solving',
+    activityType: 'game',
+    estimatedDuration: '3–10 min',
+    difficulty: 'Adaptive',
+    thumbnailUrl: '/games/thumbnails/neon-flow.jpg',
+    accentColor: 'from-sky-500 to-indigo-600',
+    badgeLabel: 'Connect the Pipes · 1,000 Levels',
+    htmlPath: '/games/neon-flow.html',
+    defaultPoints: 100,
+    isStandaloneBuiltIn: true,
+    isCampaignGame: true,
+    totalLevels: 1000,
+    defaultInitialReleaseEnd: 10,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true,
+    resultMetrics: ['Levels Completed', 'Stars', 'Moves vs Par']
+  },
+  {
+    id: 'arrow-escape',
+    name: 'Arrow Escape',
+    shortDescription:
+      'Arrow Direction Puzzle across 1,000 brain-training grids with combos, hearts, and teacher-released batches.',
+    category: 'Logic & Brain Training',
+    categoryId: 'brain-memory',
+    activityType: 'cognitive_training',
+    estimatedDuration: '3–10 min',
+    difficulty: 'Adaptive',
+    thumbnailUrl: '/games/thumbnails/arrow-escape.jpg',
+    accentColor: 'from-emerald-500 to-sky-600',
+    badgeLabel: 'Arrow Direction Puzzle · 1,000 Levels',
+    htmlPath: '/games/arrow-escape.html',
+    defaultPoints: 100,
+    isStandaloneBuiltIn: true,
+    isCampaignGame: true,
+    totalLevels: 1000,
+    defaultInitialReleaseEnd: 10,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true,
+    resultMetrics: ['Levels Completed', 'Stars', 'Max Combo']
+  },
+  {
+    id: 'game-of-words-2000',
+    name: 'Game of Words 2000',
+    shortDescription:
+      'Word Formation across 2,000 progressive letter-wheel puzzles with teacher-controlled level releases.',
+    category: 'Language & Vocabulary Training',
+    categoryId: 'language',
+    activityType: 'game',
+    estimatedDuration: '3–10 min',
+    difficulty: 'Adaptive',
+    thumbnailUrl: '/games/thumbnails/game-of-words-2000.jpg',
+    accentColor: 'from-emerald-500 to-amber-500',
+    badgeLabel: 'Word Formation · 2,000 Levels',
+    htmlPath: '/games/game-of-words-2000.html',
+    defaultPoints: 200,
+    isStandaloneBuiltIn: true,
+    isCampaignGame: true,
+    totalLevels: 2000,
+    defaultInitialReleaseEnd: 20,
+    supportsScoring: true,
+    defaultLeaderboardEnabled: true,
+    resultMetrics: ['Levels Completed', 'Words Discovered', 'Bonus Words']
   }
 ];
 
@@ -395,6 +487,19 @@ export function getEmptyConfigForGame(gameId: GameId): GameConfig {
           { title: '', level: 3, words: ['', '', '', ''] }
         ]
       };
+    case 'game-of-words':
+      return {
+        title: 'Vocabulary Training',
+        description: 'Build strong everyday English vocabulary with definitions, examples, and word games.',
+        sourceMode: 'builtin',
+        category: 'All',
+        difficulty: 'all',
+        gameMode: 'all',
+        roundSize: 10,
+        timedChallenge: false,
+        timeLimitSeconds: 60,
+        words: []
+      } satisfies GameOfWordsConfig;
     default: {
       const item = getGameCatalogItem(gameId);
       return {
@@ -482,6 +587,80 @@ export function getDemoConfigForGame(gameId: GameId): GameConfig {
           { title: 'Things That Have Keys', level: 3, words: ['PIANO', 'MAP', 'LOCK', 'TYPEWRITER'] }
         ]
       };
+    case 'game-of-words':
+      return {
+        title: 'Core Academic & Everyday Vocabulary',
+        description: 'Explore definitions, synonyms, antonyms, and sentence context with starter words.',
+        sourceMode: 'hybrid',
+        category: 'All',
+        difficulty: 'beginner',
+        gameMode: 'all',
+        roundSize: 10,
+        timedChallenge: false,
+        timeLimitSeconds: 60,
+        words: [
+          {
+            word: 'curious',
+            definition: 'eager to learn or know more about something',
+            example: 'The curious student asked thoughtful questions in science class.',
+            category: 'School',
+            difficulty: 'beginner',
+            synonyms: ['inquisitive', 'eager'],
+            antonym: 'indifferent',
+            emoji: '🔍'
+          },
+          {
+            word: 'bright',
+            definition: 'giving out lots of light or showing quick intelligence',
+            example: 'Sunlight made the classroom feel bright and cheerful.',
+            category: 'Everyday',
+            difficulty: 'beginner',
+            synonyms: ['radiant', 'clever'],
+            antonym: 'dim',
+            emoji: '☀️'
+          },
+          {
+            word: 'journey',
+            definition: 'an act of traveling from one place to another',
+            example: 'Our train journey across the mountains took three hours.',
+            category: 'Travel',
+            difficulty: 'beginner',
+            synonyms: ['trip', 'voyage'],
+            antonym: 'stay',
+            emoji: '🧳'
+          },
+          {
+            word: 'harmony',
+            definition: 'peaceful agreement or working smoothly together',
+            example: 'The team worked in harmony to finish the project early.',
+            category: 'Family',
+            difficulty: 'intermediate',
+            synonyms: ['unity', 'accord'],
+            antonym: 'conflict',
+            emoji: '🤝'
+          },
+          {
+            word: 'discover',
+            definition: 'to find or learn something for the first time',
+            example: 'Astronomers hope to discover new planets every year.',
+            category: 'Actions',
+            difficulty: 'beginner',
+            synonyms: ['uncover', 'detect'],
+            antonym: 'hide',
+            emoji: '🧭'
+          },
+          {
+            word: 'resilient',
+            definition: 'able to recover quickly from difficulties or challenges',
+            example: 'Resilient learners keep practicing even after making mistakes.',
+            category: 'Emotions',
+            difficulty: 'advanced',
+            synonyms: ['adaptable', 'strong'],
+            antonym: 'fragile',
+            emoji: '🌱'
+          }
+        ]
+      } satisfies GameOfWordsConfig;
     default: {
       const item = getGameCatalogItem(gameId);
       return {
@@ -527,6 +706,10 @@ export function countGameContentItems(gameId: GameId, levels: GameLevelDefinitio
         return total + ((cfg as SnakeSpellConfig).words?.length || 0);
       case 'connections':
         return total + ((cfg as ConnectionsConfig).groups?.length || 0);
+      case 'game-of-words': {
+        const gow = cfg as GameOfWordsConfig;
+        return total + (gow.words?.length || gow.roundSize || 10);
+      }
       default:
         return total + 1;
     }
@@ -615,6 +798,11 @@ class GameLibraryService {
     unlockMode?: LevelUnlockMode;
     dailyLimit?: number;
     libraryGameId?: string;
+    campaignRelease?: {
+      releasedStart: number;
+      releasedEnd: number;
+      pointsPerLevel?: number;
+    };
   }): Promise<{ data?: Assignment; createdAssignments?: Assignment[]; error?: string }> {
     if (!supabase) return { error: 'Supabase is not configured' };
     const {
@@ -726,6 +914,14 @@ class GameLibraryService {
           ? params.assignedStudentIds
           : null;
 
+      const isCampaign = Boolean(catalogItem.isCampaignGame);
+      const campaignTotal = catalogItem.totalLevels || 1000;
+      const campaignStart = Math.max(1, Math.min(campaignTotal, Number(params.campaignRelease?.releasedStart ?? 1)));
+      const campaignEnd = Math.max(0, Math.min(campaignTotal, Number(params.campaignRelease?.releasedEnd ?? catalogItem.defaultInitialReleaseEnd ?? 10)));
+      const campaignPtsPerLevel = Math.max(1, Number(params.campaignRelease?.pointsPerLevel ?? 10));
+      const campaignReleasedCount = campaignEnd >= campaignStart ? (campaignEnd - campaignStart + 1) : 0;
+      const effectivePoints = isCampaign ? campaignReleasedCount * campaignPtsPerLevel : totalPoints;
+
       const settings: GameAssignmentSettings & { jigsaw_sealed_keys?: string } = {
         is_game_library: true,
         ...(params.libraryGameId ? { library_game_id: params.libraryGameId } : {}),
@@ -734,7 +930,9 @@ class GameLibraryService {
         activity_type: catalogItem.activityType,
         category_id: catalogItem.categoryId,
         supports_scoring: supportsScoring,
-        teacher_instructions: cleanInstructions,
+        teacher_instructions: isCampaign
+          ? (params.instructions || '').trim() || `Complete Levels ${campaignStart}–${campaignEnd} in ${catalogItem.name} (${catalogItem.badgeLabel}).`
+          : cleanInstructions,
         start_date: params.startDate || null,
         max_attempts: params.maxAttempts ?? 1,
         is_compulsory: params.isCompulsory ?? true,
@@ -743,8 +941,29 @@ class GameLibraryService {
         assigned_student_ids: assignedStudentIds,
         unlock_mode: params.unlockMode || 'sequential',
         daily_limit: params.dailyLimit || 1,
-        levels: classroomLevels,
-        game_config: sanitizedSingleConfig,
+        levels: isCampaign ? undefined : classroomLevels,
+        game_config: isCampaign ? undefined : sanitizedSingleConfig,
+        ...(isCampaign
+          ? {
+              is_campaign_game: true,
+              total_levels: campaignTotal,
+              points_per_level: campaignPtsPerLevel,
+              level_release: {
+                total_levels: campaignTotal,
+                released_start: campaignStart,
+                released_end: campaignEnd,
+                release_history: [
+                  {
+                    start: campaignStart,
+                    end: campaignEnd,
+                    action: 'initial',
+                    releasedAt: new Date().toISOString(),
+                    releasedBy: user.id
+                  }
+                ]
+              }
+            }
+          : {}),
         ...(jigsawSealedKeys ? { jigsaw_sealed_keys: jigsawSealedKeys } : {})
       };
 
@@ -754,9 +973,9 @@ class GameLibraryService {
           .insert({
             classroom_id: targetClassroomId,
             title: params.title.trim(),
-            instructions: cleanInstructions,
+            instructions: settings.teacher_instructions || cleanInstructions,
             assignment_type: 'activity',
-            points: totalPoints,
+            points: effectivePoints,
             due_date: params.dueDate || null,
             attachment_urls: [],
             settings,
@@ -1077,6 +1296,98 @@ class GameLibraryService {
       return { error: err?.message || 'Failed to update competition status.' };
     }
   }
+
+  async getCampaignState(assignmentId: string): Promise<{ campaignState?: CampaignProgressState; error?: string }> {
+    try {
+      const res = await authenticatedFetch(`/api/games/campaign/state?assignmentId=${encodeURIComponent(assignmentId)}&_t=${Date.now()}`, {
+        method: 'GET',
+        cache: 'no-store'
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.success) {
+        return { error: json?.error || 'Failed to load level progress.' };
+      }
+      return { campaignState: json.campaignState as CampaignProgressState };
+    } catch (err: any) {
+      return { error: err?.message || 'Failed to load level progress.' };
+    }
+  }
+
+  async completeCampaignLevel(params: {
+    assignmentId: string;
+    classroomId: string;
+    gameId: GameId;
+    levelNumber: number;
+    scoreEarned: number;
+    maxPoints: number;
+    stars?: number;
+    timeTakenSeconds?: number;
+    details?: Record<string, unknown>;
+  }): Promise<{
+    success: boolean;
+    pointsAwarded?: number;
+    totalPointsEarned?: number;
+    completedCount?: number;
+    highestUnlockedLevel?: number;
+    releasedStart?: number;
+    releasedEnd?: number;
+    completedAllReleased?: boolean;
+    campaignState?: CampaignProgressState;
+    error?: string;
+  }> {
+    try {
+      const res = await authenticatedFetch('/api/games/campaign/complete-level', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params)
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Failed to save level completion.' };
+    }
+  }
+
+  async releaseCampaignLevels(params: {
+    assignmentId: string;
+    action: 'batch' | 'range' | 'lock' | 'release_all';
+    batchSize?: number;
+    startLevel?: number;
+    endLevel?: number;
+    notifyStudents?: boolean;
+  }): Promise<{
+    success: boolean;
+    levelRelease?: { total_levels: number; released_start: number; released_end: number; release_history?: any[] };
+    newlyUnlockedRange?: { start: number; end: number } | null;
+    notified?: boolean;
+    error?: string;
+  }> {
+    try {
+      const res = await authenticatedFetch('/api/games/campaign/release-levels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params)
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Failed to update released levels.' };
+    }
+  }
+
+  async getCampaignAnalytics(assignmentId: string): Promise<{ data?: CampaignAnalyticsData; error?: string }> {
+    try {
+      const res = await authenticatedFetch(`/api/games/campaign/analytics?assignmentId=${encodeURIComponent(assignmentId)}&_t=${Date.now()}`, {
+        method: 'GET',
+        cache: 'no-store'
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.success) {
+        return { error: json?.error || 'Failed to load campaign analytics.' };
+      }
+      return { data: json as CampaignAnalyticsData };
+    } catch (err: any) {
+      return { error: err?.message || 'Failed to load campaign analytics.' };
+    }
+  }
 }
 
 export interface TeacherDashboardClassroom {
@@ -1101,6 +1412,14 @@ export interface TeacherActivityAssignmentItem {
   dueDate: string | null;
   points: number;
   totalLevels: number;
+  isCampaignGame?: boolean;
+  campaignRelease?: {
+    totalLevels: number;
+    releasedStart: number;
+    releasedEnd: number;
+    pointsPerLevel: number;
+    releaseHistory?: any[];
+  } | null;
   submissionsCount: number;
   completedCount: number;
   inProgressCount: number;

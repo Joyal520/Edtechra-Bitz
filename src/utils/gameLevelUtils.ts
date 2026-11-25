@@ -6,6 +6,7 @@ import type {
   GameConfig,
   GameId,
   GameLevelDefinition,
+  GameOfWordsConfig,
   LevelUnlockMode,
   LiquidSentencesConfig,
   LuminaWordsConfig,
@@ -77,6 +78,12 @@ export function getLevelQuestionCount(gameId: GameId, cfg?: GameConfig | null): 
       return Array.isArray((cfg as ConnectionsConfig).groups)
         ? (cfg as ConnectionsConfig).groups.length
         : 0;
+    case 'game-of-words': {
+      const gow = cfg as GameOfWordsConfig;
+      return Array.isArray(gow.words) && gow.words.length > 0
+        ? gow.words.length
+        : Number(gow.roundSize || 10);
+    }
     default:
       return 0;
   }

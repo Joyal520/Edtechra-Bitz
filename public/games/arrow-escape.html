@@ -1,0 +1,2122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Arrow Escape 1000</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0b0f19;
+            --card-glass: rgba(20, 27, 45, 0.78);
+            --card-border: rgba(255, 255, 255, 0.12);
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-dark);
+            color: #f8fafc;
+            overflow: hidden;
+            height: 100dvh;
+            width: 100vw;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Animated Aurora Background */
+        .aurora-bg {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            overflow: hidden;
+            background: radial-gradient(circle at 15% 15%, #172554 0%, #090d16 55%, #05070c 100%);
+        }
+
+        .aurora-blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.45;
+            animation: floatBlob 18s infinite alternate ease-in-out;
+        }
+
+        .blob-1 {
+            width: 380px;
+            height: 380px;
+            background: #0d9488;
+            top: -80px;
+            left: -80px;
+        }
+
+        .blob-2 {
+            width: 420px;
+            height: 420px;
+            background: #2563eb;
+            bottom: -100px;
+            right: -80px;
+            animation-delay: -6s;
+        }
+
+        .blob-3 {
+            width: 300px;
+            height: 300px;
+            background: #e11d48;
+            top: 42%;
+            left: 55%;
+            opacity: 0.25;
+            animation-delay: -12s;
+        }
+
+        @keyframes floatBlob {
+            0% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(35px, -25px) scale(1.08); }
+            100% { transform: translate(-25px, 35px) scale(0.95); }
+        }
+
+        /* Main Mobile Frame Container */
+        .app-shell {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            max-width: 460px;
+            height: 100dvh;
+            max-height: 920px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 12px 16px 16px;
+            background: linear-gradient(180deg, rgba(17, 24, 39, 0.65) 0%, rgba(11, 15, 25, 0.85) 100%);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+
+        @media (min-width: 500px) {
+            .app-shell {
+                height: 95dvh;
+                border-radius: 36px;
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                box-shadow: 0 30px 70px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+            }
+        }
+
+        /* Tactile Glass & Clay Buttons */
+        .clay-pill {
+            background: rgba(30, 41, 59, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+            transition: transform 0.14s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s, box-shadow 0.2s;
+        }
+
+        .clay-pill:active:not(:disabled) {
+            transform: scale(0.93);
+        }
+
+        .clay-btn-primary {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            box-shadow: 0 6px 0 #065f46, 0 12px 24px rgba(16, 185, 129, 0.35), inset 0 2px 2px rgba(255, 255, 255, 0.4);
+            transition: transform 0.12s ease, box-shadow 0.12s ease;
+        }
+
+        .clay-btn-primary:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #065f46, 0 6px 12px rgba(16, 185, 129, 0.3), inset 0 2px 2px rgba(255, 255, 255, 0.4);
+        }
+
+        .clay-btn-amber {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            box-shadow: 0 5px 0 #92400e, 0 10px 20px rgba(245, 158, 11, 0.3), inset 0 2px 2px rgba(255, 255, 255, 0.4);
+            transition: transform 0.12s ease, box-shadow 0.12s ease;
+        }
+
+        .clay-btn-amber:active {
+            transform: translateY(3px);
+            box-shadow: 0 2px 0 #92400e, 0 5px 10px rgba(245, 158, 11, 0.3);
+        }
+
+        .clay-btn-rose {
+            background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
+            box-shadow: 0 5px 0 #9f1239, 0 10px 20px rgba(244, 63, 94, 0.3), inset 0 2px 2px rgba(255, 255, 255, 0.4);
+            transition: transform 0.12s ease, box-shadow 0.12s ease;
+        }
+
+        .clay-btn-rose:active {
+            transform: translateY(3px);
+            box-shadow: 0 2px 0 #9f1239, 0 5px 10px rgba(244, 63, 94, 0.3);
+        }
+
+        /* Board Container */
+        .board-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            max-height: 54dvh;
+            margin: auto;
+            border-radius: 28px;
+            background: rgba(15, 23, 42, 0.72);
+            border: 1.5px solid rgba(255, 255, 255, 0.1);
+            box-shadow: inset 0 4px 20px rgba(0, 0, 0, 0.55), 0 16px 36px rgba(0, 0, 0, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        canvas#gameCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        /* Zap Mode Pulse */
+        .zap-active-board {
+            border-color: #f43f5e !important;
+            box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.45), inset 0 0 25px rgba(244, 63, 94, 0.25) !important;
+            animation: zapPulse 1.2s infinite alternate;
+        }
+
+        @keyframes zapPulse {
+            from { box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.4), inset 0 0 15px rgba(244, 63, 94, 0.2); }
+            to { box-shadow: 0 0 0 5px rgba(244, 63, 94, 0.75), inset 0 0 30px rgba(244, 63, 94, 0.35); }
+        }
+
+        /* Heart Beat & Break */
+        @keyframes heartLost {
+            0% { transform: scale(1); }
+            25% { transform: scale(1.35) rotate(-12deg); }
+            50% { transform: scale(0.8) rotate(10deg); }
+            100% { transform: scale(1) rotate(0); }
+        }
+
+        .heart-shake {
+            animation: heartLost 0.4s ease-out;
+        }
+
+        /* Modal Backdrop */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            background: rgba(5, 8, 17, 0.8);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+
+        .modal-backdrop.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-card {
+            width: 100%;
+            max-width: 400px;
+            background: linear-gradient(165deg, #1e293b 0%, #0f172a 100%);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 32px;
+            padding: 24px;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            transform: scale(0.9) translateY(15px);
+            transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .modal-backdrop.open .modal-card {
+            transform: scale(1) translateY(0);
+        }
+
+        /* Custom Scrollbar for World Map */
+        .custom-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.4);
+            border-radius: 10px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.35);
+            border-radius: 10px;
+        }
+
+        /* Toast Notification */
+        #toastBanner {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-80px);
+            z-index: 100;
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            pointer-events: none;
+        }
+        #toastBanner.show {
+            transform: translateX(-50%) translateY(0);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Animated Soft Aurora Background -->
+    <div class="aurora-bg">
+        <div class="aurora-blob blob-1"></div>
+        <div class="aurora-blob blob-2"></div>
+        <div class="aurora-blob blob-3"></div>
+    </div>
+
+    <!-- Floating Toast Banner -->
+    <div id="toastBanner" class="px-5 py-2.5 rounded-full bg-slate-900/95 border border-white/15 shadow-2xl text-sm font-bold text-white flex items-center gap-2">
+        <span id="toastIcon">✨</span>
+        <span id="toastText">Notification</span>
+    </div>
+
+    <!-- Main Mobile-First Game Shell -->
+    <main class="app-shell">
+        
+        <!-- Top Header Bar -->
+        <header class="flex items-center justify-between gap-2 pt-1">
+            <!-- World Map / Level Drawer Trigger -->
+            <button id="btnOpenMap" class="clay-pill px-3.5 py-2 rounded-2xl flex items-center gap-2 text-left">
+                <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shadow-inner">
+                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h10"/>
+                    </svg>
+                </div>
+                <div>
+                    <div id="chapterBadge" class="text-[10px] font-bold uppercase tracking-wider text-emerald-400 leading-none">Dawn Meadow</div>
+                    <div class="text-sm font-extrabold text-white flex items-center gap-1 mt-0.5">
+                        <span id="headerLevelText">Level 1</span>
+                        <span class="text-slate-400 text-xs">/ 1000</span>
+                    </div>
+                </div>
+            </button>
+
+            <!-- Coins & Daily Challenge & Sound -->
+            <div class="flex items-center gap-2">
+                <!-- Daily Challenge Button -->
+                <button id="btnDaily" class="clay-pill px-2.5 py-2 rounded-2xl flex items-center gap-1.5 relative" title="Daily Challenge">
+                    <span class="text-base">📅</span>
+                    <div class="text-left hidden sm:block">
+                        <div class="text-[9px] font-bold uppercase text-amber-300 leading-none">Daily</div>
+                        <div id="dailyStreakMini" class="text-xs font-extrabold text-white leading-tight">0🔥</div>
+                    </div>
+                    <span id="dailyDot" class="w-2 h-2 rounded-full bg-amber-400 absolute -top-0.5 -right-0.5 animate-ping"></span>
+                </button>
+
+                <!-- Coin Balance -->
+                <div class="clay-pill px-3 py-2 rounded-2xl flex items-center gap-1.5">
+                    <span class="text-base">🪙</span>
+                    <span id="coinBalance" class="text-sm font-extrabold text-amber-300">150</span>
+                </div>
+
+                <!-- Audio Toggle -->
+                <button id="btnAudio" class="clay-pill w-10 h-10 rounded-2xl flex items-center justify-center text-slate-200" title="Toggle Sound">
+                    <svg id="iconSoundOn" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5zM15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14"/>
+                    </svg>
+                    <svg id="iconSoundOff" class="w-5 h-5 hidden text-rose-400" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5zM23 9l-6 6M17 9l6 6"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Sub-Header: Hearts, Mechanic Legend & Progress -->
+        <section class="flex items-center justify-between px-1 my-2">
+            <!-- Hearts Display -->
+            <div class="flex items-center gap-1.5 bg-slate-900/60 px-3 py-1.5 rounded-2xl border border-white/10" id="heartsContainer">
+                <span class="heart-icon text-lg transition-all duration-300">❤️</span>
+                <span class="heart-icon text-lg transition-all duration-300">❤️</span>
+                <span class="heart-icon text-lg transition-all duration-300">❤️</span>
+            </div>
+
+            <!-- Combo Pill -->
+            <div id="comboPill" class="opacity-0 transition-all duration-200 scale-90 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500/20 to-rose-500/20 border border-amber-400/40 text-amber-300 text-xs font-extrabold tracking-wide">
+                🔥 <span id="comboCount">2</span>x COMBO
+            </div>
+
+            <!-- Tiles Remaining & Restart -->
+            <div class="flex items-center gap-2">
+                <div class="bg-slate-900/60 px-3 py-1.5 rounded-2xl border border-white/10 text-xs font-bold text-slate-300">
+                    Left: <span id="tilesRemaining" class="text-white font-extrabold">0</span>
+                </div>
+                <button id="btnRestart" class="clay-pill w-9 h-9 rounded-xl flex items-center justify-center text-slate-300 hover:text-white" title="Restart Level">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                </button>
+            </div>
+        </section>
+
+        <!-- Mechanic Helper Pill (Dynamic based on level features) -->
+        <div id="mechanicBanner" class="flex items-center justify-center gap-3 text-[11px] font-semibold text-slate-300 bg-white/5 border border-white/10 rounded-xl py-1.5 px-3 mb-2">
+            <span id="mechanicText">Tap any unblocked arrow to slide it off the board!</span>
+        </div>
+
+        <!-- Interactive Game Board Canvas -->
+        <div id="boardWrapper" class="board-wrapper">
+            <canvas id="gameCanvas"></canvas>
+        </div>
+
+        <!-- Zap Mode Instruction Overlay Banner -->
+        <div id="zapBanner" class="hidden mt-2 py-2 px-4 rounded-2xl bg-rose-500/20 border border-rose-500/50 text-center text-xs font-bold text-rose-200 flex items-center justify-between">
+            <span>⚡ TAP ANY ARROW TO VAPORIZE IT</span>
+            <button id="btnCancelZap" class="px-2.5 py-1 rounded-lg bg-rose-600 text-white text-[11px] font-extrabold">Cancel</button>
+        </div>
+
+        <!-- Bottom Power-Ups & Boosters Dock -->
+        <footer class="pt-3 pb-1">
+            <div class="grid grid-cols-3 gap-2.5">
+                <!-- Hint Booster -->
+                <button id="btnHint" class="clay-pill py-2.5 px-2 rounded-2xl flex flex-col items-center justify-center relative group">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-lg">💡</span>
+                        <span class="text-xs font-extrabold text-white">Hint</span>
+                    </div>
+                    <div class="mt-1 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/30 text-[10px] font-extrabold text-amber-300 flex items-center gap-1">
+                        <span>🪙</span> <span>25</span>
+                    </div>
+                </button>
+
+                <!-- Undo Booster -->
+                <button id="btnUndo" class="clay-pill py-2.5 px-2 rounded-2xl flex flex-col items-center justify-center relative disabled:opacity-45">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-lg">↩️</span>
+                        <span class="text-xs font-extrabold text-white">Undo</span>
+                    </div>
+                    <div class="mt-1 px-2 py-0.5 rounded-full bg-sky-500/20 border border-sky-400/30 text-[10px] font-extrabold text-sky-300 flex items-center gap-1">
+                        <span>🪙</span> <span>15</span>
+                    </div>
+                </button>
+
+                <!-- Bomb / Zap Booster -->
+                <button id="btnZap" class="clay-pill py-2.5 px-2 rounded-2xl flex flex-col items-center justify-center relative">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-lg">⚡</span>
+                        <span class="text-xs font-extrabold text-white">Zap</span>
+                    </div>
+                    <div class="mt-1 px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-400/30 text-[10px] font-extrabold text-rose-300 flex items-center gap-1">
+                        <span>🪙</span> <span>40</span>
+                    </div>
+                </button>
+            </div>
+        </footer>
+    </main>
+
+    <!-- ==================== MODALS ==================== -->
+
+    <!-- 1. Level Victory Modal -->
+    <div id="modalVictory" class="modal-backdrop">
+        <div class="modal-card text-center relative overflow-hidden">
+            <div class="text-xs font-extrabold uppercase tracking-widest text-emerald-400 mb-1" id="victorySubtitle">Level 1 Cleared!</div>
+            <h2 class="text-3xl font-black text-white mb-4">BRILLIANT!</h2>
+
+            <!-- 3 Stars Display -->
+            <div class="flex items-center justify-center gap-3 my-4" id="victoryStars">
+                <span class="text-4xl transform -rotate-12 transition-all duration-500">⭐</span>
+                <span class="text-5xl transform -translate-y-2 transition-all duration-500">⭐</span>
+                <span class="text-4xl transform rotate-12 transition-all duration-500">⭐</span>
+            </div>
+
+            <!-- Rewards Summary -->
+            <div class="bg-slate-900/80 border border-white/10 rounded-2xl p-3.5 mb-5 flex items-center justify-around">
+                <div>
+                    <div class="text-[10px] uppercase font-bold text-slate-400">Reward</div>
+                    <div class="text-lg font-extrabold text-amber-300 flex items-center justify-center gap-1">
+                        <span>🪙</span> +<span id="victoryCoins">20</span>
+                    </div>
+                </div>
+                <div class="w-px h-8 bg-white/10"></div>
+                <div>
+                    <div class="text-[10px] uppercase font-bold text-slate-400">Max Combo</div>
+                    <div class="text-lg font-extrabold text-emerald-400"><span id="victoryCombo">1</span>x</div>
+                </div>
+                <div class="w-px h-8 bg-white/10"></div>
+                <div>
+                    <div class="text-[10px] uppercase font-bold text-slate-400">Hearts Left</div>
+                    <div class="text-lg font-extrabold text-rose-400"><span id="victoryHearts">3</span>/3 ❤️</div>
+                </div>
+            </div>
+
+            <button id="btnNextLevel" class="w-full py-4 rounded-2xl clay-btn-primary text-white font-black text-lg tracking-wide">
+                NEXT LEVEL ➔
+            </button>
+        </div>
+    </div>
+
+    <!-- 2. Out of Hearts Modal -->
+    <div id="modalOutOfHearts" class="modal-backdrop">
+        <div class="modal-card text-center">
+            <div class="w-16 h-16 rounded-3xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-4xl mx-auto mb-3">
+                💔
+            </div>
+            <h2 class="text-2xl font-black text-white mb-1">Out of Hearts!</h2>
+            <p class="text-sm text-slate-300 mb-5">An arrow collided with an obstacle. Watch your angles or grab an extra heart to keep going!</p>
+
+            <div class="space-y-3">
+                <button id="btnRefillHeart" class="w-full py-3.5 rounded-2xl clay-btn-amber text-white font-extrabold text-base flex items-center justify-center gap-2">
+                    <span>❤️ +1 Extra Heart</span>
+                    <span class="px-2 py-0.5 rounded-full bg-black/25 text-xs">🪙 30</span>
+                </button>
+                <button id="btnRetryLevel" class="w-full py-3.5 rounded-2xl clay-pill text-slate-200 font-bold text-base hover:text-white">
+                    ↻ Retry Level
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. World Map / 1,000 Level Selector Modal -->
+    <div id="modalWorldMap" class="modal-backdrop">
+        <div class="modal-card max-w-md h-[82dvh] flex flex-col p-5">
+            <div class="flex items-center justify-between mb-3">
+                <div>
+                    <h2 class="text-xl font-black text-white">World Map</h2>
+                    <p class="text-xs text-slate-400">1,000 Guaranteed-Solvable Levels</p>
+                </div>
+                <button id="btnCloseMap" class="clay-pill w-9 h-9 rounded-xl flex items-center justify-center text-slate-300 font-bold">✕</button>
+            </div>
+
+            <!-- Overall Progress & Quick Jump -->
+            <div class="bg-slate-900/80 border border-white/10 rounded-2xl p-3 mb-3 flex items-center justify-between gap-2">
+                <div>
+                    <div class="text-[10px] font-bold uppercase text-slate-400">Total Stars</div>
+                    <div class="text-sm font-extrabold text-amber-300">⭐ <span id="totalStarsCount">0</span> / 3000</div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <input id="jumpLevelInput" type="number" min="1" max="1000" placeholder="1-1000" class="w-20 px-2.5 py-1.5 rounded-xl bg-slate-800 border border-white/15 text-xs font-bold text-white text-center focus:outline-none focus:border-emerald-400">
+                    <button id="btnJumpLevel" class="px-3 py-1.5 rounded-xl bg-emerald-500 text-slate-950 font-extrabold text-xs">Go</button>
+                </div>
+            </div>
+
+            <!-- Chapter Selector Tabs -->
+            <div id="chapterTabs" class="flex gap-1.5 overflow-x-auto pb-2 mb-2 custom-scroll shrink-0">
+                <!-- Populated dynamically -->
+            </div>
+
+            <!-- Chapter Info Banner -->
+            <div id="chapterInfoBanner" class="px-3 py-2 rounded-xl bg-white/5 border border-white/10 mb-2.5 flex items-center justify-between text-xs shrink-0">
+                <span id="chapterTitleBanner" class="font-bold text-emerald-300">Ch. 1: Dawn Meadow</span>
+                <span id="chapterMechanicTag" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 font-semibold">Classic Grid</span>
+            </div>
+
+            <!-- 100-Level Grid for Selected Chapter -->
+            <div id="levelGridContainer" class="grid grid-cols-5 gap-2 overflow-y-auto pr-1 custom-scroll flex-1 content-start">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Daily Challenge Modal -->
+    <div id="modalDaily" class="modal-backdrop">
+        <div class="modal-card text-center">
+            <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/30 text-amber-300 text-xs font-extrabold mb-3">
+                <span>📅 DAILY CHALLENGE</span>
+            </div>
+            <h2 id="dailyDateTitle" class="text-2xl font-black text-white mb-1">Today's Puzzle</h2>
+            <p class="text-xs text-slate-300 mb-4">A unique seed generated fresh every 24 hours. Complete it to build your streak and earn +75 Coins!</p>
+
+            <div class="bg-slate-900/80 border border-white/10 rounded-2xl p-4 mb-5 flex items-center justify-around">
+                <div>
+                    <div class="text-[10px] font-bold uppercase text-slate-400">Current Streak</div>
+                    <div class="text-2xl font-black text-amber-400"><span id="dailyStreakModal">0</span> 🔥</div>
+                </div>
+                <div class="w-px h-10 bg-white/10"></div>
+                <div>
+                    <div class="text-[10px] font-bold uppercase text-slate-400">Status</div>
+                    <div id="dailyStatusText" class="text-sm font-extrabold text-emerald-400">Ready!</div>
+                </div>
+            </div>
+
+            <div class="space-y-2.5">
+                <button id="btnPlayDaily" class="w-full py-3.5 rounded-2xl clay-btn-primary text-white font-black text-base">
+                    PLAY DAILY PUZZLE
+                </button>
+                <button id="btnCloseDaily" class="w-full py-2.5 rounded-2xl text-slate-400 font-bold text-sm hover:text-white">
+                    Back to Campaign
+                </button>
+            </div>
+        </div>
+    </div>
+
+<script>
+/**
+ * ============================================================================
+ * ARROW ESCAPE 1000 - DETERMINISTIC SOLVER-GUARANTEED PUZZLE ENGINE
+ * ============================================================================
+ * Architecture:
+ * 1. Mulberry32 Seeded PRNG: Guarantees identical boards across sessions/devices.
+ * 2. Reverse-Construction Level Generator:
+ *    - Places Stone Blockers and 90° Clockwise Rotator Pads according to level tier.
+ *    - Simulates backward/forward trajectories to place directional arrow tiles
+ *      such that every tile has a mathematically verified escape sequence!
+ * 3. Web Audio Procedural Synthesizer: Zero external assets, tactile foley.
+ * 4. 60fps Canvas Renderer: Claymorphic 3D rounded tiles, particle trails,
+ *    impact sparks, rotator animations, and celebratory confetti.
+ */
+
+// ==================== 1. PROCEDURAL WEB AUDIO SYNTHESIZER ====================
+class SoundEngine {
+    constructor() {
+        this.ctx = null;
+        this.enabled = true;
+    }
+
+    init() {
+        if (!this.ctx) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioCtx();
+        }
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    }
+
+    playTap() {
+        if (!this.enabled) return;
+        this.init();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(320, now);
+        osc.frequency.exponentialRampToValueAtTime(140, now + 0.06);
+        gain.gain.setValueAtTime(0.18, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.065);
+    }
+
+    playLaunch(combo = 1) {
+        if (!this.enabled) return;
+        this.init();
+        const now = this.ctx.currentTime;
+        const pitchBoost = Math.min(combo - 1, 12) * 38;
+
+        // Crisp whoosh + melodic chime
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(380 + pitchBoost, now);
+        osc.frequency.exponentialRampToValueAtTime(760 + pitchBoost * 1.3, now + 0.16);
+
+        gain.gain.setValueAtTime(0.22, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.19);
+    }
+
+    playRotate() {
+        if (!this.enabled) return;
+        this.init();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(520, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.09);
+        gain.gain.setValueAtTime(0.16, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.095);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.1);
+    }
+
+    playBlocked() {
+        if (!this.enabled) return;
+        this.init();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(145, now);
+        osc.frequency.exponentialRampToValueAtTime(58, now + 0.22);
+
+        gain.gain.setValueAtTime(0.26, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.25);
+    }
+
+    playZap() {
+        if (!this.enabled) return;
+        this.init();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(920, now);
+        osc.frequency.exponentialRampToValueAtTime(180, now + 0.25);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.27);
+    }
+
+    playVictory() {
+        if (!this.enabled) return;
+        this.init();
+        const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+        notes.forEach((freq, idx) => {
+            const now = this.ctx.currentTime + idx * 0.09;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, now);
+            gain.gain.setValueAtTime(0.22, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.36);
+        });
+    }
+}
+
+const sfx = new SoundEngine();
+
+// ==================== 2. DETERMINISTIC PRNG & LEVEL GENERATOR ====================
+function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function() {
+        a |= 0;
+        a = a + 0x6D2B79F5 | 0;
+        let t = Math.imul(a ^ a >>> 15, 1 | a);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+}
+
+// Directions: 0 = UP, 1 = RIGHT, 2 = DOWN, 3 = LEFT
+const DIRS = [
+    { dx: 0, dy: -1, name: 'UP',    color: '#10b981', dark: '#047857', glow: 'rgba(16,185,129,0.45)' }, // Emerald
+    { dx: 1, dy: 0,  name: 'RIGHT', color: '#0ea5e9', dark: '#0369a1', glow: 'rgba(14,165,233,0.45)' }, // Azure
+    { dx: 0, dy: 1,  name: 'DOWN',  color: '#f43f5e', dark: '#be123c', glow: 'rgba(244,63,94,0.45)'  }, // Coral
+    { dx: -1, dy: 0, name: 'LEFT',  color: '#f59e0b', dark: '#b45309', glow: 'rgba(245,158,11,0.45)' }  // Amber
+];
+
+const CHAPTERS = [
+    { id: 1, name: "Dawn Meadow",     range: [1, 100],   tag: "4×4 – 6×6 Classic" },
+    { id: 2, name: "Cobalt Bay",      range: [101, 200], tag: "6×6 – 7×7 + Stone Blockers" },
+    { id: 3, name: "Amber Canyon",    range: [201, 300], tag: "7×7 + 90° Rotator Pads" },
+    { id: 4, name: "Emerald Spire",   range: [301, 400], tag: "7×7 – 8×8 Hybrid Logic" },
+    { id: 5, name: "Crimson Forge",   range: [401, 500], tag: "8×8 Dense Clusters" },
+    { id: 6, name: "Sapphire Frost",  range: [501, 600], tag: "8×8 Master Chains" },
+    { id: 7, name: "Obsidian Rift",   range: [601, 700], tag: "8×8 – 9×9 Labyrinth" },
+    { id: 8, name: "Solaris Crown",   range: [701, 800], tag: "9×9 Precision Routing" },
+    { id: 9, name: "Astral Nexus",    range: [801, 900], tag: "9×9 Grandmaster" },
+    { id: 10, name: "Eternal Apex",   range: [901, 1000],tag: "9×9 Nightmare Gauntlet" }
+];
+
+/**
+ * Traces a ray from (startX, startY) in initial direction `dir` across the board.
+ * Respects current remaining arrows, stone blockers, and 90° clockwise rotator pads.
+ * Returns { escaped: boolean, path: [{x, y, dir}], hitCell: {x, y} | null }
+ */
+function traceArrowPath(gridSize, board, startX, startY, initialDir) {
+    let x = startX;
+    let y = startY;
+    let dir = initialDir;
+    const path = [{ x, y, dir }];
+    const visitedStates = new Set();
+    visitedStates.add(`${x},${y},${dir}`);
+
+    let steps = 0;
+    const maxSteps = gridSize * gridSize * 4;
+
+    while (steps < maxSteps) {
+        steps++;
+        const nx = x + DIRS[dir].dx;
+        const ny = y + DIRS[dir].dy;
+
+        // Off the edge -> Escaped!
+        if (nx < 0 || nx >= gridSize || ny < 0 || ny >= gridSize) {
+            return { escaped: true, path, hitCell: null };
+        }
+
+        const cell = board[ny][nx];
+
+        // Blocked by Stone or another Arrow
+        if (cell.type === 'stone' || cell.type === 'arrow') {
+            return { escaped: false, path, hitCell: { x: nx, y: ny } };
+        }
+
+        // Advance into cell
+        x = nx;
+        y = ny;
+
+        // Check if cell has a 90° clockwise rotator pad
+        if (cell.pad === 'rotator') {
+            dir = (dir + 1) % 4;
+        }
+
+        path.push({ x, y, dir });
+
+        const stateKey = `${x},${y},${dir}`;
+        if (visitedStates.has(stateKey)) {
+            // Infinite rotator loop -> counts as blocked
+            return { escaped: false, path, hitCell: { x, y } };
+        }
+        visitedStates.add(stateKey);
+    }
+
+    return { escaped: false, path, hitCell: { x, y } };
+}
+
+/**
+ * Deterministic Solver-Guaranteed Level Generator
+ * Uses reverse extraction construction:
+ * We build the level by choosing empty cells and assigning them a direction that
+ * currently has a clear exit path given the arrows ALREADY placed on the board!
+ * When played forward, the player simply extracts them in reverse (or any valid) order.
+ */
+function generateLevelData(levelNum, customSeed = null) {
+    const seed = customSeed !== null ? customSeed : (levelNum * 7919 + 104729);
+    const rng = mulberry32(seed);
+
+    // Determine Grid Size & Feature Counts by Tier
+    let gridSize = 4;
+    let stoneCount = 0;
+    let rotatorCount = 0;
+    let fillRatio = 0.68;
+
+    if (levelNum <= 10) {
+        gridSize = 4;
+        fillRatio = 0.62 + (levelNum / 10) * 0.15;
+    } else if (levelNum <= 50) {
+        gridSize = 5 + (levelNum > 28 ? 1 : 0);
+        fillRatio = 0.68 + ((levelNum - 10) / 40) * 0.14;
+    } else if (levelNum <= 200) {
+        gridSize = levelNum <= 120 ? 6 : 7;
+        stoneCount = 1 + Math.floor((levelNum - 50) / 38);
+        fillRatio = 0.72;
+    } else if (levelNum <= 500) {
+        gridSize = levelNum <= 350 ? 7 : 8;
+        stoneCount = 2 + Math.floor((levelNum - 200) / 90);
+        rotatorCount = 1 + Math.floor((levelNum - 200) / 75);
+        fillRatio = 0.74;
+    } else {
+        gridSize = levelNum <= 700 ? 8 : 9;
+        stoneCount = 3 + Math.floor((levelNum - 500) / 140);
+        rotatorCount = 2 + Math.floor((levelNum - 500) / 120);
+        fillRatio = 0.76;
+    }
+
+    // Initialize empty board
+    const board = Array.from({ length: gridSize }, () =>
+        Array.from({ length: gridSize }, () => ({ type: 'empty', dir: 0, pad: null }))
+    );
+
+    // Helper to get shuffled list of all coordinates
+    const allCoords = [];
+    for (let y = 0; y < gridSize; y++) {
+        for (let x = 0; x < gridSize; x++) {
+            allCoords.push({ x, y });
+        }
+    }
+    for (let i = allCoords.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [allCoords[i], allCoords[j]] = [allCoords[j], allCoords[i]];
+    }
+
+    let coordCursor = 0;
+
+    // 1. Place Stone Blockers (avoiding outer rim on smaller boards so exits remain plentiful)
+    let placedStones = 0;
+    while (placedStones < stoneCount && coordCursor < allCoords.length) {
+        const { x, y } = allCoords[coordCursor++];
+        const isCorner = (x === 0 || x === gridSize - 1) && (y === 0 || y === gridSize - 1);
+        if (!isCorner) {
+            board[y][x].type = 'stone';
+            placedStones++;
+        }
+    }
+
+    // 2. Place 90° Clockwise Rotator Pads on empty tiles
+    let placedRotators = 0;
+    while (placedRotators < rotatorCount && coordCursor < allCoords.length) {
+        const { x, y } = allCoords[coordCursor++];
+        if (board[y][x].type === 'empty') {
+            board[y][x].pad = 'rotator';
+            placedRotators++;
+        }
+    }
+
+    // 3. Reverse-Construction Arrow Placement (100% Solvable Guarantee!)
+    // Collect remaining empty cells (cells with rotator pads stay empty for arrows to traverse)
+    const candidateCells = [];
+    for (let y = 0; y < gridSize; y++) {
+        for (let x = 0; x < gridSize; x++) {
+            if (board[y][x].type === 'empty' && board[y][x].pad === null) {
+                candidateCells.push({ x, y });
+            }
+        }
+    }
+
+    const targetArrows = Math.max(4, Math.floor(candidateCells.length * fillRatio));
+    let placedArrows = 0;
+    const solutionOrder = [];
+
+    // Repeatedly scan candidate cells and place an arrow if at least one direction escapes
+    // cleanly past the ALREADY-PLACED arrows!
+    let progress = true;
+    while (placedArrows < targetArrows && progress) {
+        progress = false;
+        // Shuffle candidate order each pass for organic interlocking dependencies
+        for (let i = candidateCells.length - 1; i > 0; i--) {
+            const j = Math.floor(rng() * (i + 1));
+            [candidateCells[i], candidateCells[j]] = [candidateCells[j], candidateCells[i]];
+        }
+
+        for (let i = 0; i < candidateCells.length; i++) {
+            if (placedArrows >= targetArrows) break;
+            const { x, y } = candidateCells[i];
+            if (board[y][x].type !== 'empty') continue;
+
+            // Test all 4 directions
+            const validDirs = [];
+            for (let d = 0; d < 4; d++) {
+                const res = traceArrowPath(gridSize, board, x, y, d);
+                if (res.escaped) {
+                    // Score direction: prefer paths that pass over rotators or point inward
+                    // to create interesting dependency chains!
+                    let weight = 1;
+                    if (res.path.length > 2) weight += 2;
+                    if (res.path.some(p => board[p.y][p.x].pad === 'rotator')) weight += 4;
+                    validDirs.push({ d, weight });
+                }
+            }
+
+            if (validDirs.length > 0) {
+                // Weighted random pick among valid escape directions
+                const totalWeight = validDirs.reduce((sum, item) => sum + item.weight, 0);
+                let pick = rng() * totalWeight;
+                let chosenDir = validDirs[0].d;
+                for (const item of validDirs) {
+                    pick -= item.weight;
+                    if (pick <= 0) {
+                        chosenDir = item.d;
+                        break;
+                    }
+                }
+
+                board[y][x] = { type: 'arrow', dir: chosenDir, pad: null };
+                solutionOrder.push({ x, y });
+                placedArrows++;
+                progress = true;
+            }
+        }
+    }
+
+    return {
+        levelNum,
+        gridSize,
+        board,
+        totalArrows: placedArrows,
+        hasStones: placedStones > 0,
+        hasRotators: placedRotators > 0,
+        hintSequence: solutionOrder.reverse()
+    };
+}
+
+// ==================== 3. GAME STATE & PERSISTENCE ====================
+const STORAGE_KEY = 'arrow_escape_1000_save_v1';
+const edtechra = {
+  active: false,
+  mode: 'standalone',
+  assignmentId: null,
+  totalLevels: 1000,
+  releasedStart: 1,
+  releasedEnd: 1000,
+  highestUnlockedLevel: 1000,
+  pointsPerLevel: 10,
+  completedLevels: {}
+};
+function getEdtechraStorageKey() {
+  return edtechra.assignmentId ? STORAGE_KEY + '_assign_' + edtechra.assignmentId : STORAGE_KEY;
+}
+function isArrowTeacherLocked(lvl) {
+  if (!edtechra.active || edtechra.mode === 'preview') return false;
+  return lvl < edtechra.releasedStart || lvl > edtechra.releasedEnd;
+}
+function isArrowProgLocked(lvl) {
+  if (!edtechra.active || edtechra.mode === 'preview') return false;
+  return lvl > edtechra.highestUnlockedLevel;
+}
+
+const defaultSave = {
+    unlockedLevel: 1,
+    currentLevel: 1,
+    coins: 150,
+    stars: {}, // { "1": 3, "2": 2, ... }
+    soundEnabled: true,
+    dailyStreak: 0,
+    lastDailyDate: null
+};
+
+let saveData = { ...defaultSave };
+
+function loadSave() {
+    try {
+        const raw = localStorage.getItem(getEdtechraStorageKey());
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            saveData = { ...defaultSave, ...parsed };
+        }
+    } catch (e) {
+        console.warn('Could not load save:', e);
+    }
+    sfx.enabled = saveData.soundEnabled;
+}
+
+function persistSave() {
+    try {
+        localStorage.setItem(getEdtechraStorageKey(), JSON.stringify(saveData));
+    } catch (e) {
+        console.warn('Could not write save:', e);
+    }
+}
+
+// Active Gameplay State
+const game = {
+    isDaily: false,
+    levelNum: 1,
+    gridSize: 4,
+    board: [],
+    initialBoardSnapshot: null,
+    history: [], // Stack of board snapshots for Undo
+    hearts: 3,
+    combo: 0,
+    maxCombo: 1,
+    lastClearTime: 0,
+    arrowsRemaining: 0,
+    zapMode: false,
+    hintCell: null, // { x, y, pulseTime }
+    animations: [], // Active sliding/bouncing arrow animations
+    particles: [],  // Sparks, trails, confetti
+    selectedChapter: 1
+};
+
+// ==================== 4. CANVAS RENDERING & ANIMATION ENGINE ====================
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let canvasSize = 400;
+let dpr = 1;
+
+function resizeCanvas() {
+    const wrapper = document.getElementById('boardWrapper');
+    const rect = wrapper.getBoundingClientRect();
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvasSize = rect.width;
+    canvas.width = canvasSize * dpr;
+    canvas.height = canvasSize * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+window.addEventListener('resize', resizeCanvas);
+
+function getCellGeometry(gridSize) {
+    const padding = Math.max(12, canvasSize * 0.045);
+    const gap = Math.max(5, (canvasSize - padding * 2) * 0.022);
+    const usable = canvasSize - padding * 2 - gap * (gridSize - 1);
+    const cellSize = usable / gridSize;
+    return { padding, gap, cellSize };
+}
+
+function cellCenter(gx, gy, geom) {
+    const x = geom.padding + gx * (geom.cellSize + geom.gap) + geom.cellSize / 2;
+    const y = geom.padding + gy * (geom.cellSize + geom.gap) + geom.cellSize / 2;
+    return { x, y };
+}
+
+function drawRoundedRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+}
+
+function spawnParticles(x, y, color, count = 14, speedScale = 1) {
+    for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = (1.5 + Math.random() * 4.5) * speedScale;
+        game.particles.push({
+            x,
+            y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            size: 2.5 + Math.random() * 4,
+            color,
+            alpha: 1,
+            decay: 0.025 + Math.random() * 0.025
+        });
+    }
+}
+
+function renderLoop(timestamp) {
+    ctx.clearRect(0, 0, canvasSize, canvasSize);
+
+    const geom = getCellGeometry(game.gridSize);
+    const radius = Math.max(8, geom.cellSize * 0.24);
+
+    // 1. Draw Grid Slots & Rotator Pads
+    for (let y = 0; y < game.gridSize; y++) {
+        for (let x = 0; x < game.gridSize; x++) {
+            const cx = geom.padding + x * (geom.cellSize + geom.gap);
+            const cy = geom.padding + y * (geom.cellSize + geom.gap);
+            const cell = game.board[y][x];
+
+            // Recessed slot background
+            drawRoundedRect(ctx, cx, cy, geom.cellSize, geom.cellSize, radius);
+            ctx.fillStyle = 'rgba(30, 41, 59, 0.55)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Draw 90° Clockwise Rotator Pad if present
+            if (cell.pad === 'rotator') {
+                const center = cellCenter(x, y, geom);
+                const padR = geom.cellSize * 0.34;
+                ctx.save();
+                ctx.translate(center.x, center.y);
+                ctx.rotate((timestamp * 0.0018) % (Math.PI * 2));
+
+                // Glowing cyan/purple vortex ring
+                ctx.beginPath();
+                ctx.arc(0, 0, padR, 0, Math.PI * 1.55);
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = Math.max(2.5, geom.cellSize * 0.065);
+                ctx.lineCap = 'round';
+                ctx.stroke();
+
+                // Clockwise arrow tip
+                ctx.fillStyle = '#38bdf8';
+                ctx.beginPath();
+                ctx.moveTo(padR + 4, 0);
+                ctx.lineTo(padR - 4, -5);
+                ctx.lineTo(padR - 4, 5);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+    }
+
+    // Track cells currently animated so we don't double-draw them statically
+    const animatedOriginKeys = new Set(game.animations.map(a => `${a.originX},${a.originY}`));
+
+    // 2. Draw Static Stone Blockers & Arrow Tiles
+    for (let y = 0; y < game.gridSize; y++) {
+        for (let x = 0; x < game.gridSize; x++) {
+            if (animatedOriginKeys.has(`${x},${y}`)) continue;
+            const cell = game.board[y][x];
+            if (cell.type === 'empty') continue;
+
+            const center = cellCenter(x, y, geom);
+            if (cell.type === 'stone') {
+                drawStoneTile(center.x, center.y, geom.cellSize, radius);
+            } else if (cell.type === 'arrow') {
+                const isHinted = game.hintCell && game.hintCell.x === x && game.hintCell.y === y;
+                drawArrowTile(center.x, center.y, geom.cellSize, radius, cell.dir, 1, isHinted, timestamp);
+            }
+        }
+    }
+
+    // 3. Update & Draw Active Animations (Escaping or Bouncing Arrows)
+    for (let i = game.animations.length - 1; i >= 0; i--) {
+        const anim = game.animations[i];
+        anim.progress += anim.speed;
+
+        if (anim.type === 'escape') {
+            // Interpolate along waypoints + exit off screen
+            const totalSegs = anim.points.length - 1;
+            const scaled = anim.progress * totalSegs;
+            const segIdx = Math.min(Math.floor(scaled), totalSegs - 1);
+            const segT = scaled - segIdx;
+
+            const p0 = anim.points[segIdx];
+            const p1 = anim.points[segIdx + 1];
+            const curX = p0.x + (p1.x - p0.x) * segT;
+            const curY = p0.y + (p1.y - p0.y) * segT;
+
+            // Check if passed a rotator waypoint for sound feedback
+            if (segIdx > anim.lastSegIdx) {
+                anim.lastSegIdx = segIdx;
+                if (p0.rotated) {
+                    sfx.playRotate();
+                    spawnParticles(p0.x, p0.y, '#38bdf8', 8, 0.7);
+                }
+            }
+
+            // Trail particle
+            if (Math.random() < 0.75) {
+                game.particles.push({
+                    x: curX + (Math.random() - 0.5) * 8,
+                    y: curY + (Math.random() - 0.5) * 8,
+                    vx: (Math.random() - 0.5) * 1.2,
+                    vy: (Math.random() - 0.5) * 1.2,
+                    size: geom.cellSize * 0.12,
+                    color: DIRS[p0.dir].color,
+                    alpha: 0.75,
+                    decay: 0.045
+                });
+            }
+
+            const fadeAlpha = anim.progress > 0.78 ? Math.max(0, 1 - (anim.progress - 0.78) / 0.22) : 1;
+            drawArrowTile(curX, curY, geom.cellSize, radius, p0.dir, fadeAlpha, false, timestamp);
+
+            if (anim.progress >= 1) {
+                game.animations.splice(i, 1);
+                checkLevelCompletion();
+            }
+        } else if (anim.type === 'bounce') {
+            // Slide forward to obstacle, impact at 0.5, recoil back to origin
+            let t = anim.progress;
+            let curX, curY, shakeOffset = 0;
+
+            if (t < 0.45) {
+                const k = t / 0.45;
+                curX = anim.startX + (anim.hitX - anim.startX) * k;
+                curY = anim.startY + (anim.hitY - anim.startY) * k;
+            } else {
+                if (!anim.impactTriggered) {
+                    anim.impactTriggered = true;
+                    sfx.playBlocked();
+                    spawnParticles(anim.hitX, anim.hitY, '#f43f5e', 16, 1.1);
+                    loseHeart();
+                }
+                const k = (t - 0.45) / 0.55;
+                const easeOut = 1 - Math.pow(1 - k, 3);
+                curX = anim.hitX + (anim.startX - anim.hitX) * easeOut;
+                curY = anim.hitY + (anim.startY - anim.hitY) * easeOut;
+                shakeOffset = Math.sin(k * Math.PI * 6) * (1 - k) * 6;
+            }
+
+            drawArrowTile(curX + shakeOffset, curY, geom.cellSize, radius, anim.dir, 1, false, timestamp);
+
+            if (anim.progress >= 1) {
+                game.animations.splice(i, 1);
+            }
+        }
+    }
+
+    // 4. Update & Draw Particles
+    for (let i = game.particles.length - 1; i >= 0; i--) {
+        const p = game.particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.alpha -= p.decay;
+        if (p.alpha <= 0) {
+            game.particles.splice(i, 1);
+            continue;
+        }
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    requestAnimationFrame(renderLoop);
+}
+
+function drawStoneTile(cx, cy, size, radius) {
+    const s = size * 0.92;
+    const x = cx - s / 2;
+    const y = cy - s / 2;
+
+    // 3D Bottom Bevel
+    drawRoundedRect(ctx, x, y + 4, s, s, radius);
+    ctx.fillStyle = '#1e293b';
+    ctx.fill();
+
+    // Top Stone Body
+    const grad = ctx.createLinearGradient(x, y, x + s, y + s);
+    grad.addColorStop(0, '#64748b');
+    grad.addColorStop(1, '#334155');
+    drawRoundedRect(ctx, x, y, s, s, radius);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Inner bevel highlight
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Lock / Crosshatch emblem
+    ctx.strokeStyle = 'rgba(15, 23, 42, 0.55)';
+    ctx.lineWidth = Math.max(2.5, s * 0.08);
+    ctx.lineCap = 'round';
+    const d = s * 0.2;
+    ctx.beginPath();
+    ctx.moveTo(cx - d, cy - d);
+    ctx.lineTo(cx + d, cy + d);
+    ctx.moveTo(cx + d, cy - d);
+    ctx.lineTo(cx - d, cy + d);
+    ctx.stroke();
+}
+
+function drawArrowTile(cx, cy, size, radius, dir, alpha = 1, isHinted = false, timestamp = 0) {
+    const info = DIRS[dir];
+    const s = size * 0.92;
+    const x = cx - s / 2;
+    const y = cy - s / 2;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    // Hint Golden Ring Pulse
+    if (isHinted) {
+        const pulse = 1 + Math.sin(timestamp * 0.008) * 0.08;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(pulse, pulse);
+        drawRoundedRect(ctx, -s / 2 - 4, -s / 2 - 4, s + 8, s + 8, radius + 3);
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 3.5;
+        ctx.shadowColor = '#f59e0b';
+        ctx.shadowBlur = 14;
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // 3D Clay Shadow Base
+    drawRoundedRect(ctx, x, y + 4.5, s, s, radius);
+    ctx.fillStyle = info.dark;
+    ctx.fill();
+
+    // Main Vibrant Tile Face
+    drawRoundedRect(ctx, x, y, s, s, radius);
+    ctx.fillStyle = info.color;
+    ctx.fill();
+
+    // Top Glossy Highlight
+    const gloss = ctx.createLinearGradient(x, y, x, y + s * 0.65);
+    gloss.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
+    gloss.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+    drawRoundedRect(ctx, x + 1.5, y + 1.5, s - 3, s * 0.6, radius - 1);
+    ctx.fillStyle = gloss;
+    ctx.fill();
+
+    // Crisp White Directional Chevron + Shaft
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate((dir * Math.PI) / 2);
+
+    ctx.strokeStyle = '#ffffff';
+    ctx.fillStyle = '#ffffff';
+    ctx.lineWidth = Math.max(3, s * 0.11);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    const arrowH = s * 0.27;
+    const arrowW = s * 0.24;
+
+    // Shaft
+    ctx.beginPath();
+    ctx.moveTo(0, arrowH);
+    ctx.lineTo(0, -arrowH * 0.65);
+    ctx.stroke();
+
+    // Arrowhead
+    ctx.beginPath();
+    ctx.moveTo(-arrowW, -arrowH * 0.1);
+    ctx.lineTo(0, -arrowH);
+    ctx.lineTo(arrowW, -arrowH * 0.1);
+    ctx.stroke();
+
+    ctx.restore();
+    ctx.restore();
+}
+
+// ==================== 5. GAMEPLAY INTERACTIONS & LOGIC ====================
+function cloneBoard(board) {
+    return board.map(row => row.map(cell => ({ ...cell })));
+}
+
+function getChapterForLevel(lvl) {
+    return CHAPTERS.find(c => lvl >= c.range[0] && lvl <= c.range[1]) || CHAPTERS[0];
+}
+
+function startLevel(levelNum, isDaily = false) {
+    if (!isDaily && edtechra.active && edtechra.mode === 'student') {
+        if (edtechra.releasedEnd < edtechra.releasedStart) {
+            showToast('🔒', 'No levels are currently released by your teacher.');
+            return;
+        }
+        if (isArrowTeacherLocked(levelNum)) {
+            if (levelNum > edtechra.releasedEnd && saveData.stars[edtechra.releasedEnd]) {
+                document.getElementById('victorySubtitle').textContent = "🎉 You've completed all the available levels! Wait for your teacher to unlock the next challenge.";
+                document.getElementById('btnNextLevel').textContent = 'BACK TO CLASSROOM';
+                openModal('modalVictory');
+            } else {
+                showToast('🔒', `Level ${levelNum} is not released yet (Released: ${edtechra.releasedStart}–${edtechra.releasedEnd}).`);
+            }
+            return;
+        }
+        if (isArrowProgLocked(levelNum)) {
+            showToast('🔒', `Complete Level ${Math.max(edtechra.releasedStart, edtechra.highestUnlockedLevel)} first.`);
+            return;
+        }
+    }
+    game.levelStartTime = performance.now();
+    game.isDaily = isDaily;
+    game.levelNum = levelNum;
+    game.hearts = 3;
+    game.combo = 0;
+    game.maxCombo = 1;
+    game.history = [];
+    game.animations = [];
+    game.particles = [];
+    game.hintCell = null;
+    setZapMode(false);
+
+    let data;
+    if (isDaily) {
+        const todayKey = getTodayDateKey();
+        const dailySeed = hashStringToSeed('DAILY_' + todayKey);
+        data = generateLevelData(260, dailySeed); // Rich 7x7 board with blockers & rotators
+    } else {
+        data = generateLevelData(levelNum);
+        saveData.currentLevel = levelNum;
+        persistSave();
+    }
+
+    game.gridSize = data.gridSize;
+    game.board = cloneBoard(data.board);
+    game.initialBoardSnapshot = cloneBoard(data.board);
+    game.arrowsRemaining = data.totalArrows;
+
+    // Update UI Headers & Mechanic Banner
+    if (isDaily) {
+        document.getElementById('chapterBadge').textContent = 'Daily Challenge';
+        document.getElementById('headerLevelText').textContent = getTodayDateKey();
+    } else {
+        const ch = getChapterForLevel(levelNum);
+        document.getElementById('chapterBadge').textContent = `Ch.${ch.id} • ${ch.name}`;
+        document.getElementById('headerLevelText').textContent = `Level ${levelNum}`;
+    }
+
+    const mechText = document.getElementById('mechanicText');
+    if (data.hasRotators && data.hasStones) {
+        mechText.textContent = '🪨 Stones block arrows • 🔄 Cyan pads rotate arrows 90° clockwise!';
+    } else if (data.hasRotators) {
+        mechText.textContent = '🔄 Cyan Rotator Pads turn passing arrows 90° clockwise!';
+    } else if (data.hasStones) {
+        mechText.textContent = '🪨 Stone Blockers stop arrows — clear clear paths first!';
+    } else {
+        mechText.textContent = 'Tap any arrow with a clear path to slide it off the board!';
+    }
+
+    updateHUD();
+    resizeCanvas();
+}
+
+function updateHUD() {
+    document.getElementById('coinBalance').textContent = saveData.coins;
+    document.getElementById('tilesRemaining').textContent = game.arrowsRemaining;
+    document.getElementById('btnUndo').disabled = game.history.length === 0;
+    document.getElementById('dailyStreakMini').textContent = `${saveData.dailyStreak}🔥`;
+
+    // Hide daily notification dot if completed today
+    const todayKey = getTodayDateKey();
+    const dot = document.getElementById('dailyDot');
+    if (saveData.lastDailyDate === todayKey) {
+        dot.classList.add('hidden');
+    } else {
+        dot.classList.remove('hidden');
+    }
+
+    // Update Hearts
+    const heartEls = document.querySelectorAll('#heartsContainer .heart-icon');
+    heartEls.forEach((el, idx) => {
+        if (idx < game.hearts) {
+            el.textContent = '❤️';
+            el.style.opacity = '1';
+            el.style.filter = 'none';
+        } else {
+            el.textContent = '🖤';
+            el.style.opacity = '0.45';
+        }
+    });
+
+    // Combo Pill
+    const comboPill = document.getElementById('comboPill');
+    if (game.combo >= 2) {
+        comboPill.classList.remove('opacity-0', 'scale-90');
+        comboPill.classList.add('opacity-100', 'scale-100');
+        document.getElementById('comboCount').textContent = game.combo;
+    } else {
+        comboPill.classList.add('opacity-0', 'scale-90');
+        comboPill.classList.remove('opacity-100', 'scale-100');
+    }
+}
+
+function handleBoardTap(clientX, clientY) {
+    if (game.hearts <= 0) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+
+    const geom = getCellGeometry(game.gridSize);
+
+    // Find clicked cell
+    let tappedX = -1;
+    let tappedY = -1;
+
+    for (let y = 0; y < game.gridSize; y++) {
+        for (let x = 0; x < game.gridSize; x++) {
+            const cx = geom.padding + x * (geom.cellSize + geom.gap);
+            const cy = geom.padding + y * (geom.cellSize + geom.gap);
+            if (px >= cx && px <= cx + geom.cellSize && py >= cy && py <= cy + geom.cellSize) {
+                tappedX = x;
+                tappedY = y;
+                break;
+            }
+        }
+    }
+
+    if (tappedX === -1 || tappedY === -1) return;
+
+    const cell = game.board[tappedY][tappedX];
+    if (cell.type !== 'arrow') {
+        sfx.playTap();
+        return;
+    }
+
+    // Check if Zap Booster Mode is active
+    if (game.zapMode) {
+        executeZap(tappedX, tappedY);
+        return;
+    }
+
+    // Clear hint highlight on move
+    game.hintCell = null;
+
+    // Trace trajectory
+    const trace = traceArrowPath(game.gridSize, game.board, tappedX, tappedY, cell.dir);
+
+    if (trace.escaped) {
+        // Save Undo Snapshot
+        game.history.push({
+            board: cloneBoard(game.board),
+            arrowsRemaining: game.arrowsRemaining
+        });
+
+        // Remove from logical board immediately so player can rapidly tap next arrows!
+        const arrowDir = cell.dir;
+        game.board[tappedY][tappedX] = { type: 'empty', dir: 0, pad: cell.pad };
+        game.arrowsRemaining--;
+
+        // Combo tracking
+        const now = Date.now();
+        if (now - game.lastClearTime < 2200) {
+            game.combo++;
+        } else {
+            game.combo = 1;
+        }
+        game.lastClearTime = now;
+        game.maxCombo = Math.max(game.maxCombo, game.combo);
+
+        sfx.playLaunch(game.combo);
+        updateHUD();
+
+        // Build smooth pixel waypoints including off-screen exit point
+        const waypoints = trace.path.map((pt, idx) => {
+            const c = cellCenter(pt.x, pt.y, geom);
+            const prevDir = idx > 0 ? trace.path[idx - 1].dir : pt.dir;
+            return { x: c.x, y: c.y, dir: pt.dir, rotated: pt.dir !== prevDir };
+        });
+
+        const lastPt = trace.path[trace.path.length - 1];
+        const lastCenter = cellCenter(lastPt.x, lastPt.y, geom);
+        const exitDist = canvasSize * 0.45;
+        waypoints.push({
+            x: lastCenter.x + DIRS[lastPt.dir].dx * exitDist,
+            y: lastCenter.y + DIRS[lastPt.dir].dy * exitDist,
+            dir: lastPt.dir,
+            rotated: false
+        });
+
+        game.animations.push({
+            type: 'escape',
+            originX: tappedX,
+            originY: tappedY,
+            points: waypoints,
+            lastSegIdx: 0,
+            progress: 0,
+            speed: Math.min(0.11, 0.065 + waypoints.length * 0.005)
+        });
+    } else {
+        // Blocked! Animate travel up to obstacle & bounce back
+        game.combo = 0;
+        updateHUD();
+
+        const startC = cellCenter(tappedX, tappedY, geom);
+        const stopPt = trace.path[trace.path.length - 1];
+        const stopC = cellCenter(stopPt.x, stopPt.y, geom);
+
+        // Nudge slightly toward the blocking cell for crisp physical impact
+        const impactX = stopC.x + DIRS[stopPt.dir].dx * (geom.cellSize * 0.36);
+        const impactY = stopC.y + DIRS[stopPt.dir].dy * (geom.cellSize * 0.36);
+
+        game.animations.push({
+            type: 'bounce',
+            originX: tappedX,
+            originY: tappedY,
+            dir: cell.dir,
+            startX: startC.x,
+            startY: startC.y,
+            hitX: impactX,
+            hitY: impactY,
+            progress: 0,
+            speed: 0.055,
+            impactTriggered: false
+        });
+    }
+}
+
+function loseHeart() {
+    if (game.hearts <= 0) return;
+    game.hearts--;
+    updateHUD();
+
+    const heartEls = document.querySelectorAll('#heartsContainer .heart-icon');
+    const lostEl = heartEls[game.hearts];
+    if (lostEl) {
+        lostEl.classList.add('heart-shake');
+        setTimeout(() => lostEl.classList.remove('heart-shake'), 450);
+    }
+
+    if (game.hearts <= 0) {
+        setTimeout(() => {
+            openModal('modalOutOfHearts');
+        }, 320);
+    }
+}
+
+function checkLevelCompletion() {
+    if (game.arrowsRemaining === 0 && game.animations.length === 0) {
+        sfx.playVictory();
+
+        // Celebratory Confetti Burst
+        const colors = ['#10b981', '#0ea5e9', '#f43f5e', '#f59e0b', '#a855f7'];
+        for (let i = 0; i < 65; i++) {
+            spawnParticles(
+                canvasSize * (0.2 + Math.random() * 0.6),
+                canvasSize * (0.2 + Math.random() * 0.5),
+                colors[i % colors.length],
+                1,
+                1.4
+            );
+        }
+
+        // Calculate Stars (1 to 3 based on remaining hearts)
+        const earnedStars = game.hearts === 3 ? 3 : (game.hearts === 2 ? 2 : 1);
+        const coinReward = game.isDaily ? 75 : (15 + earnedStars * 5);
+
+        saveData.coins += coinReward;
+
+        if (game.isDaily) {
+            const todayKey = getTodayDateKey();
+            if (saveData.lastDailyDate !== todayKey) {
+                saveData.dailyStreak++;
+                saveData.lastDailyDate = todayKey;
+            }
+            document.getElementById('victorySubtitle').textContent = 'Daily Challenge Complete!';
+            document.getElementById('btnNextLevel').textContent = 'CONTINUE CAMPAIGN ➔';
+        } else {
+            const prevStars = saveData.stars[game.levelNum] || 0;
+            if (earnedStars > prevStars) {
+                saveData.stars[game.levelNum] = earnedStars;
+            }
+            const capLimit = (edtechra.active && edtechra.mode === 'student') ? edtechra.releasedEnd : 1000;
+            if (game.levelNum >= saveData.unlockedLevel && game.levelNum < capLimit) {
+                saveData.unlockedLevel = game.levelNum + 1;
+            }
+            if (edtechra.active && edtechra.mode === 'student') {
+                if (game.levelNum >= edtechra.highestUnlockedLevel && game.levelNum < edtechra.releasedEnd) {
+                    edtechra.highestUnlockedLevel = game.levelNum + 1;
+                }
+                const elapsedSec = Math.max(1, Math.round((performance.now() - (game.levelStartTime || performance.now())) / 1000));
+                const lvlMax = Math.max(1, edtechra.pointsPerLevel || 10);
+                const earned = Math.max(1, Math.round((earnedStars / 3) * lvlMax));
+                try {
+                    window.parent.postMessage({
+                        type: 'EDTECHRA_CAMPAIGN_LEVEL_COMPLETE',
+                        gameId: 'arrow-escape',
+                        levelNumber: game.levelNum,
+                        scoreEarned: earned,
+                        maxPoints: lvlMax,
+                        stars: earnedStars,
+                        completed: true,
+                        timeTakenSeconds: elapsedSec,
+                        details: { hearts: game.hearts, maxCombo: game.maxCombo, stars: earnedStars, coins: coinReward }
+                    }, window.location.origin);
+                } catch (_) {}
+            }
+            const atTeacherCap = edtechra.active && edtechra.mode === 'student' && game.levelNum >= edtechra.releasedEnd && edtechra.releasedEnd < edtechra.totalLevels;
+            if (atTeacherCap) {
+                document.getElementById('victorySubtitle').textContent = "🎉 You've completed all the available levels! Wait for your teacher to unlock the next challenge.";
+                document.getElementById('btnNextLevel').textContent = 'BACK TO CLASSROOM';
+            } else {
+                document.getElementById('victorySubtitle').textContent = `Level ${game.levelNum} Cleared!`;
+                document.getElementById('btnNextLevel').textContent = game.levelNum < 1000 ? 'NEXT LEVEL ➔' : 'MASTERED ALL 1000! 🏆';
+            }
+        }
+
+        persistSave();
+        updateHUD();
+
+        // Populate Victory Modal
+        const starIcons = document.querySelectorAll('#victoryStars span');
+        starIcons.forEach((s, idx) => {
+            s.style.opacity = idx < earnedStars ? '1' : '0.22';
+            s.style.filter = idx < earnedStars ? 'drop-shadow(0 0 12px rgba(251,191,36,0.7))' : 'grayscale(1)';
+        });
+
+        document.getElementById('victoryCoins').textContent = coinReward;
+        document.getElementById('victoryCombo').textContent = game.maxCombo;
+        document.getElementById('victoryHearts').textContent = game.hearts;
+
+        setTimeout(() => {
+            openModal('modalVictory');
+        }, 420);
+    }
+}
+
+// ==================== 6. BOOSTERS (HINT, UNDO, ZAP) ====================
+function useHint() {
+    if (game.arrowsRemaining === 0) return;
+
+    // Scan board for any currently unblocked arrow
+    let found = null;
+    for (let y = 0; y < game.gridSize; y++) {
+        for (let x = 0; x < game.gridSize; x++) {
+            const cell = game.board[y][x];
+            if (cell.type === 'arrow') {
+                const res = traceArrowPath(game.gridSize, game.board, x, y, cell.dir);
+                if (res.escaped) {
+                    found = { x, y };
+                    break;
+                }
+            }
+        }
+        if (found) break;
+    }
+
+    if (!found) {
+        showToast('💡', 'No direct escape! Use Undo or Zap.');
+        return;
+    }
+
+    if (saveData.coins < 25) {
+        showToast('🪙', 'Need 25 Coins for Hint!');
+        return;
+    }
+
+    saveData.coins -= 25;
+    persistSave();
+    updateHUD();
+    sfx.playRotate();
+
+    game.hintCell = found;
+    showToast('💡', 'Golden ring marks a free arrow!');
+}
+
+function useUndo() {
+    if (game.history.length === 0) return;
+    if (saveData.coins < 15) {
+        showToast('🪙', 'Need 15 Coins for Undo!');
+        return;
+    }
+
+    saveData.coins -= 15;
+    persistSave();
+
+    const prev = game.history.pop();
+    game.board = cloneBoard(prev.board);
+    game.arrowsRemaining = prev.arrowsRemaining;
+    game.hintCell = null;
+    sfx.playTap();
+    updateHUD();
+    showToast('↩️', 'Last move undone!');
+}
+
+function setZapMode(active) {
+    game.zapMode = active;
+    const wrapper = document.getElementById('boardWrapper');
+    const banner = document.getElementById('zapBanner');
+    if (active) {
+        wrapper.classList.add('zap-active-board');
+        banner.classList.remove('hidden');
+    } else {
+        wrapper.classList.remove('zap-active-board');
+        banner.classList.add('hidden');
+    }
+}
+
+function toggleZapMode() {
+    if (game.zapMode) {
+        setZapMode(false);
+        return;
+    }
+    if (saveData.coins < 40) {
+        showToast('🪙', 'Need 40 Coins for Zap!');
+        return;
+    }
+    setZapMode(true);
+    sfx.playTap();
+}
+
+function executeZap(x, y) {
+    if (saveData.coins < 40) {
+        setZapMode(false);
+        return;
+    }
+
+    saveData.coins -= 40;
+    persistSave();
+
+    game.history.push({
+        board: cloneBoard(game.board),
+        arrowsRemaining: game.arrowsRemaining
+    });
+
+    const cell = game.board[y][x];
+    const geom = getCellGeometry(game.gridSize);
+    const center = cellCenter(x, y, geom);
+
+    game.board[y][x] = { type: 'empty', dir: 0, pad: cell.pad };
+    game.arrowsRemaining--;
+    game.hintCell = null;
+
+    setZapMode(false);
+    sfx.playZap();
+    spawnParticles(center.x, center.y, '#f43f5e', 26, 1.3);
+    updateHUD();
+    checkLevelCompletion();
+}
+
+// ==================== 7. WORLD MAP & DAILY CHALLENGE UI ====================
+function getTodayDateKey() {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+function hashStringToSeed(str) {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+}
+
+function renderWorldMap() {
+    // Total stars count
+    const totalStars = Object.values(saveData.stars).reduce((a, b) => a + b, 0);
+    document.getElementById('totalStarsCount').textContent = totalStars;
+
+    // Render Chapter Tabs
+    const tabsEl = document.getElementById('chapterTabs');
+    tabsEl.innerHTML = '';
+
+    CHAPTERS.forEach(ch => {
+        const isSelected = ch.id === game.selectedChapter;
+        const btn = document.createElement('button');
+        btn.className = `px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all ${
+            isSelected
+                ? 'bg-emerald-500 text-slate-950 shadow-lg'
+                : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700'
+        }`;
+        btn.textContent = `Ch.${ch.id} (${ch.range[0]}-${ch.range[1]})`;
+        btn.onclick = () => {
+            game.selectedChapter = ch.id;
+            renderWorldMap();
+        };
+        tabsEl.appendChild(btn);
+    });
+
+    // Update Chapter Banner
+    const activeCh = CHAPTERS.find(c => c.id === game.selectedChapter) || CHAPTERS[0];
+    document.getElementById('chapterTitleBanner').textContent = `Ch. ${activeCh.id}: ${activeCh.name}`;
+    document.getElementById('chapterMechanicTag').textContent = activeCh.tag;
+
+    // Render 100 Levels in Active Chapter
+    const gridEl = document.getElementById('levelGridContainer');
+    gridEl.innerHTML = '';
+
+    for (let lvl = activeCh.range[0]; lvl <= activeCh.range[1]; lvl++) {
+        const stars = saveData.stars[lvl] || 0;
+        const isCurrent = !game.isDaily && game.levelNum === lvl;
+        const tLocked = isArrowTeacherLocked(lvl);
+        const pLocked = !tLocked && isArrowProgLocked(lvl);
+        const isUnlocked = !tLocked && !pLocked && lvl <= saveData.unlockedLevel;
+
+        const tile = document.createElement('button');
+        tile.className = `p-2 rounded-2xl border flex flex-col items-center justify-center transition-transform active:scale-90 ${
+            isCurrent
+                ? 'bg-emerald-500/25 border-emerald-400 text-white shadow-md'
+                : stars > 0
+                ? 'bg-slate-800/90 border-amber-400/30 text-white'
+                : isUnlocked
+                ? 'bg-slate-800/70 border-white/15 text-slate-200'
+                : 'bg-slate-900/50 border-white/5 text-slate-400'
+        }`;
+
+        const starStr = (tLocked || pLocked) ? '🔒' : (stars === 3 ? '⭐⭐⭐' : stars === 2 ? '⭐⭐' : stars === 1 ? '⭐' : '•••');
+        if (tLocked || pLocked) tile.style.opacity = '0.4';
+        tile.innerHTML = `
+            <span class="text-xs font-extrabold">${lvl}</span>
+            <span class="text-[9px] mt-0.5 tracking-tighter ${stars > 0 ? 'text-amber-300' : 'text-slate-500'}">${starStr}</span>
+        `;
+
+        tile.onclick = () => {
+            if (tLocked) {
+                showToast('🔒', `Level ${lvl} has not been released by your teacher yet.`);
+                return;
+            }
+            if (pLocked) {
+                showToast('🔒', `Complete Level ${Math.max(edtechra.releasedStart, edtechra.highestUnlockedLevel)} first.`);
+                return;
+            }
+            closeModal('modalWorldMap');
+            startLevel(lvl, false);
+        };
+        gridEl.appendChild(tile);
+    }
+}
+
+function openDailyModal() {
+    const today = getTodayDateKey();
+    const completedToday = saveData.lastDailyDate === today;
+    document.getElementById('dailyDateTitle').textContent = `Challenge • ${today}`;
+    document.getElementById('dailyStreakModal').textContent = saveData.dailyStreak;
+    document.getElementById('dailyStatusText').textContent = completedToday ? 'Completed Today ✅' : 'Ready to Play!';
+    document.getElementById('dailyStatusText').className = completedToday
+        ? 'text-sm font-extrabold text-amber-300'
+        : 'text-sm font-extrabold text-emerald-400';
+
+    openModal('modalDaily');
+}
+
+// ==================== 8. MODAL & EVENT WIRING ====================
+function openModal(id) {
+    document.getElementById(id).classList.add('open');
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
+}
+
+let toastTimer = null;
+function showToast(icon, text) {
+    const banner = document.getElementById('toastBanner');
+    document.getElementById('toastIcon').textContent = icon;
+    document.getElementById('toastText').textContent = text;
+    banner.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+        banner.classList.remove('show');
+    }, 2200);
+}
+
+// Canvas Pointer Events (Supports Mouse & Touch cleanly)
+canvas.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    handleBoardTap(e.clientX, e.clientY);
+});
+
+// Header Controls
+document.getElementById('btnOpenMap').addEventListener('click', () => {
+    sfx.playTap();
+    game.selectedChapter = getChapterForLevel(game.levelNum).id;
+    renderWorldMap();
+    openModal('modalWorldMap');
+});
+
+document.getElementById('btnCloseMap').addEventListener('click', () => {
+    sfx.playTap();
+    closeModal('modalWorldMap');
+});
+
+document.getElementById('btnJumpLevel').addEventListener('click', () => {
+    const val = parseInt(document.getElementById('jumpLevelInput').value, 10);
+    if (val >= 1 && val <= 1000) {
+        sfx.playTap();
+        closeModal('modalWorldMap');
+        startLevel(val, false);
+    } else {
+        showToast('⚠️', 'Enter a level between 1 and 1000');
+    }
+});
+
+document.getElementById('btnDaily').addEventListener('click', () => {
+    sfx.playTap();
+    openDailyModal();
+});
+
+document.getElementById('btnPlayDaily').addEventListener('click', () => {
+    sfx.playTap();
+    closeModal('modalDaily');
+    startLevel(1, true);
+});
+
+document.getElementById('btnCloseDaily').addEventListener('click', () => {
+    sfx.playTap();
+    closeModal('modalDaily');
+});
+
+document.getElementById('btnAudio').addEventListener('click', () => {
+    saveData.soundEnabled = !saveData.soundEnabled;
+    sfx.enabled = saveData.soundEnabled;
+    persistSave();
+    document.getElementById('iconSoundOn').classList.toggle('hidden', !saveData.soundEnabled);
+    document.getElementById('iconSoundOff').classList.toggle('hidden', saveData.soundEnabled);
+    if (saveData.soundEnabled) sfx.playTap();
+});
+
+document.getElementById('btnRestart').addEventListener('click', () => {
+    sfx.playTap();
+    startLevel(game.levelNum, game.isDaily);
+});
+
+// Booster Buttons
+document.getElementById('btnHint').addEventListener('click', useHint);
+document.getElementById('btnUndo').addEventListener('click', useUndo);
+document.getElementById('btnZap').addEventListener('click', toggleZapMode);
+document.getElementById('btnCancelZap').addEventListener('click', () => setZapMode(false));
+
+// Victory & Out of Hearts Modal Actions
+document.getElementById('btnNextLevel').addEventListener('click', () => {
+    sfx.playTap();
+    closeModal('modalVictory');
+    if (game.isDaily) {
+        startLevel(saveData.currentLevel, false);
+    } else if (edtechra.active && edtechra.mode === 'student' && game.levelNum >= edtechra.releasedEnd) {
+        try { window.parent.postMessage({ type: 'EDTECHRA_GAME_EXIT', gameId: 'arrow-escape' }, window.location.origin); } catch (_) {}
+    } else {
+        const next = game.levelNum < 1000 ? game.levelNum + 1 : 1;
+        startLevel(next, false);
+    }
+});
+
+document.getElementById('btnRefillHeart').addEventListener('click', () => {
+    if (saveData.coins < 30) {
+        showToast('🪙', 'Need 30 Coins for +1 Heart!');
+        return;
+    }
+    saveData.coins -= 30;
+    persistSave();
+    game.hearts = 1;
+    updateHUD();
+    sfx.playLaunch(2);
+    closeModal('modalOutOfHearts');
+    showToast('❤️', '+1 Heart restored!');
+});
+
+document.getElementById('btnRetryLevel').addEventListener('click', () => {
+    sfx.playTap();
+    closeModal('modalOutOfHearts');
+    startLevel(game.levelNum, game.isDaily);
+});
+
+// ==================== 9. INITIALIZATION ON WINDOW LOAD ====================
+function applyArrowCampaignState(cs, requestedStartLevel) {
+    if (!cs || typeof cs !== 'object') return;
+    edtechra.totalLevels = Math.max(1, Number(cs.totalLevels || 1000));
+    edtechra.releasedStart = Math.max(1, Number(cs.releasedStart || 1));
+    edtechra.releasedEnd = Math.max(0, Math.min(edtechra.totalLevels, Number(cs.releasedEnd ?? 10)));
+    edtechra.highestUnlockedLevel = Math.max(0, Number(cs.highestUnlockedLevel ?? edtechra.releasedStart));
+    edtechra.pointsPerLevel = Math.max(0, Number(cs.pointsPerLevel ?? 10));
+    edtechra.completedLevels = (cs.completedLevels && typeof cs.completedLevels === 'object') ? cs.completedLevels : {};
+
+    const hydratedStars = {};
+    for (const [k, rec] of Object.entries(edtechra.completedLevels)) {
+        const lvlNum = Number(rec && rec.levelNumber ? rec.levelNumber : k);
+        if (Number.isInteger(lvlNum) && lvlNum >= 1) {
+            hydratedStars[lvlNum] = Math.max(1, Math.min(3, Number((rec && rec.stars) || (rec && rec.details && rec.details.stars) || 3)));
+        }
+    }
+    saveData.stars = hydratedStars;
+    saveData.unlockedLevel = Math.max(edtechra.releasedStart, Math.min(edtechra.releasedEnd || 1, edtechra.highestUnlockedLevel || 1));
+    persistSave();
+    if (requestedStartLevel && edtechra.releasedEnd >= edtechra.releasedStart) {
+        const target = Math.max(edtechra.releasedStart, Math.min(Math.max(edtechra.releasedStart, edtechra.highestUnlockedLevel), Number(requestedStartLevel)));
+        startLevel(target, false);
+    }
+    updateHUD();
+}
+
+window.addEventListener('message', (ev) => {
+    if (ev.origin !== window.location.origin) return;
+    const msg = ev.data;
+    if (!msg || typeof msg !== 'object') return;
+    if (msg.type === 'EDTECHRA_INIT_GAME') {
+        const p = msg.payload || msg;
+        edtechra.active = true;
+        edtechra.mode = p.mode || 'student';
+        edtechra.assignmentId = p.assignmentId || null;
+        if (p.campaignState) {
+            applyArrowCampaignState(p.campaignState, p.levelNumber || p.campaignState.currentLevel || p.campaignState.releasedStart || 1);
+        } else if (p.levelNumber) {
+            startLevel(Number(p.levelNumber), false);
+        }
+    } else if (msg.type === 'EDTECHRA_CAMPAIGN_STATE_SYNC') {
+        if (msg.campaignState) {
+            applyArrowCampaignState(msg.campaignState, null);
+        }
+    }
+});
+
+window.onload = function() {
+    loadSave();
+    document.getElementById('iconSoundOn').classList.toggle('hidden', !saveData.soundEnabled);
+    document.getElementById('iconSoundOff').classList.toggle('hidden', saveData.soundEnabled);
+
+    resizeCanvas();
+    startLevel(saveData.currentLevel || 1, false);
+    requestAnimationFrame(renderLoop);
+    try {
+        window.parent.postMessage({ type: 'EDTECHRA_GAME_READY', gameId: 'arrow-escape' }, window.location.origin);
+    } catch (_) {}
+};
+</script>
+</body>
+</html>

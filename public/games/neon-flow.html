@@ -1,0 +1,2218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Neon Flow 1000 — Connect the Pipes</title>
+<style>
+  :root {
+    --bg-deep: #0b041c;
+    --bg-mid: #160a35;
+    --panel: rgba(27, 15, 62, 0.86);
+    --panel-border: rgba(167, 139, 250, 0.22);
+    --text: #f5f3ff;
+    --muted: #a89bc9;
+    --accent-pink: #ff1678;
+    --accent-cyan: #00d4ff;
+    --accent-gold: #ffc800;
+    --accent-violet: #a78bfa;
+    --radius: 18px;
+  }
+
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow-x: hidden;
+    background: radial-gradient(circle at 50% 20%, #231052 0%, #130730 52%, #090318 100%);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  .app-shell {
+    min-height: 100dvh;
+    width: 100%;
+    max-width: 620px;
+    margin: 0 auto;
+    padding: 12px 14px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    position: relative;
+  }
+
+  /* Header */
+  .topbar {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .brand-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+    background: linear-gradient(145deg, #25105a, #12062f);
+    border: 1px solid rgba(184, 148, 255, 0.35);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45), inset 0 1px 1px rgba(255,255,255,0.18);
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+  }
+
+  .brand-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.1;
+    min-width: 0;
+  }
+
+  .brand-title {
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    background: linear-gradient(90deg, #ff3b9a, #ffd036 50%, #2ce2ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    white-space: nowrap;
+  }
+
+  .brand-sub {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .top-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .icon-btn {
+    height: 38px;
+    min-width: 38px;
+    padding: 0 10px;
+    border-radius: 12px;
+    border: 1px solid var(--panel-border);
+    background: var(--panel);
+    color: var(--text);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease;
+    backdrop-filter: blur(8px);
+  }
+
+  .icon-btn:hover {
+    background: rgba(46, 26, 98, 0.92);
+    border-color: rgba(196, 181, 253, 0.45);
+  }
+
+  .icon-btn:active {
+    transform: scale(0.94);
+  }
+
+  .icon-btn.active {
+    border-color: var(--accent-cyan);
+    background: rgba(0, 212, 255, 0.16);
+    color: #9ff3ff;
+  }
+
+  .icon-btn.daily-btn {
+    border-color: rgba(255, 200, 0, 0.4);
+    background: rgba(255, 200, 0, 0.12);
+    color: #ffe27a;
+  }
+
+  .icon-btn.daily-btn.active-mode {
+    border-color: #ffd000;
+    background: rgba(255, 200, 0, 0.28);
+    box-shadow: 0 0 14px rgba(255, 200, 0, 0.25);
+  }
+
+  /* Level & Telemetry Bar */
+  .hud-card {
+    width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 16px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(10px);
+  }
+
+  .hud-row-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .level-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(196, 181, 253, 0.32);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.12s ease;
+  }
+
+  .level-pill:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .level-pill:active {
+    transform: scale(0.96);
+  }
+
+  .level-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(0, 212, 255, 0.18);
+    color: #7eeeff;
+  }
+
+  .chapter-tag {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+    text-align: right;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+
+  .stat-box {
+    background: rgba(11, 4, 28, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 6px 8px;
+    text-align: center;
+  }
+
+  .stat-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--muted);
+  }
+
+  .stat-val {
+    font-size: 14px;
+    font-weight: 800;
+    color: #fff;
+    margin-top: 2px;
+  }
+
+  .stat-val.perfect {
+    color: var(--accent-gold);
+  }
+
+  .stat-val.complete {
+    color: #4ade80;
+  }
+
+  /* Board Stage */
+  .stage-wrap {
+    width: 100%;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    min-height: 280px;
+  }
+
+  .board-frame {
+    position: relative;
+    width: min(100%, 500px, calc(100dvh - 265px));
+    aspect-ratio: 1 / 1;
+    min-width: 260px;
+    min-height: 260px;
+    border-radius: 26px;
+    padding: 10px;
+    background: linear-gradient(155deg, rgba(44, 20, 96, 0.9), rgba(18, 8, 44, 0.96));
+    border: 1.5px solid rgba(184, 148, 255, 0.28);
+    box-shadow:
+      0 22px 55px rgba(0, 0, 0, 0.6),
+      0 0 40px rgba(124, 58, 237, 0.18),
+      inset 0 1px 1px rgba(255, 255, 255, 0.16);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #gameCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    border-radius: 18px;
+    touch-action: none;
+    cursor: pointer;
+  }
+
+  .status-banner {
+    margin-top: 8px;
+    min-height: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #ffd86b;
+    text-align: center;
+    opacity: 0;
+    transform: translateY(3px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+
+  .status-banner.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Bottom Controls */
+  .controls-bar {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+
+  .ctrl-btn {
+    height: 48px;
+    border-radius: 14px;
+    border: 1px solid var(--panel-border);
+    background: var(--panel);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    transition: transform 0.13s ease, background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+    backdrop-filter: blur(8px);
+  }
+
+  .ctrl-btn:hover:not(:disabled) {
+    background: rgba(49, 28, 106, 0.95);
+    border-color: rgba(196, 181, 253, 0.45);
+  }
+
+  .ctrl-btn:active:not(:disabled) {
+    transform: scale(0.94);
+  }
+
+  .ctrl-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .ctrl-btn.hint-btn {
+    border-color: rgba(255, 200, 0, 0.36);
+    color: #ffe066;
+  }
+
+  .ctrl-btn.primary-next {
+    background: linear-gradient(135deg, #ff1678, #8b5cf6);
+    border-color: rgba(255, 255, 255, 0.25);
+    color: #fff;
+    box-shadow: 0 6px 18px rgba(255, 22, 120, 0.32);
+  }
+
+  /* Modals */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(7, 3, 20, 0.78);
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease;
+  }
+
+  .modal-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .modal-card {
+    width: 100%;
+    max-width: 520px;
+    max-height: 86dvh;
+    background: linear-gradient(165deg, #21104c, #12072e);
+    border: 1px solid rgba(196, 181, 253, 0.3);
+    border-radius: 24px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.72);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: scale(0.95);
+    transition: transform 0.22s ease;
+  }
+
+  .modal-backdrop.open .modal-card {
+    transform: scale(1);
+  }
+
+  .modal-header {
+    padding: 16px 18px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .modal-title {
+    font-size: 17px;
+    font-weight: 800;
+    margin: 0;
+  }
+
+  .close-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    font-size: 18px;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+  }
+
+  /* Level Picker */
+  .jump-bar {
+    padding: 10px 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(0, 0, 0, 0.18);
+  }
+
+  .jump-input {
+    flex: 1;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid rgba(196, 181, 253, 0.3);
+    background: rgba(11, 4, 28, 0.7);
+    color: #fff;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 700;
+    outline: none;
+  }
+
+  .jump-input:focus {
+    border-color: var(--accent-cyan);
+  }
+
+  .jump-go {
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 10px;
+    border: none;
+    background: linear-gradient(135deg, #00d4ff, #3b82f6);
+    color: #090318;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .chapter-tabs {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    scrollbar-width: thin;
+  }
+
+  .chap-tab {
+    flex: 0 0 auto;
+    padding: 6px 11px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .chap-tab.active {
+    background: rgba(139, 92, 246, 0.28);
+    border-color: #a78bfa;
+    color: #fff;
+  }
+
+  .chap-tab small {
+    font-size: 9px;
+    opacity: 0.8;
+  }
+
+  .level-grid-wrap {
+    padding: 14px 16px 18px;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .level-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+
+  @media (min-width: 440px) {
+    .level-grid {
+      grid-template-columns: repeat(8, 1fr);
+    }
+  }
+
+  .lvl-cell {
+    aspect-ratio: 1 / 1;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: #e9e4ff;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    transition: transform 0.12s ease, background 0.12s ease;
+  }
+
+  .lvl-cell:hover {
+    background: rgba(167, 139, 250, 0.22);
+    transform: translateY(-1px);
+  }
+
+  .lvl-cell.current {
+    border-color: var(--accent-cyan);
+    background: rgba(0, 212, 255, 0.2);
+    box-shadow: 0 0 12px rgba(0, 212, 255, 0.35);
+    color: #fff;
+  }
+
+  .lvl-cell.solved {
+    border-color: rgba(74, 222, 128, 0.45);
+    background: rgba(34, 197, 94, 0.16);
+  }
+
+  .lvl-cell.perfect {
+    border-color: rgba(255, 200, 0, 0.65);
+    background: rgba(255, 200, 0, 0.16);
+  }
+
+  .lvl-stars {
+    font-size: 8px;
+    letter-spacing: 0.5px;
+    color: var(--accent-gold);
+    line-height: 1;
+  }
+
+  /* Victory Modal */
+  .win-body {
+    padding: 24px 20px 22px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .win-stars {
+    font-size: 38px;
+    letter-spacing: 6px;
+    text-shadow: 0 0 24px rgba(255, 200, 0, 0.6);
+  }
+
+  .win-heading {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 900;
+    background: linear-gradient(90deg, #ff3b9a, #ffd036, #2ce2ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .win-sub {
+    margin: 0;
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .win-metrics {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .win-actions {
+    width: 100%;
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .btn-main {
+    flex: 1;
+    height: 46px;
+    border-radius: 14px;
+    border: none;
+    background: linear-gradient(135deg, #ff1678, #8b5cf6);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 8px 22px rgba(255, 22, 120, 0.35);
+  }
+
+  .btn-sec {
+    height: 46px;
+    padding: 0 16px;
+    border-radius: 14px;
+    border: 1px solid var(--panel-border);
+    background: rgba(255, 255, 255, 0.07);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 76px;
+    left: 50%;
+    transform: translateX(-50%) translateY(16px);
+    background: rgba(22, 10, 53, 0.95);
+    border: 1px solid rgba(0, 212, 255, 0.45);
+    color: #fff;
+    padding: 9px 16px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 200;
+    white-space: nowrap;
+  }
+
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  .lvl-cell.edtechra-locked {
+    opacity: 0.36;
+    cursor: not-allowed;
+    background: rgba(15, 23, 42, 0.55) !important;
+    border-color: rgba(148, 163, 184, 0.2) !important;
+    color: #94a3b8 !important;
+  }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <!-- Top Bar -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-icon" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M5 12V6a1 1 0 0 1 1-1h10" stroke="#ff1678" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="5" cy="12" r="2.6" fill="#ff1678"/>
+          <circle cx="16" cy="5" r="2.6" fill="#ff1678"/>
+          <path d="M5 17h4v-7h7v9" stroke="#ffc800" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="5" cy="17" r="2.3" fill="#ffc800"/>
+          <circle cx="16" cy="19" r="2.3" fill="#ffc800"/>
+          <path d="M20 5v14" stroke="#00d4ff" stroke-width="2.8" stroke-linecap="round"/>
+          <circle cx="20" cy="5" r="2.2" fill="#00d4ff"/>
+          <circle cx="20" cy="19" r="2.2" fill="#00d4ff"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <span class="brand-title">NEON FLOW 1000</span>
+        <span class="brand-sub" id="progressSummary">0 / 1,000 Solved</span>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <button class="icon-btn daily-btn" id="dailyBtn" title="Daily Challenge">
+        <span>★ Daily</span>
+      </button>
+      <button class="icon-btn" id="symbolBtn" title="Toggle Colorblind Symbols" aria-label="Toggle Symbols">
+        <span id="symbolLabel">◆</span>
+      </button>
+      <button class="icon-btn" id="soundBtn" title="Toggle Sound" aria-label="Toggle Sound">
+        <span id="soundLabel">🔊</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- HUD Card -->
+  <section class="hud-card">
+    <div class="hud-row-top">
+      <button class="level-pill" id="levelPickerBtn" title="Choose any level (1–1000)">
+        <span id="levelTitle">Level 1</span>
+        <span class="level-badge" id="gridBadge">5×5</span>
+        <span style="opacity:0.65;font-size:11px;">▾</span>
+      </button>
+      <div class="chapter-tag" id="chapterLabel">Ch. 1 · Neon Spark</div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="stat-label">Flows</div>
+        <div class="stat-val" id="flowsVal">0 / 4</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Fill</div>
+        <div class="stat-val" id="fillVal">0%</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Moves</div>
+        <div class="stat-val" id="movesVal">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Best</div>
+        <div class="stat-val" id="bestVal">—</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Canvas Stage -->
+  <main class="stage-wrap">
+    <div class="board-frame" id="boardFrame">
+      <canvas id="gameCanvas"></canvas>
+    </div>
+    <div class="status-banner" id="statusBanner">Fill every cell on the board to complete the level!</div>
+  </main>
+
+  <!-- Action Controls -->
+  <footer class="controls-bar">
+    <button class="ctrl-btn" id="prevBtn" title="Previous Level (Left Arrow)">
+      <span style="font-size:15px;">◀</span>
+      <span>Prev</span>
+    </button>
+    <button class="ctrl-btn" id="undoBtn" title="Undo Move (Z)">
+      <span style="font-size:15px;">↶</span>
+      <span>Undo</span>
+    </button>
+    <button class="ctrl-btn hint-btn" id="hintBtn" title="Reveal One Flow (H)">
+      <span style="font-size:15px;">✦</span>
+      <span>Hint</span>
+    </button>
+    <button class="ctrl-btn" id="resetBtn" title="Reset Level (R)">
+      <span style="font-size:15px;">↻</span>
+      <span>Reset</span>
+    </button>
+    <button class="ctrl-btn primary-next" id="nextBtn" title="Next Level (Right Arrow)">
+      <span style="font-size:15px;">▶</span>
+      <span>Next</span>
+    </button>
+  </footer>
+</div>
+
+<!-- Level Select Modal -->
+<div class="modal-backdrop" id="levelModal" role="dialog" aria-modal="true" aria-labelledby="levelModalTitle">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2 class="modal-title" id="levelModalTitle">Select Level (1 – 1,000)</h2>
+      <button class="close-btn" id="closeLevelModal" aria-label="Close">×</button>
+    </div>
+    <div class="jump-bar">
+      <input type="number" id="jumpInput" class="jump-input" min="1" max="1000" placeholder="Jump to any level (1 – 1000)..." />
+      <button class="jump-go" id="jumpGoBtn">Go</button>
+    </div>
+    <div class="chapter-tabs" id="chapterTabs"></div>
+    <div class="level-grid-wrap">
+      <div class="level-grid" id="levelGrid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Victory Modal -->
+<div class="modal-backdrop" id="winModal" role="dialog" aria-modal="true" aria-labelledby="winHeading">
+  <div class="modal-card">
+    <div class="win-body">
+      <div class="win-stars" id="winStars">★★★</div>
+      <h2 class="win-heading" id="winHeading">Level 1 Complete!</h2>
+      <p class="win-sub" id="winSub">Perfect flow! Zero wasted moves.</p>
+      <div class="win-metrics">
+        <div class="stat-box">
+          <div class="stat-label">Moves</div>
+          <div class="stat-val" id="winMoves">4</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Par</div>
+          <div class="stat-val" id="winPar">4</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Time</div>
+          <div class="stat-val" id="winTime">0:08</div>
+        </div>
+      </div>
+      <div class="win-actions">
+        <button class="btn-sec" id="winReplayBtn">Replay</button>
+        <button class="btn-sec" id="winLevelsBtn">Levels</button>
+        <button class="btn-main" id="winNextBtn">Next Level →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  // =========================================================================
+  // 1. PALETTE & CHAPTER METADATA (Matching Uploaded Icon Aesthetic)
+  // =========================================================================
+  const COLORS = [
+    { name: 'Magenta',   main: '#ff0e7a', light: '#ff70b4', dark: '#b30052', glow: 'rgba(255, 14, 122, 0.55)', tint: 'rgba(255, 14, 122, 0.16)', sym: '●' },
+    { name: 'Gold',      main: '#ffc800', light: '#fff080', dark: '#d47c00', glow: 'rgba(255, 200, 0, 0.55)',   tint: 'rgba(255, 200, 0, 0.15)',   sym: '▲' },
+    { name: 'Lavender',  main: '#a985ff', light: '#dfd1ff', dark: '#6d47d9', glow: 'rgba(169, 133, 255, 0.55)', tint: 'rgba(169, 133, 255, 0.17)', sym: '■' },
+    { name: 'Cyan',      main: '#00c8ff', light: '#8ceaff', dark: '#0072d6', glow: 'rgba(0, 200, 255, 0.55)',   tint: 'rgba(0, 200, 255, 0.15)',   sym: '◆' },
+    { name: 'Emerald',   main: '#00e676', light: '#8affbe', dark: '#009e4f', glow: 'rgba(0, 230, 118, 0.52)',   tint: 'rgba(0, 230, 118, 0.15)',   sym: '★' },
+    { name: 'Tangerine', main: '#ff6d24', light: '#ffb385', dark: '#c43c00', glow: 'rgba(255, 109, 36, 0.55)',  tint: 'rgba(255, 109, 36, 0.16)',  sym: '✚' },
+    { name: 'Crimson',   main: '#ff2e4c', light: '#ff8a9b', dark: '#b5001f', glow: 'rgba(255, 46, 76, 0.55)',   tint: 'rgba(255, 46, 76, 0.16)',   sym: '✕' },
+    { name: 'Mint',      main: '#1de9b6', light: '#9effe6', dark: '#009678', glow: 'rgba(29, 233, 182, 0.52)',  tint: 'rgba(29, 233, 182, 0.15)',  sym: '⬟' },
+    { name: 'Lime',      main: '#b8ff00', light: '#e4ff8f', dark: '#79ad00', glow: 'rgba(184, 255, 0, 0.50)',   tint: 'rgba(184, 255, 0, 0.14)',   sym: '▼' },
+    { name: 'Cobalt',    main: '#448aff', light: '#9cc2ff', dark: '#1a4fd6', glow: 'rgba(68, 138, 255, 0.55)',  tint: 'rgba(68, 138, 255, 0.16)',  sym: '◐' },
+    { name: 'Orchid',    main: '#e040fb', light: '#f4a3ff', dark: '#9c00b8', glow: 'rgba(224, 64, 251, 0.55)',  tint: 'rgba(224, 64, 251, 0.16)',  sym: '❖' },
+    { name: 'Coral',     main: '#ff9e80', light: '#ffd4c7', dark: '#cc5b3b', glow: 'rgba(255, 158, 128, 0.52)', tint: 'rgba(255, 158, 128, 0.15)', sym: '✦' }
+  ];
+
+  const CHAPTERS = [
+    { name: 'Neon Spark',      range: '1–100',    desc: '5×5' },
+    { name: 'Prism Pulse',     range: '101–200',  desc: '6×6' },
+    { name: 'Cyber Circuit',   range: '201–300',  desc: '6×6–7×7' },
+    { name: 'Flux Matrix',     range: '301–400',  desc: '7×7' },
+    { name: 'Quantum Conduit', range: '401–500',  desc: '7×7–8×8' },
+    { name: 'Astral Grid',     range: '501–600',  desc: '8×8' },
+    { name: 'Nova Relay',      range: '601–700',  desc: '8×8–9×9' },
+    { name: 'Singularity',     range: '701–800',  desc: '9×9' },
+    { name: 'Hyperdrive',      range: '801–900',  desc: '9×9–10×10' },
+    { name: 'Zenith Core',     range: '901–1000', desc: '10×10' }
+  ];
+
+  // =========================================================================
+  // 2. DETERMINISTIC 1,000-LEVEL GENERATOR (Mulberry32 + Backbite MCMC)
+  // =========================================================================
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function() {
+      a |= 0;
+      a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function getLevelConfig(levelNum) {
+    if (levelNum === 1) return { size: 5, colors: 4, chapter: 0 };
+    const idx = levelNum - 1;
+    const chapter = Math.min(9, Math.floor(idx / 100));
+    const inChap = idx % 100;
+    switch (chapter) {
+      case 0: return { size: 5, colors: inChap < 50 ? 4 : 5, chapter };
+      case 1: return { size: 6, colors: inChap < 50 ? 5 : 6, chapter };
+      case 2: return { size: inChap < 50 ? 6 : 7, colors: 6, chapter };
+      case 3: return { size: 7, colors: inChap < 50 ? 6 : 7, chapter };
+      case 4: return { size: inChap < 50 ? 7 : 8, colors: 7, chapter };
+      case 5: return { size: 8, colors: inChap < 50 ? 7 : 8, chapter };
+      case 6: return { size: inChap < 50 ? 8 : 9, colors: 8, chapter };
+      case 7: return { size: 9, colors: inChap < 50 ? 8 : 9, chapter };
+      case 8: return { size: inChap < 50 ? 9 : 10, colors: inChap < 50 ? 9 : 10, chapter };
+      default: return { size: 10, colors: inChap < 50 ? 10 : 11, chapter: 9 };
+    }
+  }
+
+  function generateHamiltonianPath(size, rng) {
+    const N = size * size;
+    const path = new Int32Array(N);
+    const pos = new Int32Array(N);
+    let k = 0;
+    for (let r = 0; r < size; r++) {
+      if (r % 2 === 0) {
+        for (let c = 0; c < size; c++) {
+          const cell = r * size + c;
+          path[k] = cell;
+          pos[cell] = k++;
+        }
+      } else {
+        for (let c = size - 1; c >= 0; c--) {
+          const cell = r * size + c;
+          path[k] = cell;
+          pos[cell] = k++;
+        }
+      }
+    }
+
+    const iters = N * 12;
+    const nbrs = [];
+    for (let it = 0; it < iters; it++) {
+      const useStart = rng() < 0.5;
+      const endCell = path[useStart ? 0 : N - 1];
+      const er = Math.floor(endCell / size);
+      const ec = endCell % size;
+
+      nbrs.length = 0;
+      if (ec > 0) nbrs.push(endCell - 1);
+      if (ec < size - 1) nbrs.push(endCell + 1);
+      if (er > 0) nbrs.push(endCell - size);
+      if (er < size - 1) nbrs.push(endCell + size);
+
+      const pick = nbrs[Math.floor(rng() * nbrs.length)];
+      const pIdx = pos[pick];
+
+      if (useStart) {
+        if (pIdx <= 1) continue;
+        let l = 0, r = pIdx - 1;
+        while (l < r) {
+          const a = path[l], b = path[r];
+          path[l] = b; path[r] = a;
+          pos[b] = l; pos[a] = r;
+          l++; r--;
+        }
+      } else {
+        if (pIdx >= N - 2) continue;
+        let l = pIdx + 1, r = N - 1;
+        while (l < r) {
+          const a = path[l], b = path[r];
+          path[l] = b; path[r] = a;
+          pos[b] = l; pos[a] = r;
+          l++; r--;
+        }
+      }
+    }
+    return path;
+  }
+
+  function areAdjacent(c1, c2, size) {
+    const r1 = Math.floor(c1 / size), col1 = c1 % size;
+    const r2 = Math.floor(c2 / size), col2 = c2 % size;
+    return Math.abs(r1 - r2) + Math.abs(col1 - col2) === 1;
+  }
+
+  function buildPuzzleFromSeed(seed, size, colors) {
+    const N = size * size;
+    const rng = mulberry32(seed);
+    let bestFlows = null;
+    let bestScore = -1e9;
+
+    for (let attempt = 0; attempt < 18; attempt++) {
+      const hPath = generateHamiltonianPath(size, rng);
+      for (let sTry = 0; sTry < 12; sTry++) {
+        const cuts = [0];
+        let ok = true;
+        let remCells = N;
+        for (let i = 0; i < colors - 1; i++) {
+          const remSegs = colors - i;
+          const minLen = 3;
+          const maxLen = Math.min(remCells - (remSegs - 1) * 3, Math.ceil((remCells / remSegs) * 1.8));
+          if (maxLen < minLen) { ok = false; break; }
+          const len = minLen + Math.floor(rng() * (maxLen - minLen + 1));
+          cuts.push(cuts[cuts.length - 1] + len);
+          remCells -= len;
+        }
+        if (!ok || remCells < 3) continue;
+        cuts.push(N);
+
+        let adjEndpoints = 0;
+        let selfTouches = 0;
+        let turns = 0;
+        const flows = [];
+
+        for (let i = 0; i < colors; i++) {
+          const start = cuts[i], end = cuts[i + 1];
+          const seg = [];
+          for (let j = start; j < end; j++) seg.push(hPath[j]);
+          if (areAdjacent(seg[0], seg[seg.length - 1], size)) adjEndpoints++;
+          for (let j = 1; j < seg.length - 1; j++) {
+            if (seg[j] - seg[j - 1] !== seg[j + 1] - seg[j]) turns++;
+          }
+          for (let j = 0; j < seg.length; j++) {
+            for (let k = j + 2; k < seg.length; k++) {
+              if (areAdjacent(seg[j], seg[k], size)) selfTouches++;
+            }
+          }
+          flows.push({ color: i, solution: seg, a: seg[0], b: seg[seg.length - 1] });
+        }
+
+        const score = turns * 3 - adjEndpoints * 100 - selfTouches * 12;
+        if (score > bestScore) {
+          bestScore = score;
+          bestFlows = flows;
+        }
+        if (adjEndpoints === 0 && selfTouches === 0 && turns >= colors) {
+          return { size, flows: bestFlows };
+        }
+      }
+    }
+    return { size, flows: bestFlows };
+  }
+
+  function generateLevel(levelNum) {
+    if (levelNum === 1) {
+      // Exact homage to the iconic 5x5 Neon Flow puzzle
+      const flows = [
+        { color: 0, solution: [10, 5, 0, 1, 2, 3],             a: 10, b: 3  }, // Magenta
+        { color: 1, solution: [15, 16, 11, 6, 7, 8, 13, 18, 23], a: 15, b: 23 }, // Gold
+        { color: 2, solution: [20, 21, 22, 17, 12],            a: 20, b: 12 }, // Lavender
+        { color: 3, solution: [4, 9, 14, 19, 24],              a: 4,  b: 24 }  // Cyan
+      ];
+      return { level: 1, chapter: 0, size: 5, flows };
+    }
+    const cfg = getLevelConfig(levelNum);
+    const seed = (Math.imul(levelNum, 2654435761) ^ 0x9E3779B9) >>> 0;
+    const p = buildPuzzleFromSeed(seed, cfg.size, cfg.colors);
+    return { level: levelNum, chapter: cfg.chapter, size: p.size, flows: p.flows };
+  }
+
+  function getTodayKey() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function generateDailyLevel() {
+    const key = getTodayKey();
+    let hash = 2166136261;
+    for (let i = 0; i < key.length; i++) {
+      hash ^= key.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    const p = buildPuzzleFromSeed(hash >>> 0, 7, 7);
+    return { level: 0, dailyKey: key, chapter: -1, size: p.size, flows: p.flows };
+  }
+
+  // =========================================================================
+  // 3. WEB AUDIO SYNTHESIZER (Zero Assets)
+  // =========================================================================
+  const AudioEngine = (() => {
+    let ctx = null;
+    const scale = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33, 659.25, 783.99, 880.00, 1046.50];
+
+    function ensure() {
+      if (!state.soundOn) return null;
+      if (!ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        ctx = new AC();
+      }
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      return ctx;
+    }
+
+    function tone(freq, dur, type = 'sine', vol = 0.08, delay = 0) {
+      const ac = ensure();
+      if (!ac) return;
+      const now = ac.currentTime + delay;
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(vol, now + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      osc.connect(gain);
+      gain.connect(ac.destination);
+      osc.start(now);
+      osc.stop(now + dur + 0.02);
+    }
+
+    return {
+      step(len) {
+        const freq = scale[Math.min(scale.length - 1, Math.max(0, len - 1))];
+        tone(freq, 0.09, 'sine', 0.065);
+      },
+      backtrack() {
+        tone(220, 0.06, 'triangle', 0.045);
+      },
+      cut() {
+        tone(175, 0.08, 'sawtooth', 0.04);
+      },
+      connect(connectedCount) {
+        const idx = Math.min(scale.length - 3, Math.max(0, connectedCount - 1));
+        tone(scale[idx], 0.22, 'sine', 0.09, 0);
+        tone(scale[idx + 2], 0.28, 'triangle', 0.07, 0.055);
+      },
+      hint() {
+        tone(523.25, 0.16, 'sine', 0.07, 0);
+        tone(659.25, 0.16, 'sine', 0.07, 0.07);
+        tone(783.99, 0.24, 'triangle', 0.07, 0.14);
+      },
+      win() {
+        const notes = [523.25, 659.25, 783.99, 1046.5, 1174.66];
+        notes.forEach((f, i) => tone(f, 0.36, i % 2 === 0 ? 'sine' : 'triangle', 0.085, i * 0.075));
+      }
+    };
+  })();
+
+  // =========================================================================
+  // 4. STATE & PERSISTENCE
+  // =========================================================================
+  const STORAGE_KEY = 'neon_flow_1000_save_v1';
+  const state = {
+    currentLevel: 1,
+    isDaily: false,
+    soundOn: true,
+    symbolMode: false,
+    completed: {},      // { "1": { moves, stars, time } }
+    dailyCompleted: {}, // { "YYYY-MM-DD": { moves, stars, time } }
+    puzzle: null,
+    paths: [],          // Array of cell arrays per color index
+    endpointMap: new Map(), // cell -> color index
+    activeColor: -1,
+    isDragging: false,
+    moves: 0,
+    lastMovedColor: -1,
+    undoStack: [],
+    startTime: 0,
+    solved: false,
+    pickerChapter: 0
+  };
+
+  // Visual FX state
+  const particles = [];
+  const pulses = [];
+  const orbSpring = new Map(); // cell -> { s, v }
+
+  // EdTechra Classroom Campaign Bridge
+  const edtechra = {
+    active: false,
+    mode: 'standalone',
+    assignmentId: null,
+    totalLevels: 1000,
+    releasedStart: 1,
+    releasedEnd: 1000,
+    highestUnlockedLevel: 1000,
+    pointsPerLevel: 10,
+    completedLevels: {}
+  };
+
+  function getEdtechraStorageKey() {
+    return edtechra.assignmentId ? STORAGE_KEY + '_assign_' + edtechra.assignmentId : STORAGE_KEY;
+  }
+
+  function isLevelTeacherLocked(lvl) {
+    if (!edtechra.active || edtechra.mode === 'preview') return false;
+    return lvl < edtechra.releasedStart || lvl > edtechra.releasedEnd;
+  }
+
+  function isLevelProgLocked(lvl) {
+    if (!edtechra.active || edtechra.mode === 'preview') return false;
+    return lvl > edtechra.highestUnlockedLevel;
+  }
+
+  function applyEdtechraCampaignState(cs, requestedStartLevel) {
+    if (!cs || typeof cs !== 'object') return;
+    edtechra.totalLevels = Math.max(1, Number(cs.totalLevels || 1000));
+    edtechra.releasedStart = Math.max(1, Number(cs.releasedStart || 1));
+    edtechra.releasedEnd = Math.max(0, Math.min(edtechra.totalLevels, Number(cs.releasedEnd ?? 10)));
+    edtechra.highestUnlockedLevel = Math.max(0, Number(cs.highestUnlockedLevel ?? edtechra.releasedStart));
+    edtechra.pointsPerLevel = Math.max(0, Number(cs.pointsPerLevel ?? 10));
+    edtechra.completedLevels = (cs.completedLevels && typeof cs.completedLevels === 'object') ? cs.completedLevels : {};
+
+    const hydrated = {};
+    for (const [k, rec] of Object.entries(edtechra.completedLevels)) {
+      const lvlNum = Number(rec && rec.levelNumber ? rec.levelNumber : k);
+      if (Number.isInteger(lvlNum) && lvlNum >= 1) {
+        hydrated[String(lvlNum)] = {
+          moves: Number((rec && rec.details && rec.details.moves) || 0),
+          stars: Math.max(1, Math.min(3, Number((rec && rec.stars) || (rec && rec.details && rec.details.stars) || 3))),
+          time: Number((rec && rec.timeTakenSeconds) || 0)
+        };
+      }
+    }
+    state.completed = hydrated;
+    writeSave();
+    if (requestedStartLevel) {
+      const target = Math.max(edtechra.releasedStart, Math.min(Math.max(edtechra.releasedStart, edtechra.highestUnlockedLevel), Number(requestedStartLevel)));
+      if (edtechra.releasedEnd >= edtechra.releasedStart) {
+        loadLevel(target, false);
+      }
+    } else if (edtechra.active && edtechra.mode === 'student' && edtechra.releasedEnd >= edtechra.releasedStart) {
+      if (state.currentLevel < edtechra.releasedStart || state.currentLevel > edtechra.highestUnlockedLevel) {
+        loadLevel(Math.max(edtechra.releasedStart, Math.min(edtechra.highestUnlockedLevel, edtechra.releasedEnd)), false);
+      }
+    }
+    updateHUD();
+  }
+
+  function showTeacherWaitModal() {
+    winStars.textContent = '🎉';
+    winHeading.textContent = "You've completed all the available levels!";
+    winSub.textContent = 'Wait for your teacher to unlock the next challenge.';
+    winNextBtn.textContent = 'Back to Classroom';
+    winModal.classList.add('open');
+  }
+
+  function loadSave() {
+    try {
+      const raw = localStorage.getItem(getEdtechraStorageKey());
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d && typeof d === 'object') {
+        if (Number.isInteger(d.currentLevel) && d.currentLevel >= 1 && d.currentLevel <= 1000) {
+          state.currentLevel = d.currentLevel;
+        }
+        if (typeof d.soundOn === 'boolean') state.soundOn = d.soundOn;
+        if (typeof d.symbolMode === 'boolean') state.symbolMode = d.symbolMode;
+        if (d.completed && typeof d.completed === 'object') state.completed = d.completed;
+        if (d.dailyCompleted && typeof d.dailyCompleted === 'object') state.dailyCompleted = d.dailyCompleted;
+      }
+    } catch (_) {}
+  }
+
+  function writeSave() {
+    try {
+      localStorage.setItem(getEdtechraStorageKey(), JSON.stringify({
+        currentLevel: state.currentLevel,
+        soundOn: state.soundOn,
+        symbolMode: state.symbolMode,
+        completed: state.completed,
+        dailyCompleted: state.dailyCompleted
+      }));
+    } catch (_) {}
+  }
+
+  // =========================================================================
+  // 5. DOM REFERENCES
+  // =========================================================================
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const boardFrame = document.getElementById('boardFrame');
+
+  const progressSummary = document.getElementById('progressSummary');
+  const levelTitle = document.getElementById('levelTitle');
+  const gridBadge = document.getElementById('gridBadge');
+  const chapterLabel = document.getElementById('chapterLabel');
+  const flowsVal = document.getElementById('flowsVal');
+  const fillVal = document.getElementById('fillVal');
+  const movesVal = document.getElementById('movesVal');
+  const bestVal = document.getElementById('bestVal');
+  const statusBanner = document.getElementById('statusBanner');
+
+  const dailyBtn = document.getElementById('dailyBtn');
+  const symbolBtn = document.getElementById('symbolBtn');
+  const soundBtn = document.getElementById('soundBtn');
+  const soundLabel = document.getElementById('soundLabel');
+  const levelPickerBtn = document.getElementById('levelPickerBtn');
+  const prevBtn = document.getElementById('prevBtn');
+  const undoBtn = document.getElementById('undoBtn');
+  const hintBtn = document.getElementById('hintBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const nextBtn = document.getElementById('nextBtn');
+
+  const levelModal = document.getElementById('levelModal');
+  const closeLevelModal = document.getElementById('closeLevelModal');
+  const jumpInput = document.getElementById('jumpInput');
+  const jumpGoBtn = document.getElementById('jumpGoBtn');
+  const chapterTabs = document.getElementById('chapterTabs');
+  const levelGrid = document.getElementById('levelGrid');
+
+  const winModal = document.getElementById('winModal');
+  const winStars = document.getElementById('winStars');
+  const winHeading = document.getElementById('winHeading');
+  const winSub = document.getElementById('winSub');
+  const winMoves = document.getElementById('winMoves');
+  const winPar = document.getElementById('winPar');
+  const winTime = document.getElementById('winTime');
+  const winReplayBtn = document.getElementById('winReplayBtn');
+  const winLevelsBtn = document.getElementById('winLevelsBtn');
+  const winNextBtn = document.getElementById('winNextBtn');
+  const toastEl = document.getElementById('toast');
+
+  let toastTimer = null;
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2000);
+  }
+
+  // =========================================================================
+  // 6. GAMEPLAY LOGIC
+  // =========================================================================
+  function loadLevel(levelNum, isDaily = false) {
+    if (!isDaily && edtechra.active && edtechra.mode === 'student') {
+      if (edtechra.releasedEnd < edtechra.releasedStart) {
+        showToast('No levels are currently released by your teacher.');
+        return;
+      }
+      if (isLevelTeacherLocked(levelNum)) {
+        if (levelNum > edtechra.releasedEnd && state.completed[String(edtechra.releasedEnd)]) {
+          showTeacherWaitModal();
+        } else {
+          showToast(`🔒 Level ${levelNum} has not been released by your teacher yet (Released: ${edtechra.releasedStart}–${edtechra.releasedEnd}).`);
+        }
+        return;
+      }
+      if (isLevelProgLocked(levelNum)) {
+        showToast(`🔒 Complete Level ${Math.max(edtechra.releasedStart, edtechra.highestUnlockedLevel)} first to unlock Level ${levelNum}.`);
+        return;
+      }
+    }
+    state.isDaily = isDaily;
+    if (!isDaily) {
+      state.currentLevel = Math.max(1, Math.min(1000, levelNum));
+      state.pickerChapter = Math.floor((state.currentLevel - 1) / 100);
+    }
+    state.puzzle = isDaily ? generateDailyLevel() : generateLevel(state.currentLevel);
+    state.paths = state.puzzle.flows.map(() => []);
+    state.endpointMap = new Map();
+    orbSpring.clear();
+    for (const f of state.puzzle.flows) {
+      state.endpointMap.set(f.a, f.color);
+      state.endpointMap.set(f.b, f.color);
+      orbSpring.set(f.a, { s: 0.7, v: 0.18 });
+      orbSpring.set(f.b, { s: 0.7, v: 0.18 });
+    }
+    state.activeColor = -1;
+    state.isDragging = false;
+    state.moves = 0;
+    state.lastMovedColor = -1;
+    state.undoStack = [];
+    state.startTime = performance.now();
+    state.solved = false;
+
+    winModal.classList.remove('open');
+    writeSave();
+    updateHUD();
+
+    if (!state.isDaily && edtechra.active && edtechra.mode === 'student') {
+      const completedLvl = state.puzzle.level;
+      if (completedLvl >= edtechra.highestUnlockedLevel && completedLvl < edtechra.releasedEnd) {
+        edtechra.highestUnlockedLevel = completedLvl + 1;
+      }
+      const lvlMax = Math.max(1, edtechra.pointsPerLevel || 10);
+      const earned = Math.max(1, Math.round((stars / 3) * lvlMax));
+      try {
+        window.parent.postMessage({
+          type: 'EDTECHRA_CAMPAIGN_LEVEL_COMPLETE',
+          gameId: 'neon-flow',
+          levelNumber: completedLvl,
+          scoreEarned: earned,
+          maxPoints: lvlMax,
+          stars,
+          completed: true,
+          timeTakenSeconds: elapsedSec,
+          details: { moves: state.moves, par, stars, gridSize: state.puzzle.size }
+        }, window.location.origin);
+      } catch (_) {}
+    }
+  }
+
+  function clonePaths() {
+    return state.paths.map(p => p.slice());
+  }
+
+  function pushUndo() {
+    state.undoStack.push({
+      paths: clonePaths(),
+      moves: state.moves,
+      lastMovedColor: state.lastMovedColor
+    });
+    if (state.undoStack.length > 80) state.undoStack.shift();
+  }
+
+  function isFlowComplete(colorIdx) {
+    const p = state.paths[colorIdx];
+    if (!p || p.length < 2) return false;
+    const f = state.puzzle.flows[colorIdx];
+    const first = p[0], last = p[p.length - 1];
+    return (first === f.a && last === f.b) || (first === f.b && last === f.a);
+  }
+
+  function getStats() {
+    const totalFlows = state.puzzle.flows.length;
+    let connected = 0;
+    const occupied = new Set();
+    for (let i = 0; i < totalFlows; i++) {
+      const f = state.puzzle.flows[i];
+      occupied.add(f.a);
+      occupied.add(f.b);
+      if (isFlowComplete(i)) connected++;
+      for (const c of state.paths[i]) occupied.add(c);
+    }
+    const totalCells = state.puzzle.size * state.puzzle.size;
+    // Count only cells covered by active pipes (or endpoints)
+    let pipeCells = 0;
+    const pipeSet = new Set();
+    for (let i = 0; i < totalFlows; i++) {
+      for (const c of state.paths[i]) pipeSet.add(c);
+    }
+    pipeCells = pipeSet.size;
+    const pct = Math.round((pipeCells / totalCells) * 100);
+    return { connected, totalFlows, pipeCells, totalCells, pct };
+  }
+
+  function updateHUD() {
+    const p = state.puzzle;
+    const st = getStats();
+    const solvedTotal = Object.keys(state.completed).length;
+
+    progressSummary.textContent = `${solvedTotal.toLocaleString()} / 1,000 Solved`;
+    if (state.isDaily) {
+      levelTitle.textContent = `Daily · ${p.dailyKey}`;
+      chapterLabel.textContent = 'Daily Challenge';
+      dailyBtn.classList.add('active-mode');
+    } else {
+      levelTitle.textContent = `Level ${p.level}`;
+      chapterLabel.textContent = `Ch. ${p.chapter + 1} · ${CHAPTERS[p.chapter].name}`;
+      dailyBtn.classList.remove('active-mode');
+    }
+
+    gridBadge.textContent = `${p.size}×${p.size}`;
+    flowsVal.textContent = `${st.connected} / ${st.totalFlows}`;
+    flowsVal.className = 'stat-val' + (st.connected === st.totalFlows ? ' complete' : '');
+    fillVal.textContent = `${st.pct}%`;
+    fillVal.className = 'stat-val' + (st.pipeCells === st.totalCells ? ' complete' : '');
+    movesVal.textContent = `${state.moves}`;
+
+    const rec = state.isDaily ? state.dailyCompleted[p.dailyKey] : state.completed[String(p.level)];
+    if (rec) {
+      bestVal.textContent = `${'★'.repeat(rec.stars)} (${rec.moves})`;
+      bestVal.className = 'stat-val' + (rec.stars === 3 ? ' perfect' : ' complete');
+    } else {
+      bestVal.textContent = `Par ${st.totalFlows}`;
+      bestVal.className = 'stat-val';
+    }
+
+    prevBtn.disabled = state.isDaily || state.currentLevel <= 1;
+    nextBtn.disabled = state.isDaily || state.currentLevel >= 1000;
+    undoBtn.disabled = state.undoStack.length === 0 || state.solved;
+
+    symbolBtn.classList.toggle('active', state.symbolMode);
+    soundLabel.textContent = state.soundOn ? '🔊' : '🔇';
+    soundBtn.classList.toggle('active', state.soundOn);
+
+    // Show helpful nudge if all flows connected but board not 100% full
+    if (!state.solved && st.connected === st.totalFlows && st.pipeCells < st.totalCells) {
+      statusBanner.textContent = `All flows linked! Fill the remaining ${st.totalCells - st.pipeCells} empty cell${st.totalCells - st.pipeCells > 1 ? 's' : ''} to clear.`;
+      statusBanner.classList.add('visible');
+    } else {
+      statusBanner.classList.remove('visible');
+    }
+  }
+
+  function findPathAtCell(cell) {
+    for (let i = 0; i < state.paths.length; i++) {
+      const idx = state.paths[i].indexOf(cell);
+      if (idx !== -1) return { color: i, idx };
+    }
+    return null;
+  }
+
+  function spawnBurst(cell, colorIdx, count = 14) {
+    const pos = cellToCenter(cell);
+    const col = COLORS[colorIdx % COLORS.length];
+    pulses.push({ x: pos.x, y: pos.y, r: cellSize * 0.25, maxR: cellSize * 1.15, alpha: 0.9, color: col.main });
+    for (let i = 0; i < count; i++) {
+      const ang = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
+      const spd = 1.4 + Math.random() * 3.4;
+      particles.push({
+        x: pos.x,
+        y: pos.y,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd,
+        r: 2.2 + Math.random() * 3.2,
+        alpha: 1,
+        color: i % 3 === 0 ? '#ffffff' : col.main
+      });
+    }
+  }
+
+  function kickOrb(cell, strength = 0.26) {
+    const sp = orbSpring.get(cell);
+    if (sp) sp.v += strength;
+  }
+
+  function handlePointerDown(cell) {
+    if (state.solved || cell < 0) return;
+
+    const epColor = state.endpointMap.get(cell);
+    if (epColor !== undefined) {
+      pushUndo();
+      if (state.lastMovedColor !== epColor) {
+        state.moves++;
+        state.lastMovedColor = epColor;
+      }
+      state.activeColor = epColor;
+      state.paths[epColor] = [cell];
+      state.isDragging = true;
+      kickOrb(cell, 0.28);
+      AudioEngine.step(1);
+      updateHUD();
+      return;
+    }
+
+    const hit = findPathAtCell(cell);
+    if (hit) {
+      pushUndo();
+      if (state.lastMovedColor !== hit.color) {
+        state.moves++;
+        state.lastMovedColor = hit.color;
+      }
+      state.activeColor = hit.color;
+      state.paths[hit.color] = state.paths[hit.color].slice(0, hit.idx + 1);
+      state.isDragging = true;
+      AudioEngine.step(state.paths[hit.color].length);
+      updateHUD();
+    }
+  }
+
+  function stepToCell(cell) {
+    if (!state.isDragging || state.activeColor < 0 || state.solved) return;
+    const cIdx = state.activeColor;
+    const path = state.paths[cIdx];
+    if (!path.length) return;
+
+    const head = path[path.length - 1];
+    if (cell === head) return;
+
+    const size = state.puzzle.size;
+    if (!areAdjacent(head, cell, size)) {
+      // Smooth 2-step Manhattan interpolation if dragging fast
+      const hr = Math.floor(head / size), hc = head % size;
+      const tr = Math.floor(cell / size), tc = cell % size;
+      const dr = tr - hr, dc = tc - hc;
+      if (Math.abs(dr) + Math.abs(dc) === 2) {
+        const mid1 = dr !== 0 ? (hr + Math.sign(dr)) * size + hc : -1;
+        const mid2 = dc !== 0 ? hr * size + (hc + Math.sign(dc)) : -1;
+        const tryMid = (mid) => {
+          if (mid < 0) return false;
+          const ep = state.endpointMap.get(mid);
+          if (ep !== undefined && ep !== cIdx) return false;
+          stepToCell(mid);
+          return path[path.length - 1] === mid;
+        };
+        if (tryMid(mid1) || tryMid(mid2)) {
+          stepToCell(cell);
+        }
+      }
+      return;
+    }
+
+    // Backtracking along own path
+    const ownIdx = path.indexOf(cell);
+    if (ownIdx !== -1) {
+      if (ownIdx < path.length - 1) {
+        state.paths[cIdx] = path.slice(0, ownIdx + 1);
+        AudioEngine.backtrack();
+        updateHUD();
+      }
+      return;
+    }
+
+    // Already completed this flow? Don't extend past target endpoint
+    if (isFlowComplete(cIdx)) return;
+
+    // Cannot enter another color's endpoint orb
+    const epColor = state.endpointMap.get(cell);
+    if (epColor !== undefined && epColor !== cIdx) return;
+
+    // Cut another color's pipe if crossing it
+    const hit = findPathAtCell(cell);
+    if (hit && hit.color !== cIdx) {
+      state.paths[hit.color] = state.paths[hit.color].slice(0, hit.idx);
+      AudioEngine.cut();
+      spawnBurst(cell, hit.color, 6);
+    }
+
+    path.push(cell);
+    if (isFlowComplete(cIdx)) {
+      const st = getStats();
+      kickOrb(cell, 0.34);
+      spawnBurst(cell, cIdx, 18);
+      AudioEngine.connect(st.connected);
+      checkWin();
+    } else {
+      AudioEngine.step(path.length);
+    }
+    updateHUD();
+  }
+
+  function handlePointerUp() {
+    if (!state.isDragging) return;
+    state.isDragging = false;
+    // If user only tapped a single orb without dragging, leave empty path
+    if (state.activeColor >= 0 && state.paths[state.activeColor].length <= 1) {
+      state.paths[state.activeColor] = [];
+    }
+    state.activeColor = -1;
+    updateHUD();
+  }
+
+  function checkWin() {
+    const st = getStats();
+    if (st.connected !== st.totalFlows || st.pipeCells !== st.totalCells) return;
+
+    state.solved = true;
+    state.isDragging = false;
+    state.activeColor = -1;
+
+    const elapsedSec = Math.max(1, Math.round((performance.now() - state.startTime) / 1000));
+    const par = st.totalFlows;
+    const stars = state.moves <= par ? 3 : state.moves <= par + 3 ? 2 : 1;
+
+    // Record best result
+    const store = state.isDaily ? state.dailyCompleted : state.completed;
+    const key = state.isDaily ? state.puzzle.dailyKey : String(state.puzzle.level);
+    const prev = store[key];
+    if (!prev || stars > prev.stars || (stars === prev.stars && state.moves < prev.moves)) {
+      store[key] = { moves: state.moves, stars, time: elapsedSec };
+    }
+    writeSave();
+    updateHUD();
+
+    // Celebratory bursts across all orbs
+    AudioEngine.win();
+    state.puzzle.flows.forEach((f, idx) => {
+      setTimeout(() => {
+        spawnBurst(f.a, f.color, 10);
+        spawnBurst(f.b, f.color, 10);
+      }, idx * 55);
+    });
+
+    // Show Victory Modal
+    setTimeout(() => {
+      winStars.textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
+      winHeading.textContent = state.isDaily
+        ? 'Daily Challenge Cleared!'
+        : `Level ${state.puzzle.level} Complete!`;
+      winSub.textContent = stars === 3
+        ? 'Perfect flow! Flawless par efficiency.'
+        : stars === 2
+        ? 'Great routing! Try par moves for 3 stars.'
+        : 'Board 100% filled! Ready for the next grid?';
+      winMoves.textContent = String(state.moves);
+      winPar.textContent = String(par);
+      const mins = Math.floor(elapsedSec / 60);
+      const secs = String(elapsedSec % 60).padStart(2, '0');
+      winTime.textContent = `${mins}:${secs}`;
+      const atTeacherCap = !state.isDaily && edtechra.active && edtechra.mode === 'student' && state.currentLevel >= edtechra.releasedEnd && edtechra.releasedEnd < edtechra.totalLevels;
+      if (atTeacherCap) {
+        winHeading.textContent = "🎉 You've completed all the available levels!";
+        winSub.textContent = 'Wait for your teacher to unlock the next challenge.';
+        winNextBtn.textContent = 'Back to Classroom';
+      } else {
+        winNextBtn.textContent = state.isDaily
+          ? 'Back to Campaign →'
+          : state.currentLevel < 1000
+          ? `Level ${state.currentLevel + 1} →`
+          : 'All 1,000 Cleared! ★';
+      }
+      winModal.classList.add('open');
+    }, 420);
+  }
+
+  function applyHint() {
+    if (state.solved) return;
+    // Find an unsolved flow (preferring one that doesn't match its verified solution)
+    const unsolvedIdx = [];
+    for (let i = 0; i < state.puzzle.flows.length; i++) {
+      const f = state.puzzle.flows[i];
+      const p = state.paths[i];
+      const matchesSol =
+        p.length === f.solution.length &&
+        (p.every((c, idx) => c === f.solution[idx]) ||
+         p.every((c, idx) => c === f.solution[f.solution.length - 1 - idx]));
+      if (!matchesSol) unsolvedIdx.push(i);
+    }
+    if (!unsolvedIdx.length) return;
+
+    pushUndo();
+    const target = unsolvedIdx[0];
+    const sol = state.puzzle.flows[target].solution;
+    const solSet = new Set(sol);
+
+    // Clear any conflicting cells from other paths
+    for (let i = 0; i < state.paths.length; i++) {
+      if (i === target) continue;
+      const cutIdx = state.paths[i].findIndex(c => solSet.has(c));
+      if (cutIdx !== -1) state.paths[i] = state.paths[i].slice(0, cutIdx);
+    }
+
+    state.paths[target] = sol.slice();
+    state.moves++;
+    state.lastMovedColor = target;
+    AudioEngine.hint();
+    spawnBurst(sol[0], target, 12);
+    spawnBurst(sol[sol.length - 1], target, 12);
+    kickOrb(sol[0], 0.3);
+    kickOrb(sol[sol.length - 1], 0.3);
+    showToast(`Hint revealed ${COLORS[target % COLORS.length].name} flow`);
+    updateHUD();
+    checkWin();
+  }
+
+  // =========================================================================
+  // 7. CANVAS SIZING & HIGH-CRAFT 3D NEON RENDERER
+  // =========================================================================
+  let boardPx = 400;
+  let cellSize = 80;
+  let dpr = 1;
+
+  function resizeCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    boardPx = Math.floor(Math.min(rect.width, rect.height));
+    canvas.width = Math.round(boardPx * dpr);
+    canvas.height = Math.round(boardPx * dpr);
+    if (state.puzzle) {
+      cellSize = boardPx / state.puzzle.size;
+    }
+  }
+
+  function cellToCenter(cell) {
+    const size = state.puzzle.size;
+    const r = Math.floor(cell / size);
+    const c = cell % size;
+    return { x: (c + 0.5) * cellSize, y: (r + 0.5) * cellSize };
+  }
+
+  function pointerToCell(ev) {
+    const rect = canvas.getBoundingClientRect();
+    const x = ev.clientX - rect.left;
+    const y = ev.clientY - rect.top;
+    if (x < 0 || y < 0 || x >= rect.width || y >= rect.height) return -1;
+    const size = state.puzzle.size;
+    const c = Math.floor((x / rect.width) * size);
+    const r = Math.floor((y / rect.height) * size);
+    if (c < 0 || c >= size || r < 0 || r >= size) return -1;
+    return r * size + c;
+  }
+
+  function drawRoundedRect(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
+  }
+
+  function render(now) {
+    requestAnimationFrame(render);
+    if (!state.puzzle) return;
+
+    const size = state.puzzle.size;
+    cellSize = boardPx / size;
+
+    ctx.save();
+    ctx.scale(dpr, dpr);
+
+    // 1. Deep Indigo Board Background
+    const bgGrad = ctx.createRadialGradient(boardPx * 0.5, boardPx * 0.35, 10, boardPx * 0.5, boardPx * 0.5, boardPx * 0.85);
+    bgGrad.addColorStop(0, '#1e0e47');
+    bgGrad.addColorStop(1, '#11062b');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, boardPx, boardPx);
+
+    // 2. Cell Tints under active pipes + Recessed Grid Tiles
+    const pad = Math.max(2, cellSize * 0.05);
+    const tileRadius = Math.max(4, cellSize * 0.14);
+
+    // Build cell -> color map for active pipes
+    const cellTint = new Int8Array(size * size).fill(-1);
+    for (let i = 0; i < state.paths.length; i++) {
+      const p = state.paths[i];
+      for (let j = 0; j < p.length; j++) cellTint[p[j]] = i;
+    }
+
+    const st = getStats();
+    const highlightEmpty = !state.solved && st.connected === st.totalFlows && st.pipeCells < st.totalCells;
+    const pulseWave = 0.5 + 0.5 * Math.sin(now * 0.006);
+
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        const cell = r * size + c;
+        const x = c * cellSize + pad;
+        const y = r * cellSize + pad;
+        const w = cellSize - pad * 2;
+        const tCol = cellTint[cell];
+
+        drawRoundedRect(ctx, x, y, w, w, tileRadius);
+        if (tCol >= 0) {
+          ctx.fillStyle = COLORS[tCol % COLORS.length].tint;
+          ctx.fill();
+        } else if (highlightEmpty) {
+          ctx.fillStyle = `rgba(255, 208, 0, ${0.08 + pulseWave * 0.12})`;
+          ctx.fill();
+          ctx.strokeStyle = `rgba(255, 208, 0, ${0.35 + pulseWave * 0.35})`;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          continue;
+        } else {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.025)';
+          ctx.fill();
+        }
+
+        ctx.strokeStyle = 'rgba(184, 148, 255, 0.09)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+
+    // 3. 3D Glossy Neon Pipes
+    const pipeW = cellSize * 0.36;
+    for (let i = 0; i < state.paths.length; i++) {
+      const p = state.paths[i];
+      if (p.length < 2) continue;
+      const col = COLORS[i % COLORS.length];
+
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      const trace = () => {
+        ctx.beginPath();
+        const p0 = cellToCenter(p[0]);
+        ctx.moveTo(p0.x, p0.y);
+        for (let k = 1; k < p.length; k++) {
+          const pk = cellToCenter(p[k]);
+          ctx.lineTo(pk.x, pk.y);
+        }
+      };
+
+      // Layer A: Outer neon glow
+      trace();
+      ctx.strokeStyle = col.glow;
+      ctx.lineWidth = pipeW * 1.48;
+      ctx.stroke();
+
+      // Layer B: Dark 3D rim / drop shadow
+      trace();
+      ctx.strokeStyle = col.dark;
+      ctx.lineWidth = pipeW * 1.06;
+      ctx.stroke();
+
+      // Layer C: Vibrant core pipe
+      trace();
+      ctx.strokeStyle = col.main;
+      ctx.lineWidth = pipeW * 0.86;
+      ctx.stroke();
+
+      // Layer D: Specular 3D glossy ridge (shifted slightly up-left)
+      ctx.translate(-pipeW * 0.11, -pipeW * 0.11);
+      trace();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.36)';
+      ctx.lineWidth = pipeW * 0.24;
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    // 4. 3D Glossy Endpoint Orbs with Damped Spring Physics
+    const baseOrbR = cellSize * 0.33;
+    for (let i = 0; i < state.puzzle.flows.length; i++) {
+      const f = state.puzzle.flows[i];
+      const col = COLORS[f.color % COLORS.length];
+      const done = isFlowComplete(i);
+      const isAct = state.activeColor === i;
+
+      for (const cell of [f.a, f.b]) {
+        const sp = orbSpring.get(cell) || { s: 1, v: 0 };
+        const target = isAct ? 1.12 : 1.0;
+        sp.v += (target - sp.s) * 0.22;
+        sp.v *= 0.72;
+        sp.s += sp.v;
+        orbSpring.set(cell, sp);
+
+        const pos = cellToCenter(cell);
+        const breathe = done ? 1 : 1 + 0.025 * Math.sin(now * 0.004 + i);
+        const r = baseOrbR * sp.s * breathe;
+
+        // Soft outer halo
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, r * (done || isAct ? 1.32 : 1.15), 0, Math.PI * 2);
+        ctx.fillStyle = col.glow;
+        ctx.globalAlpha = done || isAct ? 0.42 : 0.2;
+        ctx.fill();
+        ctx.restore();
+
+        // Drop shadow
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y + r * 0.14, r * 0.98, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
+        ctx.fill();
+        ctx.restore();
+
+        // 3D Spherical Radial Gradient
+        const grad = ctx.createRadialGradient(
+          pos.x - r * 0.32, pos.y - r * 0.34, r * 0.08,
+          pos.x, pos.y, r
+        );
+        grad.addColorStop(0, col.light);
+        grad.addColorStop(0.42, col.main);
+        grad.addColorStop(1, col.dark);
+
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // Crisp glossy top-left specular dot
+        ctx.beginPath();
+        ctx.ellipse(pos.x - r * 0.3, pos.y - r * 0.32, r * 0.26, r * 0.16, -Math.PI / 5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.46)';
+        ctx.fill();
+
+        // Optional colorblind symbol
+        if (state.symbolMode) {
+          ctx.fillStyle = 'rgba(15, 6, 36, 0.85)';
+          ctx.font = `800 ${Math.round(r * 0.92)}px Inter, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(col.sym, pos.x, pos.y + 1);
+        }
+      }
+    }
+
+    // 5. Shockwave Pulses
+    for (let i = pulses.length - 1; i >= 0; i--) {
+      const pl = pulses[i];
+      pl.r += (pl.maxR - pl.r) * 0.16;
+      pl.alpha *= 0.88;
+      if (pl.alpha < 0.03) {
+        pulses.splice(i, 1);
+        continue;
+      }
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(pl.x, pl.y, pl.r, 0, Math.PI * 2);
+      ctx.strokeStyle = pl.color;
+      ctx.globalAlpha = pl.alpha;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 6. Sparkle Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const pt = particles[i];
+      pt.x += pt.vx;
+      pt.y += pt.vy;
+      pt.vx *= 0.93;
+      pt.vy *= 0.93;
+      pt.alpha *= 0.92;
+      if (pt.alpha < 0.04) {
+        particles.splice(i, 1);
+        continue;
+      }
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI * 2);
+      ctx.fillStyle = pt.color;
+      ctx.globalAlpha = pt.alpha;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  // =========================================================================
+  // 8. LEVEL SELECTOR UI (10 Chapters × 100 Levels = 1,000 Levels)
+  // =========================================================================
+  function renderLevelPicker() {
+    chapterTabs.innerHTML = '';
+    CHAPTERS.forEach((ch, idx) => {
+      let chapSolved = 0;
+      const start = idx * 100 + 1;
+      for (let l = start; l < start + 100; l++) {
+        if (state.completed[String(l)]) chapSolved++;
+      }
+      const btn = document.createElement('button');
+      btn.className = 'chap-tab' + (idx === state.pickerChapter ? ' active' : '');
+      btn.innerHTML = `<span>Ch.${idx + 1} ${ch.name}</span><small>${ch.range} · ${ch.desc} (${chapSolved}/100)</small>`;
+      btn.addEventListener('click', () => {
+        state.pickerChapter = idx;
+        renderLevelPicker();
+      });
+      chapterTabs.appendChild(btn);
+    });
+
+    levelGrid.innerHTML = '';
+    const startLvl = state.pickerChapter * 100 + 1;
+    const frag = document.createDocumentFragment();
+    for (let l = startLvl; l < startLvl + 100; l++) {
+      const rec = state.completed[String(l)];
+      const btn = document.createElement('button');
+      const tLocked = isLevelTeacherLocked(l);
+      const pLocked = !tLocked && isLevelProgLocked(l);
+      let cls = 'lvl-cell';
+      if (tLocked || pLocked) cls += ' edtechra-locked';
+      else if (!state.isDaily && l === state.currentLevel) cls += ' current';
+      else if (rec && rec.stars === 3) cls += ' perfect';
+      else if (rec) cls += ' solved';
+      btn.className = cls;
+      btn.innerHTML = `<span>${l}</span>${(tLocked || pLocked) ? '<span class="lvl-stars">🔒</span>' : (rec ? `<span class="lvl-stars">${'★'.repeat(rec.stars)}</span>` : '')}`;
+      btn.addEventListener('click', () => {
+        if (tLocked) {
+          showToast(`🔒 Level ${l} is not released by your teacher yet (Released: ${edtechra.releasedStart}–${edtechra.releasedEnd}).`);
+          return;
+        }
+        if (pLocked) {
+          showToast(`🔒 Complete Level ${Math.max(edtechra.releasedStart, edtechra.highestUnlockedLevel)} first.`);
+          return;
+        }
+        levelModal.classList.remove('open');
+        loadLevel(l, false);
+      });
+      frag.appendChild(btn);
+    }
+    levelGrid.appendChild(frag);
+  }
+
+  // =========================================================================
+  // 9. EVENT LISTENERS
+  // =========================================================================
+  canvas.addEventListener('pointerdown', (ev) => {
+    ev.preventDefault();
+    canvas.setPointerCapture(ev.pointerId);
+    handlePointerDown(pointerToCell(ev));
+  });
+
+  canvas.addEventListener('pointermove', (ev) => {
+    if (!state.isDragging) return;
+    ev.preventDefault();
+    const cell = pointerToCell(ev);
+    if (cell >= 0) stepToCell(cell);
+  });
+
+  canvas.addEventListener('pointerup', handlePointerUp);
+  canvas.addEventListener('pointercancel', handlePointerUp);
+
+  prevBtn.addEventListener('click', () => {
+    if (!state.isDaily && state.currentLevel > 1) loadLevel(state.currentLevel - 1, false);
+  });
+
+  nextBtn.addEventListener('click', () => {
+    if (!state.isDaily && state.currentLevel < 1000) loadLevel(state.currentLevel + 1, false);
+  });
+
+  undoBtn.addEventListener('click', () => {
+    if (!state.undoStack.length || state.solved) return;
+    const prev = state.undoStack.pop();
+    state.paths = prev.paths;
+    state.moves = prev.moves;
+    state.lastMovedColor = prev.lastMovedColor;
+    AudioEngine.backtrack();
+    updateHUD();
+  });
+
+  hintBtn.addEventListener('click', applyHint);
+
+  resetBtn.addEventListener('click', () => {
+    if (state.isDaily) loadLevel(0, true);
+    else loadLevel(state.currentLevel, false);
+    AudioEngine.backtrack();
+    showToast('Board reset');
+  });
+
+  dailyBtn.addEventListener('click', () => {
+    if (state.isDaily) {
+      loadLevel(state.currentLevel, false);
+      showToast(`Returned to Level ${state.currentLevel}`);
+    } else {
+      loadLevel(0, true);
+      showToast(`Daily Challenge (${getTodayKey()})`);
+    }
+  });
+
+  symbolBtn.addEventListener('click', () => {
+    state.symbolMode = !state.symbolMode;
+    writeSave();
+    updateHUD();
+    showToast(state.symbolMode ? 'Colorblind symbols ON' : 'Colorblind symbols OFF');
+  });
+
+  soundBtn.addEventListener('click', () => {
+    state.soundOn = !state.soundOn;
+    writeSave();
+    updateHUD();
+    if (state.soundOn) AudioEngine.step(3);
+  });
+
+  levelPickerBtn.addEventListener('click', () => {
+    state.pickerChapter = Math.floor((state.currentLevel - 1) / 100);
+    jumpInput.value = '';
+    renderLevelPicker();
+    levelModal.classList.add('open');
+  });
+
+  closeLevelModal.addEventListener('click', () => levelModal.classList.remove('open'));
+  levelModal.addEventListener('click', (ev) => {
+    if (ev.target === levelModal) levelModal.classList.remove('open');
+  });
+
+  function doJump() {
+    const val = parseInt(jumpInput.value, 10);
+    if (!Number.isInteger(val) || val < 1 || val > 1000) {
+      showToast('Enter a level number from 1 to 1000');
+      return;
+    }
+    levelModal.classList.remove('open');
+    loadLevel(val, false);
+  }
+  jumpGoBtn.addEventListener('click', doJump);
+  jumpInput.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') doJump();
+  });
+
+  winReplayBtn.addEventListener('click', () => {
+    if (state.isDaily) loadLevel(0, true);
+    else loadLevel(state.currentLevel, false);
+  });
+
+  winLevelsBtn.addEventListener('click', () => {
+    winModal.classList.remove('open');
+    renderLevelPicker();
+    levelModal.classList.add('open');
+  });
+
+  winNextBtn.addEventListener('click', () => {
+    winModal.classList.remove('open');
+    if (state.isDaily) {
+      loadLevel(state.currentLevel, false);
+    } else if (edtechra.active && edtechra.mode === 'student' && state.currentLevel >= edtechra.releasedEnd) {
+      try { window.parent.postMessage({ type: 'EDTECHRA_GAME_EXIT', gameId: 'neon-flow' }, window.location.origin); } catch (_) {}
+    } else if (state.currentLevel < 1000) {
+      loadLevel(state.currentLevel + 1, false);
+    }
+  });
+
+  window.addEventListener('keydown', (ev) => {
+    if (document.activeElement === jumpInput) return;
+    if (ev.key === 'Escape') {
+      levelModal.classList.remove('open');
+      winModal.classList.remove('open');
+      return;
+    }
+    if (levelModal.classList.contains('open') || winModal.classList.contains('open')) return;
+    const k = ev.key.toLowerCase();
+    if (k === 'r') resetBtn.click();
+    else if (k === 'z') undoBtn.click();
+    else if (k === 'h') hintBtn.click();
+    else if (k === 'm') soundBtn.click();
+    else if (ev.key === 'ArrowLeft') prevBtn.click();
+    else if (ev.key === 'ArrowRight') nextBtn.click();
+  });
+
+  window.addEventListener('resize', resizeCanvas);
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(resizeCanvas).observe(boardFrame);
+  }
+
+  // =========================================================================
+  // 10. BOOT
+  // =========================================================================
+  window.addEventListener('message', (ev) => {
+    if (ev.origin !== window.location.origin) return;
+    const msg = ev.data;
+    if (!msg || typeof msg !== 'object') return;
+    if (msg.type === 'EDTECHRA_INIT_GAME') {
+      const p = msg.payload || msg;
+      edtechra.active = true;
+      edtechra.mode = p.mode || 'student';
+      edtechra.assignmentId = p.assignmentId || null;
+      if (p.campaignState) {
+        applyEdtechraCampaignState(p.campaignState, p.levelNumber || p.campaignState.currentLevel || p.campaignState.releasedStart || 1);
+      } else if (p.levelNumber) {
+        loadLevel(Number(p.levelNumber), false);
+      }
+    } else if (msg.type === 'EDTECHRA_CAMPAIGN_STATE_SYNC') {
+      if (msg.campaignState) {
+        applyEdtechraCampaignState(msg.campaignState, null);
+      }
+    }
+  });
+
+  window.addEventListener('load', () => {
+    loadSave();
+    loadLevel(state.currentLevel, false);
+    resizeCanvas();
+    requestAnimationFrame(render);
+    try {
+      window.parent.postMessage({ type: 'EDTECHRA_GAME_READY', gameId: 'neon-flow' }, window.location.origin);
+    } catch (_) {}
+  });
+})();
+</script>
+</body>
+</html>

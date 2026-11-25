@@ -601,6 +601,16 @@ export const StudentSubmissionsTab: React.FC<StudentSubmissionsTabProps> = ({
                                 Best Streak: {d.bestStreak}
                               </span>
                             )}
+                            {typeof d.xpEarned === 'number' && (
+                              <span className="px-2.5 py-1 rounded-lg bg-sky-50 text-sky-800 font-semibold">
+                                XP Earned: +{d.xpEarned} XP
+                              </span>
+                            )}
+                            {typeof d.incorrectAnswers === 'number' && !d.questionsEnabled && (
+                              <span className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 font-semibold">
+                                Incorrect: {d.incorrectAnswers}
+                              </span>
+                            )}
                             {d.mode && (
                               <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold">
                                 Mode: {String(d.mode)}

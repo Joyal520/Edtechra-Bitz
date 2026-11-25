@@ -39,6 +39,7 @@ import type {
   GameConfig,
   GameId,
   GameLevelDefinition,
+  GameOfWordsConfig,
   LevelUnlockMode,
   LiquidSentencesConfig,
   LuminaWordsConfig,
@@ -262,6 +263,46 @@ function sanitizeLevelConfig(
         }
       };
     }
+    case 'game-of-words': {
+      const c = (cfg || {}) as GameOfWordsConfig;
+      const sourceMode = c.sourceMode || 'builtin';
+      const cleanWords = (Array.isArray(c.words) ? c.words : [])
+        .map((w) => ({
+          word: String(w.word || '').trim(),
+          definition: String(w.definition || '').trim(),
+          example: (w.example || '').trim(),
+          category: (w.category || 'Everyday').trim(),
+          difficulty: (w.difficulty || 'beginner') as 'beginner' | 'intermediate' | 'advanced',
+          synonyms: Array.isArray(w.synonyms)
+            ? w.synonyms.map((s) => String(s || '').trim()).filter(Boolean)
+            : undefined,
+          antonym: (w.antonym || '').trim() || undefined,
+          imageUrl: w.imageUrl || undefined,
+          emoji: (w.emoji || '').trim() || undefined
+        }))
+        .filter((w) => w.word.length > 0 && w.definition.length > 0);
+
+      if (sourceMode === 'custom' && cleanWords.length < 4) {
+        return {
+          error: `${levelLabel}: Custom Word List mode requires at least 4 words with definitions (or switch to Hybrid / Built-in 2,000 Words).`
+        };
+      }
+
+      return {
+        config: {
+          title: (c.title || '').trim() || 'Vocabulary Training',
+          description: (c.description || '').trim(),
+          sourceMode,
+          category: c.category || 'All',
+          difficulty: c.difficulty || 'all',
+          gameMode: c.gameMode || 'all',
+          roundSize: Math.max(4, Math.min(30, Number(c.roundSize || 10))),
+          timedChallenge: Boolean(c.timedChallenge),
+          timeLimitSeconds: Math.max(30, Math.min(300, Number(c.timeLimitSeconds || 60))),
+          words: cleanWords
+        } satisfies GameOfWordsConfig
+      };
+    }
     default: {
       const item = getGameCatalogItem(gameId);
       const sc = (cfg || {}) as StandaloneTrainingConfig;
@@ -323,6 +364,9 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
   const [leaderboardEnabled, setLeaderboardEnabled] = useState<boolean>(true);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [campaignReleaseStart, setCampaignReleaseStart] = useState<number>(1);
+  const [campaignReleaseEnd, setCampaignReleaseEnd] = useState<number>(10);
+  const [campaignPointsPerLevel, setCampaignPointsPerLevel] = useState<number>(10);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -365,7 +409,14 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
       setGameTitle(item.isStandaloneBuiltIn ? item.name : `${item.name} Challenge`);
       setShowScoresToStudents(item.supportsScoring !== false);
       setLeaderboardEnabled(item.defaultLeaderboardEnabled !== false);
-      setStep('configure');
+      if (item.isCampaignGame) {
+        setCampaignReleaseStart(1);
+        setCampaignReleaseEnd(item.defaultInitialReleaseEnd || 10);
+        setCampaignPointsPerLevel(10);
+        setStep('assign');
+      } else {
+        setStep('configure');
+      }
     } else {
       setEditingLibraryId(null);
       setUnlockMode('sequential');
@@ -510,7 +561,14 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
     setShowScoresToStudents(item.supportsScoring !== false);
     setLeaderboardEnabled(item.defaultLeaderboardEnabled !== false);
     setConfigError(null);
-    setStep('configure');
+    if (item.isCampaignGame) {
+      setCampaignReleaseStart(1);
+      setCampaignReleaseEnd(item.defaultInitialReleaseEnd || 10);
+      setCampaignPointsPerLevel(10);
+      setStep('assign');
+    } else {
+      setStep('configure');
+    }
   };
 
   const validateAllLevels = (): GameLevelDefinition[] | null => {
@@ -585,11 +643,6 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
 
   const handlePublish = async (e: React.FormEvent) => {
     e.preventDefault();
-    const validLevels = validateAllLevels();
-    if (!validLevels) {
-      setStep('configure');
-      return;
-    }
     if (!gameTitle.trim()) {
       setPublishError('Please enter an activity title.');
       return;
@@ -604,6 +657,13 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
     }
 
     const item = getGameCatalogItem(selectedGameId);
+    const isCampaign = Boolean(item.isCampaignGame);
+    const validLevels = isCampaign ? levels : validateAllLevels();
+    if (!validLevels) {
+      setStep('configure');
+      return;
+    }
+
     const supportsScoring = item.supportsScoring !== false;
     const totalPoints = supportsScoring
       ? validLevels.reduce((sum, l) => sum + l.points, 0)
@@ -611,18 +671,21 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
     setPublishing(true);
     setPublishError(null);
 
-    // Automatically save/update the activity in the teacher's personal Game Library
-    const libResult = await gameLibraryService.saveGameToLibrary({
-      id: editingLibraryId || undefined,
-      gameId: selectedGameId,
-      title: gameTitle.trim(),
-      levels: validLevels,
-      unlockMode,
-      dailyLimit
-    });
-    if (libResult.data) {
-      setEditingLibraryId(libResult.data.id);
-      onSavedToLibrary?.(libResult.data);
+    let savedLibId: string | undefined;
+    if (!isCampaign) {
+      const libResult = await gameLibraryService.saveGameToLibrary({
+        id: editingLibraryId || undefined,
+        gameId: selectedGameId,
+        title: gameTitle.trim(),
+        levels: validLevels,
+        unlockMode,
+        dailyLimit
+      });
+      if (libResult.data) {
+        savedLibId = libResult.data.id;
+        setEditingLibraryId(libResult.data.id);
+        onSavedToLibrary?.(libResult.data);
+      }
     }
 
     const dueIso = dueDate ? new Date(dueDate).toISOString() : null;
@@ -647,7 +710,16 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
       levels: validLevels,
       unlockMode,
       dailyLimit,
-      libraryGameId: libResult.data?.id
+      libraryGameId: savedLibId,
+      ...(isCampaign
+        ? {
+            campaignRelease: {
+              releasedStart: campaignReleaseStart,
+              releasedEnd: Math.max(campaignReleaseStart, campaignReleaseEnd),
+              pointsPerLevel: campaignPointsPerLevel
+            }
+          }
+        : {})
     });
 
     setPublishing(false);
@@ -872,6 +944,80 @@ export const GameLibraryModal: React.FC<GameLibraryModalProps> = ({
               {publishError && (
                 <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
                   {publishError}
+                </div>
+              )}
+
+              {currentCatalog.isCampaignGame && (
+                <div className="p-4 rounded-2xl border border-sky-200 bg-sky-50/70 space-y-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                      <h4 className="text-xs font-black uppercase tracking-wider text-sky-900">
+                        Initial Teacher-Controlled Level Release
+                      </h4>
+                      <p className="text-[11px] text-sky-800">
+                        Students can only play released levels ({currentCatalog.totalLevels?.toLocaleString()} total levels available). You can unlock more batches per class anytime.
+                      </p>
+                    </div>
+                    <span className="text-[11px] font-black px-2.5 py-1 rounded-full bg-white text-sky-700 border border-sky-200">
+                      {Math.max(0, campaignReleaseEnd - campaignReleaseStart + 1)} Levels Released
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {[10, 20, 50, currentCatalog.totalLevels || 1000].map((endVal) => (
+                      <button
+                        key={endVal}
+                        type="button"
+                        onClick={() => {
+                          setCampaignReleaseStart(1);
+                          setCampaignReleaseEnd(endVal);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                          campaignReleaseStart === 1 && campaignReleaseEnd === endVal
+                            ? 'bg-sky-600 text-white border-sky-600'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        {endVal === currentCatalog.totalLevels ? `All (${endVal.toLocaleString()})` : `Levels 1–${endVal}`}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Start Level</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={currentCatalog.totalLevels || 1000}
+                        value={campaignReleaseStart}
+                        onChange={(e) => setCampaignReleaseStart(Math.max(1, Number(e.target.value) || 1))}
+                        className="w-full px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-sm font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">End Level</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={currentCatalog.totalLevels || 1000}
+                        value={campaignReleaseEnd}
+                        onChange={(e) => setCampaignReleaseEnd(Math.max(campaignReleaseStart, Math.min(currentCatalog.totalLevels || 1000, Number(e.target.value) || 1)))}
+                        className="w-full px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-sm font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Pts / Level</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={campaignPointsPerLevel}
+                        onChange={(e) => setCampaignPointsPerLevel(Math.max(1, Number(e.target.value) || 10))}
+                        className="w-full px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-sm font-bold"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
 

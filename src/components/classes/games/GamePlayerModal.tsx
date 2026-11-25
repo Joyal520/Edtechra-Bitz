@@ -20,6 +20,7 @@ import {
 import { ACTIVITY_TYPE_LABELS, gameLibraryService, getGameCatalogItem } from '@/services/gameLibraryService';
 import { gameMusicService, type GameMusicSnapshot } from '@/services/gameMusicService';
 import type {
+  CampaignProgressState,
   CompletedLevelRecord,
   GameAssignmentSettings,
   GameCompletionPayload,
@@ -95,14 +96,42 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
   const [completedDetails, setCompletedDetails] = useState<Record<string, unknown> | null>(null);
   const [previewResult, setPreviewResult] = useState<{ score: number; max: number; time: number } | null>(null);
   const [musicSnap, setMusicSnap] = useState<GameMusicSnapshot>(() => gameMusicService.getSnapshot());
+  const [campaignState, setCampaignState] = useState<CampaignProgressState | null>(null);
+  const campaignStateRef = useRef<CampaignProgressState | null>(null);
 
   const catalogItem = getGameCatalogItem(gameId);
+  const isCampaign = Boolean(assignmentSettings?.is_campaign_game) || Boolean(catalogItem.isCampaignGame);
   const supportsScoring = assignmentSettings?.supports_scoring !== false && catalogItem.supportsScoring !== false;
   const showScoresToStudents = supportsScoring && assignmentSettings?.show_scores_to_students !== false;
   const maxAttempts = assignmentSettings?.max_attempts ?? 1;
   const usedAttempts = Number(alreadyCompletedRecord?.attempts || (alreadyCompletedScore !== null ? 1 : 0));
   const attemptsExhausted =
-    alreadyCompletedScore !== null && maxAttempts !== 0 && usedAttempts >= Math.max(1, maxAttempts);
+    !isCampaign && alreadyCompletedScore !== null && maxAttempts !== 0 && usedAttempts >= Math.max(1, maxAttempts);
+
+  useEffect(() => {
+    campaignStateRef.current = campaignState;
+  }, [campaignState]);
+
+  useEffect(() => {
+    if (!isOpen || !isCampaign || isPreview || !assignmentId) {
+      setCampaignState(null);
+      return;
+    }
+    let cancelled = false;
+    gameLibraryService.getCampaignState(assignmentId).then((res) => {
+      if (!cancelled && res.campaignState) {
+        setCampaignState(res.campaignState);
+        campaignStateRef.current = res.campaignState;
+        iframeRef.current?.contentWindow?.postMessage(
+          { type: 'EDTECHRA_CAMPAIGN_STATE_SYNC', campaignState: res.campaignState },
+          window.location.origin
+        );
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, isCampaign, isPreview, assignmentId]);
 
   useEffect(() => {
     return gameMusicService.subscribe(setMusicSnap);
@@ -163,6 +192,29 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
 
       if (data.type === 'EDTECHRA_GAME_READY') {
         if (data.gameId && String(data.gameId) !== gameId) return;
+        const fallbackLr = assignmentSettings?.level_release;
+        const fallbackCampaignState = isCampaign
+          ? campaignStateRef.current || {
+              assignmentId: assignmentId || '',
+              classroomId,
+              gameId,
+              totalLevels: Number(fallbackLr?.total_levels || assignmentSettings?.total_levels || catalogItem.totalLevels || 1000),
+              releasedStart: Number(fallbackLr?.released_start ?? 1),
+              releasedEnd: Number(fallbackLr?.released_end ?? catalogItem.defaultInitialReleaseEnd ?? 10),
+              releasedCount: 0,
+              releaseHistory: [],
+              pointsPerLevel: Number(assignmentSettings?.points_per_level ?? 10),
+              highestUnlockedLevel: Number(levelNumber || fallbackLr?.released_start || 1),
+              currentLevel: Number(levelNumber || fallbackLr?.released_start || 1),
+              completedCount: 0,
+              completedInReleased: 0,
+              completedAllReleased: false,
+              totalScore: 0,
+              totalTimeSeconds: 0,
+              completedLevels: {}
+            }
+          : undefined;
+
         const initPayload = {
           mode: isPreview ? 'preview' : 'student',
           title,
@@ -172,7 +224,8 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
           assignmentId,
           classroomId,
           levelId,
-          config
+          config,
+          ...(fallbackCampaignState ? { campaignState: fallbackCampaignState } : {})
         };
         iframeRef.current.contentWindow?.postMessage(
           {
@@ -182,6 +235,43 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
           },
           targetOrigin
         );
+        return;
+      }
+
+      if (data.type === 'EDTECHRA_CAMPAIGN_LEVEL_COMPLETE') {
+        if (isPreview || !assignmentId) return;
+        const lvlNum = Number(data.levelNumber || 1);
+        const res = await gameLibraryService.completeCampaignLevel({
+          assignmentId,
+          classroomId,
+          gameId,
+          levelNumber: lvlNum,
+          scoreEarned: Number(data.scoreEarned ?? 0),
+          maxPoints: Number(data.maxPoints ?? maxPoints ?? 10),
+          stars: data.stars !== undefined ? Number(data.stars) : undefined,
+          timeTakenSeconds: Number(data.timeTakenSeconds ?? 0),
+          details: data.details && typeof data.details === 'object' ? data.details : undefined
+        });
+
+        if (res.success && res.campaignState) {
+          setCampaignState(res.campaignState);
+          campaignStateRef.current = res.campaignState;
+          iframeRef.current?.contentWindow?.postMessage(
+            { type: 'EDTECHRA_CAMPAIGN_STATE_SYNC', campaignState: res.campaignState },
+            targetOrigin
+          );
+          onSubmitted?.({
+            success: true,
+            pointsAwarded: res.pointsAwarded ?? 0,
+            maxPoints: Number(data.maxPoints ?? 10),
+            percentage: 100,
+            timeTakenSeconds: Number(data.timeTakenSeconds ?? 0),
+            levelId: String(lvlNum),
+            completedLevelsCount: res.completedCount,
+            totalLevels: res.campaignState.releasedCount,
+            totalPointsEarned: res.totalPointsEarned
+          });
+        }
         return;
       }
 
@@ -773,6 +863,26 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({
                     </p>
                     <p className="text-lg font-black text-slate-900 mt-0.5">
                       {String(activeDetails.rawScore)}
+                    </p>
+                  </div>
+                )}
+                {typeof activeDetails?.xpEarned === 'number' && (
+                  <div className="p-2.5 rounded-xl bg-white border border-slate-100">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      XP Earned
+                    </p>
+                    <p className="text-lg font-black text-amber-600 mt-0.5">
+                      +{String(activeDetails.xpEarned)} XP
+                    </p>
+                  </div>
+                )}
+                {typeof activeDetails?.bestStreak === 'number' && (
+                  <div className="p-2.5 rounded-xl bg-white border border-slate-100">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Best Streak
+                    </p>
+                    <p className="text-lg font-black text-orange-600 mt-0.5">
+                      {String(activeDetails.bestStreak)} 🔥
                     </p>
                   </div>
                 )}
