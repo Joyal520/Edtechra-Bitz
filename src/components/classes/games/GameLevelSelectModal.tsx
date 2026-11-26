@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Award,
+  Calendar,
   CheckCircle2,
   Clock,
   Lock,
@@ -29,6 +30,21 @@ interface GameLevelSelectModalProps {
   onPlayLevel: (level: GameLevelDefinition) => void;
 }
 
+function formatDeadlineCompact(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const datePart = d.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
+  const timePart = d.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+  return `${datePart} · ${timePart}`;
+}
+
 export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
   isOpen,
   onClose,
@@ -38,6 +54,7 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
   onPlayLevel
 }) => {
   const [campaignState, setCampaignState] = useState<CampaignProgressState | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const gameId = (assignment?.settings?.game_id as GameId) || 'liquid-sentences';
   const catalogItem = getGameCatalogItem(gameId);
@@ -58,6 +75,27 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
       cancelled = true;
     };
   }, [isOpen, isCampaign, assignment?.id]);
+
+  // Keyboard accessibility (Escape to close + focus management)
+  useEffect(() => {
+    if (!isOpen) return;
+    const prevFocus = document.activeElement as HTMLElement | null;
+    const timer = window.setTimeout(() => {
+      closeButtonRef.current?.focus();
+    }, 20);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('keydown', onKeyDown);
+      prevFocus?.focus?.();
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -155,27 +193,166 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
       ? Math.round((completedCount / levels.length) * 100)
       : 0;
 
+  const progressCompleted = campaignDisplay ? campaignDisplay.completedInRel : completedCount;
+  const progressTotal = campaignDisplay ? campaignDisplay.releasedCount : levels.length;
+  const displayEarned = campaignDisplay ? campaignDisplay.earnedPts : totalPointsEarned;
+  const deadlineFormatted = assignment.due_date ? formatDeadlineCompact(assignment.due_date) : '';
+
+  // Compute Sticky Bottom Primary Play Action
+  const stickyAction = (() => {
+    if (!isPublished) {
+      return {
+        label: 'Back to Classroom',
+        disabled: false,
+        isCompletedState: false,
+        onClick: onClose
+      };
+    }
+    if (!started) {
+      return {
+        label: assignment.settings?.start_date
+          ? `Starts ${formatDeadlineCompact(assignment.settings.start_date)}`
+          : 'Scheduled',
+        disabled: true,
+        isCompletedState: false,
+        onClick: () => {}
+      };
+    }
+    if (campaignState?.hasDifficultyPaths && campaignState.paths) {
+      const defDiff = campaignState.defaultDifficulty || 'easy';
+      const dp = campaignState.paths[defDiff];
+      if (!dp || !dp.isAllowed || dp.releasedCount === 0) {
+        return { label: 'Locked by Teacher', disabled: true, isCompletedState: false, onClick: () => {} };
+      }
+      const lvlToPlay = dp.highestUnlockedLevel || dp.releasedStart || 1;
+      const diffName = defDiff.charAt(0).toUpperCase() + defDiff.slice(1);
+      return {
+        label: dp.completedInReleased > 0 ? `Continue ${diffName} (Level ${lvlToPlay})` : `Play ${diffName} (Level ${lvlToPlay})`,
+        disabled: false,
+        isCompletedState: false,
+        onClick: () => {
+          onPlayLevel({
+            id: String(lvlToPlay),
+            levelNumber: lvlToPlay,
+            title: `${diffName.toUpperCase()} Level ${lvlToPlay}`,
+            points: campaignState.pointsPerLevel || 25,
+            isManuallyLocked: false,
+            unlockAt: null,
+            config: { title: assignment.title, difficulty: defDiff } as any
+          });
+        }
+      };
+    }
+    if (campaignDisplay) {
+      if (campaignDisplay.releasedCount === 0) {
+        return { label: 'Locked by Teacher', disabled: true, isCompletedState: false, onClick: () => {} };
+      }
+      const targetLvl = campaignDisplay.highestUnlocked || campaignDisplay.relStart;
+      return {
+        label: campaignDisplay.completedAllReleased
+          ? `Replay Level ${campaignDisplay.relEnd}`
+          : campaignDisplay.completedInRel > 0
+            ? `Continue Playing (Level ${targetLvl})`
+            : `Play Game (Level ${targetLvl})`,
+        disabled: false,
+        isCompletedState: false,
+        onClick: () => campaignDisplay.launchLevel(targetLvl)
+      };
+    }
+
+    const nextAvailable = evaluated.find((e) => e.status === 'available');
+    if (nextAvailable) {
+      return {
+        label: levels.length === 1 ? 'Play Game' : `Play Level ${nextAvailable.level.levelNumber}`,
+        disabled: false,
+        isCompletedState: false,
+        onClick: () => onPlayLevel(nextAvailable.level)
+      };
+    }
+    const replayable = evaluated.find((e) => {
+      if (e.status !== 'completed') return false;
+      const used = Number(e.completionRecord?.attempts || 1);
+      return maxAttempts === 0 || (maxAttempts > 1 && used < maxAttempts);
+    });
+    if (replayable) {
+      return {
+        label: levels.length === 1 ? 'Replay Game' : `Replay Level ${replayable.level.levelNumber}`,
+        disabled: false,
+        isCompletedState: false,
+        onClick: () => onPlayLevel(replayable.level)
+      };
+    }
+    return {
+      label: 'All Levels Completed ✓',
+      disabled: true,
+      isCompletedState: true,
+      onClick: () => {}
+    };
+  })();
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/65 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
-        {/* Header */}
-        <div className="p-5 sm:p-6 bg-gradient-to-r from-sky-50 via-white to-indigo-50 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0">
-          <div className="flex items-center gap-4 min-w-0">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-2 sm:p-4 bg-slate-900/65 backdrop-blur-sm overscroll-contain"
+      style={{
+        paddingTop: 'calc(8px + env(safe-area-inset-top, 0px))',
+        paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))'
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="game-details-modal-title"
+        className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-2xl flex flex-col shadow-2xl border border-slate-200 overflow-hidden"
+        style={{
+          maxHeight: 'calc(100dvh - 16px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))'
+        }}
+      >
+        {/* 1. Fixed Compact Header */}
+        <div className="px-4 sm:px-6 py-3 bg-gradient-to-r from-sky-50 via-white to-indigo-50 border-b border-slate-100 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-sky-600 text-white truncate">
+              {catalogItem.name}
+            </span>
+          </div>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            onClick={onClose}
+            className="min-w-[44px] min-h-[44px] -mr-1.5 rounded-xl hover:bg-slate-100 active:bg-slate-200 text-slate-600 transition flex items-center justify-center shrink-0 cursor-pointer"
+            aria-label="Close game details"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* 2. Scrollable Content Area */}
+        <div
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-4"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
+          {/* Game Information */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3.5 sm:gap-4">
             <img
               src={catalogItem.thumbnailUrl}
               alt={catalogItem.name}
-              className="w-24 sm:w-28 aspect-video rounded-2xl object-cover shrink-0 border border-sky-200 shadow-sm"
+              className="w-full sm:w-36 aspect-video rounded-2xl object-cover shrink-0 border border-sky-200 shadow-sm max-h-44 sm:max-h-none"
             />
-            <div className="min-w-0 space-y-1">
+            <div className="min-w-0 flex-1 space-y-2">
+              <h2
+                id="game-details-modal-title"
+                className="text-lg sm:text-xl font-black text-slate-900 leading-snug break-words"
+              >
+                {assignment.title}
+              </h2>
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-sky-600 text-white">
-                  {catalogItem.name}
-                </span>
-                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
                   {ACTIVITY_TYPE_LABELS[actType] || 'Activity'}
                 </span>
                 <span
-                  className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                  className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
                     isCompulsory
                       ? 'bg-rose-50 text-rose-700 border-rose-200'
                       : 'bg-teal-50 text-teal-700 border-teal-200'
@@ -184,7 +361,7 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
                   {isCompulsory ? 'Compulsory' : 'Optional'}
                 </span>
                 {levels.length > 1 && (
-                  <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
                     {unlockMode === 'sequential'
                       ? 'Sequential Unlock'
                       : unlockMode === 'scheduled'
@@ -193,92 +370,92 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
                   </span>
                 )}
               </div>
-              <h2 className="text-lg sm:text-xl font-black text-slate-900 truncate">
-                {assignment.title}
-              </h2>
-              <p className="text-xs font-semibold text-slate-600">
-                Your Progress: {campaignDisplay ? campaignDisplay.completedInRel : completedCount} of{' '}
-                {campaignDisplay ? campaignDisplay.releasedCount : levels.length}{' '}
-                {campaignDisplay
-                  ? 'Released Levels Completed'
-                  : `${levels.length === 1 ? (supportsScoring ? 'Level' : 'Session') : 'Levels'} Completed`}
-                {assignment.due_date ? ` • Due ${new Date(assignment.due_date).toLocaleString()}` : ''}
-              </p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-xl hover:bg-white/80 text-slate-500 transition shrink-0"
-            aria-label="Close level selection"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Progress Summary Bar */}
-        <div className="px-5 sm:px-6 py-3.5 bg-slate-50 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 shrink-0">
-          <div className="flex-1 min-w-[180px] space-y-1.5">
-            <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
-              <span>Overall Completion</span>
-              <span>{progressPct}%</span>
-            </div>
-            <div className="h-2.5 w-full rounded-full bg-slate-200 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-sky-500 to-emerald-500 transition-all duration-300"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-          </div>
-
-          {supportsScoring && showScores && (
-            <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-200 shadow-2xs">
-              <Trophy className="w-4 h-4 text-amber-500" />
-              <div className="text-xs">
-                <span className="font-black text-slate-900">
-                  {campaignDisplay ? campaignDisplay.earnedPts : totalPointsEarned}
-                </span>
-                <span className="text-slate-500 font-semibold"> / {totalAvailablePoints} pts</span>
+          {/* Progress & Deadline Grid */}
+          <div className={`grid grid-cols-1 ${deadlineFormatted ? 'sm:grid-cols-2' : ''} gap-2.5`}>
+            <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
+              <div>
+                <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                  Progress
+                </div>
+                <div className="text-sm font-black text-slate-900 mt-0.5">
+                  {progressCompleted} / {progressTotal}{' '}
+                  {campaignDisplay
+                    ? 'Levels Completed'
+                    : `${progressTotal === 1 ? (supportsScoring ? 'Level' : 'Session') : 'Levels'} Completed`}
+                </div>
               </div>
+              <span className="text-xs font-black px-2.5 py-1 rounded-full bg-sky-100 text-sky-800 shrink-0">
+                {progressPct}%
+              </span>
+            </div>
+
+            {deadlineFormatted && (
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-slate-400" />
+                  Deadline
+                </div>
+                <div className="text-sm font-black text-slate-900 mt-0.5 whitespace-nowrap">
+                  {deadlineFormatted}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Completion Bar & Points */}
+          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                <span>Overall Completion</span>
+                <span>{progressPct}%</span>
+              </div>
+              <div className="h-2.5 w-full rounded-full bg-slate-200 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-sky-500 to-emerald-500 transition-all duration-300"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+            </div>
+
+            {supportsScoring && showScores && (
+              <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-200 shadow-2xs self-start sm:self-center shrink-0">
+                <Trophy className="w-4 h-4 text-amber-500 shrink-0" />
+                <div className="text-xs whitespace-nowrap">
+                  <span className="font-black text-slate-900">{displayEarned}</span>
+                  <span className="text-slate-500 font-semibold"> / {totalAvailablePoints} pts</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Instructions */}
+          {teacherInstructions && (
+            <div className="p-3.5 rounded-2xl bg-sky-50/80 border border-sky-200 text-xs sm:text-sm text-sky-950 leading-relaxed">
+              <span className="font-extrabold text-sky-900 mr-1.5">Instructions:</span>
+              {teacherInstructions}
             </div>
           )}
-        </div>
 
-        {teacherInstructions && (
-          <div className="px-5 sm:px-6 py-2.5 bg-sky-50/70 border-b border-sky-100 text-xs text-sky-950 font-medium shrink-0">
-            <span className="font-extrabold text-sky-800 mr-1.5">Instructions:</span>
-            {teacherInstructions}
-          </div>
-        )}
-
-        {/* Level List */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-3 flex-1">
+          {/* Level List / Campaign Paths */}
           {!isPublished ? (
-            <div className="p-6 rounded-2xl bg-amber-50 border border-amber-200 text-center space-y-3 my-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
-                <Lock className="w-6 h-6" />
+            <div className="p-5 rounded-2xl bg-amber-50 border border-amber-200 text-center space-y-2.5">
+              <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
+                <Lock className="w-5 h-5" />
               </div>
-              <div className="space-y-1">
-                <h3 className="text-base font-black text-slate-900">
-                  This game is currently unavailable
-                </h3>
-                <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
-                  Your teacher has unpublished this assignment. You cannot start new attempts or access levels right now, and your existing progress and leaderboard scores have been preserved.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer"
-              >
-                Back to Classroom
-              </button>
+              <h3 className="text-sm sm:text-base font-black text-slate-900">
+                This game is currently unavailable
+              </h3>
+              <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
+                Your teacher has unpublished this assignment. Your existing progress and leaderboard scores have been preserved.
+              </p>
             </div>
           ) : campaignDisplay ? (
             <div className="space-y-4">
               {campaignDisplay.completedAllReleased && !campaignState?.hasDifficultyPaths && (
-                <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 to-sky-50 border border-emerald-200 text-center space-y-1.5">
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 to-sky-50 border border-emerald-200 text-center space-y-1">
                   <div className="text-sm font-black text-emerald-900">
                     🎉 You&apos;ve completed all the available levels!
                   </div>
@@ -299,7 +476,7 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
                     const isLocked = !dp || !dp.isAllowed || dp.releasedCount === 0;
                     const pct = dp && dp.releasedCount > 0 ? Math.round((dp.completedInReleased / dp.releasedCount) * 100) : 0;
                     return (
-                      <div key={meta.id} className={`p-4 rounded-2xl border flex flex-col justify-between gap-3 ${isLocked ? 'border-slate-200 bg-slate-50 opacity-75' : meta.tone}`}>
+                      <div key={meta.id} className={`p-3.5 rounded-2xl border flex flex-col justify-between gap-3 ${isLocked ? 'border-slate-200 bg-slate-50 opacity-75' : meta.tone}`}>
                         <div className="space-y-1.5">
                           <div className="text-xs font-black tracking-wide text-slate-900">
                             {meta.icon} {meta.title}
@@ -334,7 +511,7 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
                               config: { title: assignment.title, difficulty: meta.id } as any
                             });
                           }}
-                          className="w-full py-2 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:bg-slate-200 disabled:text-slate-500 text-white text-xs font-extrabold cursor-pointer"
+                          className="w-full min-h-[44px] py-2 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:bg-slate-200 disabled:text-slate-500 text-white text-xs font-extrabold cursor-pointer"
                         >
                           {isLocked ? '🔒 Locked' : `Play ${meta.title.charAt(0) + meta.title.slice(1).toLowerCase()}`}
                         </button>
@@ -344,205 +521,219 @@ export const GameLevelSelectModal: React.FC<GameLevelSelectModalProps> = ({
                 </div>
               ) : (
                 <>
-
-              {/* Breakdown pills */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
-                <div className="flex flex-wrap gap-2 text-xs font-bold">
-                  {campaignDisplay.completedInRel > 0 && (
-                    <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                      🟢 Levels {campaignDisplay.relStart}–{Math.min(campaignDisplay.relEnd, campaignDisplay.relStart + campaignDisplay.completedInRel - 1)} Completed
-                    </span>
-                  )}
-                  {!campaignDisplay.completedAllReleased && campaignDisplay.highestUnlocked >= campaignDisplay.relStart && (
-                    <span className="px-3 py-1 rounded-full bg-sky-100 text-sky-800 border border-sky-200">
-                      🔵 Level {campaignDisplay.highestUnlocked} Available
-                    </span>
-                  )}
-                  {campaignDisplay.highestUnlocked < campaignDisplay.relEnd && (
-                    <span className="px-3 py-1 rounded-full bg-slate-200 text-slate-700">
-                      🔒 Levels {campaignDisplay.highestUnlocked + 1}–{campaignDisplay.relEnd} Available after progression
-                    </span>
-                  )}
-                  {campaignDisplay.relEnd < campaignDisplay.totalLevels && (
-                    <span className="px-3 py-1 rounded-full bg-slate-200/80 text-slate-600">
-                      🔒 Levels {campaignDisplay.relEnd + 1}–{campaignDisplay.totalLevels.toLocaleString()} Not Released by Teacher
-                    </span>
-                  )}
-                </div>
-
-                {started && campaignDisplay.releasedCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => campaignDisplay.launchLevel(campaignDisplay.highestUnlocked || campaignDisplay.relStart)}
-                    className="w-full py-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-black inline-flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
-                  >
-                    <Play className="w-4 h-4 fill-current" />
-                    <span>
-                      {campaignDisplay.completedAllReleased
-                        ? `Replay Level ${campaignDisplay.relEnd}`
-                        : campaignDisplay.completedInRel > 0
-                          ? `Continue Playing (Level ${campaignDisplay.highestUnlocked})`
-                          : `Start Level ${campaignDisplay.relStart}`}
-                    </span>
-                  </button>
-                )}
-              </div>
-
-              {/* Released Levels Grid */}
-              {campaignDisplay.releasedCount > 0 && (
-                <div className="space-y-2">
-                  <div className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
-                    Released Levels ({campaignDisplay.relStart}–{campaignDisplay.relEnd})
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                    <div className="flex flex-wrap gap-2 text-xs font-bold">
+                      {campaignDisplay.completedInRel > 0 && (
+                        <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          🟢 Levels {campaignDisplay.relStart}–{Math.min(campaignDisplay.relEnd, campaignDisplay.relStart + campaignDisplay.completedInRel - 1)} Completed
+                        </span>
+                      )}
+                      {!campaignDisplay.completedAllReleased && campaignDisplay.highestUnlocked >= campaignDisplay.relStart && (
+                        <span className="px-3 py-1 rounded-full bg-sky-100 text-sky-800 border border-sky-200">
+                          🔵 Level {campaignDisplay.highestUnlocked} Available
+                        </span>
+                      )}
+                      {campaignDisplay.highestUnlocked < campaignDisplay.relEnd && (
+                        <span className="px-3 py-1 rounded-full bg-slate-200 text-slate-700">
+                          🔒 Levels {campaignDisplay.highestUnlocked + 1}–{campaignDisplay.relEnd} Available after progression
+                        </span>
+                      )}
+                      {campaignDisplay.relEnd < campaignDisplay.totalLevels && (
+                        <span className="px-3 py-1 rounded-full bg-slate-200/80 text-slate-600">
+                          🔒 Levels {campaignDisplay.relEnd + 1}–{campaignDisplay.totalLevels.toLocaleString()} Not Released by Teacher
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-5 sm:grid-cols-8 gap-2">
-                    {Array.from({ length: Math.min(200, campaignDisplay.releasedCount) }, (_, idx) => {
-                      const lvlNum = campaignDisplay.relStart + idx;
-                      const rec = campaignDisplay.completedLvls[String(lvlNum)];
-                      const isDone = Boolean(rec);
-                      const isNext = !isDone && lvlNum === campaignDisplay.highestUnlocked;
-                      const isLocked = !isDone && lvlNum > campaignDisplay.highestUnlocked;
-                      return (
-                        <button
-                          key={lvlNum}
-                          type="button"
-                          disabled={isLocked || !started}
-                          onClick={() => campaignDisplay.launchLevel(lvlNum)}
-                          className={`p-2 rounded-xl border text-center transition flex flex-col items-center justify-center ${
-                            isDone
-                              ? 'bg-emerald-50 border-emerald-300 text-emerald-900 hover:bg-emerald-100 cursor-pointer'
-                              : isNext
-                                ? 'bg-sky-600 border-sky-600 text-white shadow-sm hover:bg-sky-700 cursor-pointer'
-                                : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                          }`}
-                        >
-                          <span className="text-xs font-black">{lvlNum}</span>
-                          <span className="text-[10px] mt-0.5">
-                            {isDone ? '✓' : isNext ? '▶' : '🔒'}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {campaignDisplay.releasedCount > 200 && (
-                    <p className="text-[11px] text-slate-500 font-semibold">
-                      Showing first 200 released levels above. Use the in-game level selector to jump to any unlocked level up to {campaignDisplay.relEnd}.
-                    </p>
+
+                  {campaignDisplay.releasedCount > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
+                        Released Levels ({campaignDisplay.relStart}–{campaignDisplay.relEnd})
+                      </div>
+                      <div className="grid grid-cols-5 sm:grid-cols-8 gap-2">
+                        {Array.from({ length: Math.min(200, campaignDisplay.releasedCount) }, (_, idx) => {
+                          const lvlNum = campaignDisplay.relStart + idx;
+                          const rec = campaignDisplay.completedLvls[String(lvlNum)];
+                          const isDone = Boolean(rec);
+                          const isNext = !isDone && lvlNum === campaignDisplay.highestUnlocked;
+                          const isLocked = !isDone && lvlNum > campaignDisplay.highestUnlocked;
+                          return (
+                            <button
+                              key={lvlNum}
+                              type="button"
+                              disabled={isLocked || !started}
+                              onClick={() => campaignDisplay.launchLevel(lvlNum)}
+                              className={`min-h-[44px] p-2 rounded-xl border text-center transition flex flex-col items-center justify-center ${
+                                isDone
+                                  ? 'bg-emerald-50 border-emerald-300 text-emerald-900 hover:bg-emerald-100 cursor-pointer'
+                                  : isNext
+                                    ? 'bg-sky-600 border-sky-600 text-white shadow-sm hover:bg-sky-700 cursor-pointer'
+                                    : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                              }`}
+                            >
+                              <span className="text-xs font-black">{lvlNum}</span>
+                              <span className="text-[10px] mt-0.5">
+                                {isDone ? '✓' : isNext ? '▶' : '🔒'}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {campaignDisplay.releasedCount > 200 && (
+                        <p className="text-[11px] text-slate-500 font-semibold">
+                          Showing first 200 released levels above. Use the in-game level selector to jump to any unlocked level up to {campaignDisplay.relEnd}.
+                        </p>
+                      )}
+                    </div>
                   )}
-                </div>
-              )}
                 </>
               )}
             </div>
-          ) : evaluated.map(({ level, status, lockReason, completionRecord }) => {
-            const isCompleted = status === 'completed';
-            const isAvailable = status === 'available';
-            const itemCount = getLevelQuestionCount(gameId, level.config);
+          ) : (
+            <div className="space-y-2.5">
+              {evaluated.map(({ level, status, lockReason, completionRecord }) => {
+                const isCompleted = status === 'completed';
+                const isAvailable = status === 'available';
+                const itemCount = getLevelQuestionCount(gameId, level.config);
 
-            return (
-              <div
-                key={level.id}
-                className={`p-4 rounded-2xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                  isCompleted
-                    ? 'bg-emerald-50/60 border-emerald-200'
-                    : isAvailable
-                    ? 'bg-white border-sky-200 shadow-sm hover:border-sky-400'
-                    : 'bg-slate-50/80 border-slate-200 opacity-85'
-                }`}
-              >
-                <div className="space-y-1 min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span
-                      className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                        isCompleted
-                          ? 'bg-emerald-600 text-white border-emerald-600'
-                          : isAvailable
-                          ? 'bg-sky-600 text-white border-sky-600'
-                          : 'bg-slate-200 text-slate-600 border-slate-300'
-                      }`}
-                    >
-                      Level {level.levelNumber}
-                    </span>
+                return (
+                  <div
+                    key={level.id}
+                    className={`p-3.5 sm:p-4 rounded-2xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                      isCompleted
+                        ? 'bg-emerald-50/60 border-emerald-200'
+                        : isAvailable
+                        ? 'bg-white border-sky-200 shadow-sm hover:border-sky-400'
+                        : 'bg-slate-50/80 border-slate-200 opacity-85'
+                    }`}
+                  >
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                            isCompleted
+                              ? 'bg-emerald-600 text-white border-emerald-600'
+                              : isAvailable
+                              ? 'bg-sky-600 text-white border-sky-600'
+                              : 'bg-slate-200 text-slate-600 border-slate-300'
+                          }`}
+                        >
+                          Level {level.levelNumber}
+                        </span>
 
-                    {supportsScoring && showScores && (
-                      <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
-                        <Award className="w-3.5 h-3.5 text-amber-500" />
-                        {isCompleted && completionRecord
-                          ? `${completionRecord.scoreEarned} / ${level.points} pts earned`
-                          : `${level.points} pts`}
-                      </span>
-                    )}
+                        {supportsScoring && showScores && (
+                          <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+                            <Award className="w-3.5 h-3.5 text-amber-500" />
+                            {isCompleted && completionRecord
+                              ? `${completionRecord.scoreEarned} / ${level.points} pts earned`
+                              : `${level.points} pts`}
+                          </span>
+                        )}
 
-                    {isCompleted && completionRecord && (
-                      <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {completionRecord.timeTakenSeconds}s
-                      </span>
-                    )}
-                  </div>
+                        {isCompleted && completionRecord && (
+                          <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {completionRecord.timeTakenSeconds}s
+                          </span>
+                        )}
+                      </div>
 
-                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
-                    {level.title}
-                  </h3>
-                  {itemCount > 0 && (
-                    <p className="text-[11px] font-semibold text-slate-500">
-                      {itemCount} {itemCount === 1 ? 'item' : 'items'} in this level
-                    </p>
-                  )}
+                      <h3 className="text-sm sm:text-base font-extrabold text-slate-900 break-words">
+                        {level.title}
+                      </h3>
+                      {itemCount > 0 && (
+                        <p className="text-[11px] font-semibold text-slate-500">
+                          {itemCount} {itemCount === 1 ? 'item' : 'items'} in this level
+                        </p>
+                      )}
 
-                  {level.instructions && isAvailable && (
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      {level.instructions}
-                    </p>
-                  )}
+                      {level.instructions && isAvailable && (
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          {level.instructions}
+                        </p>
+                      )}
 
-                  {status === 'locked' && lockReason && (
-                    <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5 pt-0.5">
-                      <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span>{lockReason}</span>
-                    </p>
-                  )}
-                </div>
+                      {status === 'locked' && lockReason && (
+                        <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5 pt-0.5">
+                          <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>{lockReason}</span>
+                        </p>
+                      )}
+                    </div>
 
-                <div className="shrink-0">
-                  {isCompleted ? (
-                    (() => {
-                      const usedAttempts = Number(completionRecord?.attempts || 1);
-                      const canRetry = maxAttempts === 0 || (maxAttempts > 1 && usedAttempts < maxAttempts);
-                      return canRetry && started ? (
+                    <div className="shrink-0">
+                      {isCompleted ? (
+                        (() => {
+                          const usedAttempts = Number(completionRecord?.attempts || 1);
+                          const canRetry = maxAttempts === 0 || (maxAttempts > 1 && usedAttempts < maxAttempts);
+                          return canRetry && started ? (
+                            <button
+                              type="button"
+                              onClick={() => onPlayLevel(level)}
+                              className="w-full sm:w-auto min-h-[44px] inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-xs transition cursor-pointer"
+                            >
+                              <Play className="w-3.5 h-3.5 fill-current" />
+                              <span>Replay ({maxAttempts === 0 ? `${usedAttempts} played` : `${usedAttempts}/${maxAttempts}`})</span>
+                            </button>
+                          ) : (
+                            <span className="min-h-[44px] inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-extrabold">
+                              <CheckCircle2 className="w-4 h-4" />
+                              Completed
+                            </span>
+                          );
+                        })()
+                      ) : isAvailable && started ? (
                         <button
                           type="button"
                           onClick={() => onPlayLevel(level)}
-                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-xs transition cursor-pointer"
+                          className="w-full sm:w-auto min-h-[44px] inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-extrabold shadow-sm transition cursor-pointer"
                         >
                           <Play className="w-3.5 h-3.5 fill-current" />
-                          <span>Replay ({maxAttempts === 0 ? `${usedAttempts} played` : `${usedAttempts}/${maxAttempts}`})</span>
+                          {levels.length === 1 ? 'Start Activity' : 'Play Level'}
                         </button>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-extrabold">
-                          <CheckCircle2 className="w-4 h-4" />
-                          Completed
+                        <span className="min-h-[44px] inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-slate-200/80 text-slate-600 text-xs font-bold">
+                          <Lock className="w-3.5 h-3.5" />
+                          {!started ? 'Scheduled' : 'Locked'}
                         </span>
-                      );
-                    })()
-                  ) : isAvailable && started ? (
-                    <button
-                      type="button"
-                      onClick={() => onPlayLevel(level)}
-                      className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-extrabold shadow-sm transition cursor-pointer"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                      {levels.length === 1 ? 'Start Activity' : 'Play Level'}
-                    </button>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-200/80 text-slate-600 text-xs font-bold">
-                      <Lock className="w-3.5 h-3.5" />
-                      {!started ? 'Scheduled' : 'Locked'}
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* 3. Sticky Bottom Action Footer (Safe-Area Aware) */}
+        <div
+          className="px-4 sm:px-6 pt-3 bg-white/95 backdrop-blur-sm border-t border-slate-200 shrink-0 flex items-center gap-2.5"
+          style={{
+            paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))'
+          }}
+        >
+          <button
+            type="button"
+            disabled={stickyAction.disabled}
+            onClick={stickyAction.onClick}
+            className={`flex-1 min-h-[48px] px-5 py-3 rounded-xl text-sm font-black inline-flex items-center justify-center gap-2 shadow-sm transition ${
+              stickyAction.isCompletedState
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 cursor-default'
+                : stickyAction.disabled
+                  ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                  : 'bg-sky-600 hover:bg-sky-700 active:scale-[0.99] text-white cursor-pointer'
+            }`}
+          >
+            {stickyAction.isCompletedState ? (
+              <CheckCircle2 className="w-4 h-4" />
+            ) : stickyAction.disabled ? (
+              <Lock className="w-4 h-4" />
+            ) : (
+              <Play className="w-4 h-4 fill-current" />
+            )}
+            <span>{stickyAction.label}</span>
+          </button>
         </div>
       </div>
     </div>
